@@ -66,4 +66,119 @@ export function getEligibleSegments(selfSelections) {
     .map((interest) => ROUTES[interest].segment);
 }
 
-export { INTERESTS };
+const [redacted]_APPROVED = false;
+
+const DIAGNOSTIC_QUESTIONS = Object.freeze([
+  Object.freeze({ id: "explores_options", label: "複数の選択肢を自分で並べて比べたことがある" }),
+  Object.freeze({ id: "tracks_changes", label: "新しい動きや変化を自分から調べたことがある" }),
+  Object.freeze({ id: "mobilizes_others", label: "人を集めて小さな実験を始めたことがある" }),
+  Object.freeze({ id: "sustains_practice", label: "継続して情報を受け取り、試している" }),
+  Object.freeze({ id: "aligns_purpose", label: "判断の起点をPurposeや価値に戻している" })
+]);
+
+export function run_diagnosis(declared_interest, self_reported_behaviors) {
+  const interest = INTERESTS.includes(declared_interest) ? declared_interest : null;
+  const behaviors = Array.isArray(self_reported_behaviors) ? self_reported_behaviors : [];
+  const answeredIds = behaviors
+    .filter((entry) => entry && typeof entry === "object" && typeof entry.id === "string" && typeof entry.answer === "boolean")
+    .map((entry) => entry.id);
+  const yesCount = behaviors.filter((entry) => entry && entry.answer === true).length;
+  if (![redacted]_APPROVED) {
+    return {
+      current_level: "定義確定後に診断結果を表示できます",
+      next_actions: Object.freeze([
+        "比較テンプレートで、いま気になることと次に確かめたいことを整理する",
+        "関心に沿った資料を読み、自分の言葉でメモを残す",
+        "整理が進んだら、誰か一人と最初の対話を試す"
+      ]),
+      questions: DIAGNOSTIC_QUESTIONS,
+      ready: false,
+      declared_interest: interest,
+      answered: answeredIds.length,
+      yes_count: yesCount
+    };
+  }
+  return {
+    current_level: Math.min(yesCount, DIAGNOSTIC_QUESTIONS.length),
+    next_actions: Object.freeze(["比較テンプレートで次の一歩を整理する"]),
+    questions: DIAGNOSTIC_QUESTIONS,
+    ready: true,
+    declared_interest: interest,
+    answered: answeredIds.length,
+    yes_count: yesCount
+  };
+}
+
+export function buildDiagnosticCompletedEvent(declared_interest, self_reported_behaviors) {
+  const result = run_diagnosis(declared_interest, self_reported_behaviors);
+  return {
+    name: "diagnostic_completed",
+    asset_id: "diagnostic_flow",
+    cta_id: "diagnostic_submit",
+    diagnostic_answered: result.answered,
+    diagnostic_yes: result.yes_count,
+    diagnostic_ready: result.ready
+  };
+}
+
+export const FORBIDDEN_ATTRIBUTES = Object.freeze([
+  "occupation",
+  "profession",
+  "job",
+  "job_title",
+  "income",
+  "salary",
+  "revenue",
+  "annual_income",
+  "ability",
+  "skill_level",
+  "aptitude",
+  "personality",
+  "character",
+  "traits",
+  "ai_proficiency",
+  "ai_literacy",
+  "ai_familiarity",
+  "ai_skill",
+  "external_history",
+  "work_history",
+  "career_history",
+  "resume",
+  "cv",
+  "linkedin_url"
+]);
+
+export function filterForbiddenAttributes(event) {
+  if (!event || typeof event !== "object" || Array.isArray(event)) return null;
+  const cleaned = {};
+  for (const key of Object.keys(event)) {
+    if (!FORBIDDEN_ATTRIBUTES.includes(key)) cleaned[key] = event[key];
+  }
+  return cleaned;
+}
+
+export function buildEventBatch(events) {
+  if (!Array.isArray(events)) return [];
+  return events
+    .map(filterForbiddenAttributes)
+    .filter((event) => event && typeof event.name === "string" && EVENT_TYPES.has(event.name));
+}
+
+const EVENT_TYPES = Object.freeze(new Set([
+  "landing_viewed",
+  "interest_selected",
+  "diagnostic_started",
+  "diagnostic_completed",
+  "comparison_template_viewed",
+  "comparison_template_downloaded",
+  "comparison_template_started",
+  "comparison_template_completed",
+  "level_table_read_100",
+  "frontier_article_read_75",
+  "org_pdf_downloaded",
+  "newsletter_subscribed",
+  "outbound_cta_clicked",
+  "manual_collaboration_candidate"
+]));
+
+export { INTERESTS, DIAGNOSTIC_QUESTIONS, EVENT_TYPES, [redacted]_APPROVED };

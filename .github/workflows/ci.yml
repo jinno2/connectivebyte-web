@@ -16,3 +16,4 @@ jobs:
         with:
           node-version: 20
       - run: npm test
+      - run: node --test test/server.test.js

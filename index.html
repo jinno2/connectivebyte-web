@@ -76,6 +76,18 @@
         <p id="result-eyebrow"></p><h3 id="result-title"></h3><p id="result-body"></p>
         <a class="button button-primary" id="result-link" href="#resources">次へ進む</a>
       </div>
+      <div class="diagnostic-step" id="diagnostic-step" hidden aria-labelledby="diagnostic-step-title">
+        <h3 id="diagnostic-step-title">診断ステップ：あなたの最近の行動で当てはまるものを選んでください</h3>
+        <p class="privacy-note">能力・性格・習熟度を測るものではありません。自分の行動の記録として使います。</p>
+        <ul class="diagnostic-questions" id="diagnostic-questions"></ul>
+        <button class="button button-secondary" type="button" data-action="submit-diagnosis">診断を完了する</button>
+        <div class="diagnostic-output" id="diagnostic-output" hidden aria-live="polite">
+          <p>現在の段階：<span id="diagnostic-level"></span></p>
+          <p>次のアクション：</p>
+          <ul id="diagnostic-actions"></ul>
+          <a class="button button-primary" id="diagnostic-comparison-link" href="#comparison" hidden>比較テンプレートを開く <span aria-hidden="true">→</span></a>
+        </div>
+      </div>
     </section>
 
     <section class="resources" id="resources">
@@ -102,6 +114,26 @@
           <p>目的、現在の断絶、最初の実験をチームで共有するための印刷用ガイド。</p>
           <button class="text-link light" type="button" data-action="download-org">PDFをダウンロード <span>↓</span></button>
         </article>
+      </div>
+    </section>
+
+    <section class="dashboard" id="dashboard" aria-labelledby="dashboard-title">
+      <div class="section-label">05 / YOUR PROGRESS</div>
+      <h2 id="dashboard-title">あなたの進捗</h2>
+      <p class="lead">この画面はあなたの端末に保存された情報のみを表示します。サーバーから取得していません。</p>
+      <div class="dashboard-grid">
+        <article class="dash-card"><p class="card-type">関心</p><p class="dash-value" id="dash-interest">未選択</p></article>
+        <article class="dash-card"><p class="card-type">セグメント</p><p class="dash-value" id="dash-segment">未選択</p></article>
+        <article class="dash-card"><p class="card-type">対象セグメント</p><p class="dash-value" id="dash-eligible">なし</p></article>
+        <article class="dash-card"><p class="card-type">診断状態</p><p class="dash-value" id="dash-diagnostic">未実施</p></article>
+        <article class="dash-card"><p class="card-type">比較テンプレート</p><p class="dash-value" id="dash-comparison">未利用</p></article>
+        <article class="dash-card"><p class="card-type">閲覧した資料</p><p class="dash-value" id="dash-materials">なし</p></article>
+        <article class="dash-card"><p class="card-type">記録済みイベント数</p><p class="dash-value" id="dash-event-count">0</p></article>
+      </div>
+      <button class="plain-button" type="button" data-action="refresh-dashboard">進捗を更新</button>
+      <div class="level-table-placeholder" aria-labelledby="level-table-title">
+        <h3 id="level-table-title">段階一覧</h3>
+        <p>定義確定後に公開されます。</p>
       </div>
     </section>
 

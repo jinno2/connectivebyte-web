@@ -1,4 +1,13 @@
-import { getEligibleSegments, getInterestRoute, promoteBySelfSelection, shouldUseStrongCMessage } from "./logic.js";
+import {
+  buildDiagnosticCompletedEvent,
+  buildEventBatch,
+  DIAGNOSTIC_QUESTIONS,
+  getEligibleSegments,
+  getInterestRoute,
+  promoteBySelfSelection,
+  run_diagnosis,
+  shouldUseStrongCMessage
+} from "./logic.js";
 
 const STORAGE_KEYS = Object.freeze([
   "anonymous_id",
@@ -21,7 +30,8 @@ const EVENT_NAMES = new Set([
   "frontier_article_read_75",
   "org_pdf_downloaded",
   "newsletter_subscribed",
-  "outbound_cta_clicked"
+  "outbound_cta_clicked",
+  "manual_collaboration_candidate"
 ]);
 
 const campaign = (() => {
@@ -93,6 +103,67 @@ function track(name, details = {}) {
   };
   const events = readJson("events", []);
   writeJson("events", [...(Array.isArray(events) ? events : []), event].slice(-100));
+  scheduleFlush();
+}
+
+const EVENTS_ENDPOINT = "/api/events";
+let flushInFlight = false;
+let flushScheduled = false;
+
+export function send_events(events) {
+  const batch = buildEventBatch(events);
+  if (batch.length === 0) return Promise.resolve({ accepted: 0, skipped: true });
+  if (typeof navigator !== "undefined" && navigator.onLine === false) {
+    return Promise.resolve({ accepted: 0, offline: true });
+  }
+  return fetch(EVENTS_ENDPOINT, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(batch),
+    keepalive: true
+  }).then(async (response) => {
+    if (response.status >= 200 && response.status < 300) {
+      return { accepted: batch.length, status: response.status };
+    }
+    const error = new Error(`events_rejected_${response.status}`);
+    error.status = response.status;
+    throw error;
+  });
+}
+
+function scheduleFlush() {
+  if (flushScheduled || flushInFlight) return;
+  flushScheduled = true;
+  queueMicrotask(() => {
+    flushScheduled = false;
+    flushEvents().catch(() => {});
+  });
+}
+
+async function flushEvents() {
+  if (flushInFlight) return;
+  if (typeof navigator !== "undefined" && navigator.onLine === false) return;
+  const events = readJson("events", []);
+  if (!Array.isArray(events) || events.length === 0) return;
+  flushInFlight = true;
+  try {
+    const result = await send_events(events);
+    if (result && typeof result.accepted === "number" && result.accepted > 0) {
+      const remaining = readJson("events", []);
+      const next = Array.isArray(remaining) ? remaining.slice(result.accepted) : [];
+      writeJson("events", next);
+    }
+  } catch {
+  } finally {
+    flushInFlight = false;
+  }
+}
+
+if (typeof window !== "undefined") {
+  window.addEventListener("online", () => { flushEvents().catch(() => {}); });
+  window.addEventListener("pageshow", (event) => {
+    if (event.persisted) flushEvents().catch(() => {});
+  });
 }
 
 function renderRoute(interest, focus = true) {
@@ -113,6 +184,98 @@ function renderRoute(interest, focus = true) {
   link.dataset.ctaId = `route_${interest.toLowerCase()}`;
   link.dataset.track = "outbound_cta_clicked";
   if (focus) result.focus({ preventScroll: true });
+  showDiagnosticStep(interest);
+}
+
+function showDiagnosticStep(interest) {
+  const step = document.querySelector("#diagnostic-step");
+  if (!step) return;
+  step.hidden = false;
+  const list = document.querySelector("#diagnostic-questions");
+  if (list && list.childElementCount === 0) {
+    DIAGNOSTIC_QUESTIONS.forEach((question) => {
+      const item = document.createElement("li");
+      item.className = "diagnostic-question";
+      const label = document.createElement("label");
+      label.className = "check";
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.dataset.questionId = question.id;
+      label.append(checkbox, document.createTextNode(` ${question.label}`));
+      item.append(label);
+      list.append(item);
+    });
+  }
+  const heading = document.querySelector("#diagnostic-step-title");
+  if (heading && interest) heading.textContent = `診断ステップ：あなたの最近の行動で当てはまるものを選んでください`;
+}
+
+function submitDiagnosis() {
+  const declared = readJson("declared_interest", null);
+  const checkboxes = document.querySelectorAll("#diagnostic-questions input[type=checkbox]");
+  const behaviors = Array.from(checkboxes).map((checkbox) => ({
+    id: checkbox.dataset.questionId,
+    answer: checkbox.checked
+  }));
+  const result = run_diagnosis(declared, behaviors);
+  const completed = buildDiagnosticCompletedEvent(declared, behaviors);
+  track("diagnostic_completed", { asset_id: completed.asset_id, cta_id: completed.cta_id });
+  const output = document.querySelector("#diagnostic-output");
+  if (output) {
+    output.hidden = false;
+    const levelEl = document.querySelector("#diagnostic-level");
+    if (levelEl) levelEl.textContent = result.current_level;
+    const actionsEl = document.querySelector("#diagnostic-actions");
+    if (actionsEl) actionsEl.innerHTML = "";
+    if (actionsEl) result.next_actions.forEach((action) => {
+      const li = document.createElement("li");
+      li.textContent = action;
+      actionsEl.append(li);
+    });
+  }
+  const link = document.querySelector("#diagnostic-comparison-link");
+  if (link) link.hidden = false;
+  renderDashboard();
+}
+
+function renderDashboard() {
+  const panel = document.querySelector("#dashboard");
+  if (!panel) return;
+  const declared = readJson("declared_interest", null);
+  const route = getInterestRoute(declared);
+  const segments = readJson("eligible_segments", []);
+  const events = readJson("events", []);
+  const eventList = Array.isArray(events) ? events : [];
+  const segmentEl = document.querySelector("#dash-segment");
+  if (segmentEl) segmentEl.textContent = route ? route.segment : "未選択";
+  const interestEl = document.querySelector("#dash-interest");
+  if (interestEl) interestEl.textContent = declared ?? "未選択";
+  const eligibleEl = document.querySelector("#dash-eligible");
+  if (eligibleEl) eligibleEl.textContent = Array.isArray(segments) && segments.length > 0 ? segments.join("、") : "なし";
+  const names = new Set(eventList.map((event) => event?.name).filter(Boolean));
+  const diagEl = document.querySelector("#dash-diagnostic");
+  if (diagEl) diagEl.textContent = names.has("diagnostic_completed") ? "完了" : names.has("diagnostic_started") ? "開始済み" : "未実施";
+  const compEl = document.querySelector("#dash-comparison");
+  if (compEl) {
+    const state = names.has("comparison_template_completed")
+      ? "完了"
+      : names.has("comparison_template_started")
+        ? "作成中"
+        : names.has("comparison_template_viewed")
+          ? "閲覧済み"
+          : "未利用";
+    compEl.textContent = state;
+  }
+  const materialsEl = document.querySelector("#dash-materials");
+  if (materialsEl) {
+    const materials = [];
+    if (names.has("frontier_article_read_75")) materials.push("フロンティア記事");
+    if (names.has("org_pdf_downloaded")) materials.push("組織向けガイド");
+    if (names.has("comparison_template_downloaded")) materials.push("比較テンプレート");
+    materialsEl.textContent = materials.length > 0 ? materials.join("、") : "なし";
+  }
+  const eventCountEl = document.querySelector("#dash-event-count");
+  if (eventCountEl) eventCountEl.textContent = String(eventList.length);
 }
 
 let diagnosticStarted = false;
@@ -232,6 +395,11 @@ document.addEventListener("click", (event) => {
   if (action === "save-consent") saveConsent(document.querySelector("#analytics-consent").checked);
   if (action === "reject-analytics") saveConsent(false);
   if (action === "show-consent") document.querySelector("#consent-panel").hidden = false;
+  if (action === "submit-diagnosis") submitDiagnosis();
+  if (action === "refresh-dashboard") renderDashboard();
+  if (action === "open-comparison" || action === "complete-comparison" || action === "download-org") {
+    setTimeout(renderDashboard, 0);
+  }
 });
 
 const comparisonWorkflow = document.querySelector("#comparison-workflow");
@@ -265,3 +433,4 @@ const restoredInterest = readJson("declared_interest", null);
 if (getInterestRoute(restoredInterest)) renderRoute(restoredInterest, false);
 initializeConsent();
 initializeReadingEvents();
+renderDashboard();

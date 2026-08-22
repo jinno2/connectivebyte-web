@@ -125,3 +125,31 @@ footer p { margin-bottom: 0; }
 }
 
 @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } * { transition: none !important; } }
+
+.diagnostic-step { max-width: 760px; margin: 28px auto 0; padding: 32px; background: var(--white); border-left: 7px solid #4ba49e; }
+.diagnostic-step[hidden] { display: none; }
+.diagnostic-step h3 { font-size: clamp(1.3rem, 2.4vw, 1.9rem); line-height: 1.2; margin-bottom: 10px; }
+.diagnostic-questions { list-style: none; padding: 0; margin: 18px 0; display: grid; gap: 10px; }
+.diagnostic-question label { display: flex; gap: 10px; align-items: flex-start; font-size: .92rem; }
+.diagnostic-question input { flex: 0 0 auto; margin-top: 5px; }
+.diagnostic-output { margin-top: 22px; padding-top: 18px; border-top: 1px solid var(--line); }
+.diagnostic-output[hidden] { display: none; }
+.diagnostic-output ul { padding-left: 20px; }
+.diagnostic-output .button { margin-top: 14px; }
+
+.dashboard { padding: 90px max(28px, calc((100vw - var(--max)) / 2)); background: var(--white); }
+.dashboard h2 { font-size: clamp(2rem, 4vw, 3.4rem); line-height: 1.1; letter-spacing: -.045em; margin-bottom: 12px; }
+.dashboard .lead { margin-bottom: 32px; }
+.dashboard-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+.dash-card { padding: 22px; background: var(--paper); border: 1px solid var(--line); }
+.dash-value { font-size: 1.15rem; font-weight: 750; margin: 8px 0 0; }
+.level-table-placeholder { margin-top: 36px; padding: 26px; border: 1px dashed var(--line); text-align: center; color: var(--muted); }
+.level-table-placeholder h3 { font-size: 1.1rem; margin-bottom: 6px; color: var(--ink); }
+
+@media (max-width: 900px) {
+  .dashboard-grid { grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 600px) {
+  .dashboard-grid { grid-template-columns: 1fr; }
+  .dashboard { padding-top: 64px; padding-bottom: 64px; }
+}
