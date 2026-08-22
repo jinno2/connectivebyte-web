@@ -14,7 +14,8 @@ const STORAGE_KEYS = Object.freeze([
   "declared_interest",
   "eligible_segments",
   "consent",
-  "events"
+  "events",
+  "diagnosis_result"
 ]);
 
 const EVENT_NAMES = new Set([
@@ -224,7 +225,9 @@ function submitDiagnosis() {
   if (output) {
     output.hidden = false;
     const levelEl = document.querySelector("#diagnostic-level");
-    if (levelEl) levelEl.textContent = result.current_level;
+    if (levelEl) levelEl.textContent = `L${result.current_level}`;
+    const levelNameEl = document.querySelector("#diagnostic-level-name");
+    if (levelNameEl) levelNameEl.textContent = result.current_level_name ?? "";
     const actionsEl = document.querySelector("#diagnostic-actions");
     if (actionsEl) actionsEl.innerHTML = "";
     if (actionsEl) result.next_actions.forEach((action) => {
@@ -235,6 +238,7 @@ function submitDiagnosis() {
   }
   const link = document.querySelector("#diagnostic-comparison-link");
   if (link) link.hidden = false;
+  writeJson("diagnosis_result", { current_level: result.current_level, current_level_name: result.current_level_name, next_actions: [...result.next_actions] });
   renderDashboard();
 }
 
@@ -276,6 +280,26 @@ function renderDashboard() {
   }
   const eventCountEl = document.querySelector("#dash-event-count");
   if (eventCountEl) eventCountEl.textContent = String(eventList.length);
+  const levelResultEl = document.querySelector("#dash-level-result");
+  if (levelResultEl) {
+    const stored = readJson("diagnosis_result", null);
+    if (stored && typeof stored.current_level === "number") {
+      levelResultEl.hidden = false;
+      const levelEl = document.querySelector("#dash-level");
+      if (levelEl) levelEl.textContent = `L${stored.current_level}${stored.current_level_name ? " " + stored.current_level_name : ""}`;
+      const actionsEl = document.querySelector("#dash-level-actions");
+      if (actionsEl) {
+        actionsEl.innerHTML = "";
+        (Array.isArray(stored.next_actions) ? stored.next_actions : []).forEach((action) => {
+          const li = document.createElement("li");
+          li.textContent = action;
+          actionsEl.append(li);
+        });
+      }
+    } else {
+      levelResultEl.hidden = true;
+    }
+  }
 }
 
 let diagnosticStarted = false;

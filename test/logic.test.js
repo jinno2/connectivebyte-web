@@ -4,11 +4,13 @@ import test from "node:test";
 import {
   buildDiagnosticCompletedEvent,
   buildEventBatch,
+  [redacted]_APPROVED,
   DIAGNOSTIC_QUESTIONS,
   filterForbiddenAttributes,
   FORBIDDEN_ATTRIBUTES,
   getEligibleSegments,
   getInterestRoute,
+  LEVELS,
   promoteBySelfSelection,
   run_diagnosis,
   shouldUseStrongCMessage
@@ -94,34 +96,78 @@ test("イベント仕様と保存キーを静的検証する", async () => {
     "declared_interest",
     "eligible_segments",
     "consent",
-    "events"
+    "events",
+    "diagnosis_result"
   ]);
 });
 
-test("公開画面に未承認のレベル診断とレベル表を含めない", async () => {
+test("公開画面に承認済みの[redacted]一覧を含み禁止属性を含まない", async () => {
   const html = await readFile(new URL("index.html", root), "utf8");
-  assert.doesNotMatch(html, /レベル診断|レベル表/);
+  assert.match(html, /[redacted]一覧/);
+  for (const name of LEVELS) assert.match(html, new RegExp(name.name_ja));
   assert.doesNotMatch(html, /職業|年収|AI習熟度|外部履歴/);
+  assert.doesNotMatch(html, /優劣|ランキング|順位|比較判定/);
 });
 
-test("診断は承認前はレベル番号を返さず保留メッセージを返す", () => {
+test("[redacted]_APPROVEDがtrueであり診断はcurrent_levelを数値で返す", () => {
+  assert.equal([redacted]_APPROVED, true);
   const result = run_diagnosis("C", [
-    { id: "explores_options", answer: true },
-    { id: "tracks_changes", answer: true },
-    { id: "mobilizes_others", answer: false }
+    { id: "Q0", answer: true },
+    { id: "Q1", answer: true },
+    { id: "Q2", answer: false }
   ]);
-  assert.equal(result.ready, false);
-  assert.equal(typeof result.current_level, "string");
-  assert.equal(result.current_level, "定義確定後に診断結果を表示できます");
-  assert.equal(Number.isFinite(result.current_level), false);
+  assert.equal(result.ready, true);
+  assert.equal(typeof result.current_level, "number");
+  assert.equal(Number.isFinite(result.current_level), true);
   assert.ok(Array.isArray(result.next_actions));
   assert.ok(result.next_actions.length > 0);
-  assert.ok(result.next_actions.some((action) => action.includes("比較テンプレート")));
 });
 
-test("診断は質問リストを公開し3〜5問の簡易チェックリストを返す", () => {
+test("全質問trueでL11を返す", () => {
+  const behaviors = DIAGNOSTIC_QUESTIONS.map((q) => ({ id: q.id, answer: true }));
+  const result = run_diagnosis("A", behaviors);
+  assert.equal(result.current_level, 11);
+  assert.equal(result.current_level_name, "接続路の社会インフラ化");
+  assert.deepEqual(result.next_actions, []);
+});
+
+test("全質問falseでL0を返す", () => {
+  const behaviors = DIAGNOSTIC_QUESTIONS.map((q) => ({ id: q.id, answer: false }));
+  const result = run_diagnosis(null, behaviors);
+  assert.equal(result.current_level, 0);
+  assert.equal(result.current_level_name, "未接触");
+  assert.ok(result.next_actions.length > 0);
+});
+
+test("Q2までtrueでL2を返しnext_actionsはL2のexit_conditions", () => {
+  const behaviors = DIAGNOSTIC_QUESTIONS.map((q) => ({ id: q.id, answer: ["Q0", "Q1", "Q2"].includes(q.id) }));
+  const result = run_diagnosis("E", behaviors);
+  assert.equal(result.current_level, 2);
+  assert.equal(result.current_level_name, "日常足場化");
+  assert.deepEqual(result.next_actions, ["自分の職務固有のタスクへ意識的に適用範囲を広げる"]);
+});
+
+test("診断結果に優劣比較を含まない", () => {
+  const behaviors = DIAGNOSTIC_QUESTIONS.map((q) => ({ id: q.id, answer: true }));
+  const result = run_diagnosis("C", behaviors);
+  const serialized = JSON.stringify(result);
+  assert.doesNotMatch(serialized, /優劣|上位|下位|ランキング|順位|勝者|敗者|優れる|劣る/);
+});
+
+test("診断結果に禁止属性を含まない", () => {
+  const behaviors = DIAGNOSTIC_QUESTIONS.map((q) => ({ id: q.id, answer: true }));
+  const result = run_diagnosis("C", behaviors);
+  const serialized = JSON.stringify(result);
+  for (const forbidden of FORBIDDEN_ATTRIBUTES) {
+    assert.doesNotMatch(serialized, new RegExp(forbidden, "i"));
+  }
+});
+
+test("診断は質問リストを公開し12問の[redacted]チェックリストを返す", () => {
   assert.ok(Array.isArray(DIAGNOSTIC_QUESTIONS));
-  assert.ok(DIAGNOSTIC_QUESTIONS.length >= 3 && DIAGNOSTIC_QUESTIONS.length <= 5);
+  assert.equal(DIAGNOSTIC_QUESTIONS.length, 12);
+  assert.deepEqual(DIAGNOSTIC_QUESTIONS.map((q) => q.id), ["Q0","Q1","Q2","Q3","Q4","Q5","Q6","Q7","Q8","Q9","Q10","Q11"]);
+  assert.deepEqual(DIAGNOSTIC_QUESTIONS.map((q) => q.level), [0,1,2,3,4,5,6,7,8,9,10,11]);
   const result = run_diagnosis(null, []);
   assert.equal(result.questions, DIAGNOSTIC_QUESTIONS);
   assert.equal(result.answered, 0);
@@ -130,15 +176,15 @@ test("診断は質問リストを公開し3〜5問の簡易チェックリスト
 
 test("診断完了イベントがdiagnostic_completedとして発火される", () => {
   const event = buildDiagnosticCompletedEvent("D", [
-    { id: "explores_options", answer: true },
-    { id: "tracks_changes", answer: false }
+    { id: "Q0", answer: true },
+    { id: "Q1", answer: false }
   ]);
   assert.equal(event.name, "diagnostic_completed");
   assert.equal(event.asset_id, "diagnostic_flow");
   assert.equal(event.cta_id, "diagnostic_submit");
   assert.equal(event.diagnostic_answered, 2);
   assert.equal(event.diagnostic_yes, 1);
-  assert.equal(event.diagnostic_ready, false);
+  assert.equal(event.diagnostic_ready, true);
 });
 
 test("禁止属性を含むイベントから当該属性をフィルタする", () => {

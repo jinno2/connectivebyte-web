@@ -82,7 +82,7 @@
         <ul class="diagnostic-questions" id="diagnostic-questions"></ul>
         <button class="button button-secondary" type="button" data-action="submit-diagnosis">診断を完了する</button>
         <div class="diagnostic-output" id="diagnostic-output" hidden aria-live="polite">
-          <p>現在の段階：<span id="diagnostic-level"></span></p>
+          <p>現在の段階：<span id="diagnostic-level"></span> <span id="diagnostic-level-name"></span></p>
           <p>次のアクション：</p>
           <ul id="diagnostic-actions"></ul>
           <a class="button button-primary" id="diagnostic-comparison-link" href="#comparison" hidden>比較テンプレートを開く <span aria-hidden="true">→</span></a>
@@ -131,9 +131,28 @@
         <article class="dash-card"><p class="card-type">記録済みイベント数</p><p class="dash-value" id="dash-event-count">0</p></article>
       </div>
       <button class="plain-button" type="button" data-action="refresh-dashboard">進捗を更新</button>
-      <div class="level-table-placeholder" aria-labelledby="level-table-title">
-        <h3 id="level-table-title">段階一覧</h3>
-        <p>定義確定後に公開されます。</p>
+      <div class="dash-level-result" id="dash-level-result" hidden aria-live="polite">
+        <p class="card-type">現在の[redacted]</p>
+        <p class="dash-level-value" id="dash-level">未診断</p>
+        <p class="dash-level-actions-label">次のアクション</p>
+        <ul class="dash-level-actions" id="dash-level-actions"></ul>
+      </div>
+      <div class="level-table" aria-labelledby="level-table-title">
+        <h3 id="level-table-title">[redacted]一覧（[redacted] v1.0.0）</h3>
+        <ol class="level-list" id="level-list">
+          <li><b>L0</b><span><strong>未接触</strong>生成AIを自分の意思で使ったことがない。床の上昇を外部ニュースとしてのみ知覚している。</span></li>
+          <li><b>L1</b><span><strong>接触</strong>AIを試したことがある。ただし用途は単発で、結果を仕事や生活に持ち帰っていない。</span></li>
+          <li><b>L2</b><span><strong>日常足場化</strong>上がってきた床に乗り、日常のタスクの下準備をAIに任せている。日常はLunaで足りる状態。</span></li>
+          <li><b>L3</b><span><strong>職務適用</strong>職務固有のタスクにAIを組み込み、成果物の品質・速度が観測可能に変わっている。</span></li>
+          <li><b>L4</b><span><strong>ワークフロー再設計</strong>タスク単位ではなく、仕事の流れそのものをAI前提に組み替えている。天井に自分から触れ始める。</span></li>
+          <li><b>L5</b><span><strong>システム構築</strong>AIを組み込んだ再現可能なシステム（[redacted]）を構築し、自分以外でも回る状態を作っている。</span></li>
+          <li><b>L6</b><span><strong>フロンティア接触</strong>最新フロンティアモデルに自分の実課題で触れ、天井の位置と限界を実測している。[redacted]の前に限界を測る段。</span></li>
+          <li><b>L7</b><span><strong>増殖</strong>自分の接続能力を他者・チームへ複製している。使い方が個人技から共有資産になる。</span></li>
+          <li><b>L8</b><span><strong>腐敗検知と再登攀</strong>定着した仕組み・知識が床の上昇によって陳腐化（腐敗）することを検知し、自ら壊して登り直す。腐敗を検知して再登攀する最初の段。</span></li>
+          <li><b>L9</b><span><strong>事業再構成</strong>[redacted]を前提に事業・組織の職務設計そのものを再構成している。床の上昇を組織の足場に変換する。</span></li>
+          <li><b>L10</b><span><strong>現実経済接続</strong>[redacted]による価値が市場・顧客・売上など現実経済の変化として観測できる。</span></li>
+          <li><b>L11</b><span><strong>接続路の社会インフラ化</strong>他の主体が0–10を登るための接続路（教育・ツール・コミュニティ・事業支援）を社会インフラとして提供・維持している。</span></li>
+        </ol>
       </div>
     </section>
 

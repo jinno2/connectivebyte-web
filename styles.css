@@ -143,8 +143,21 @@ footer p { margin-bottom: 0; }
 .dashboard-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
 .dash-card { padding: 22px; background: var(--paper); border: 1px solid var(--line); }
 .dash-value { font-size: 1.15rem; font-weight: 750; margin: 8px 0 0; }
-.level-table-placeholder { margin-top: 36px; padding: 26px; border: 1px dashed var(--line); text-align: center; color: var(--muted); }
-.level-table-placeholder h3 { font-size: 1.1rem; margin-bottom: 6px; color: var(--ink); }
+.level-table { margin-top: 36px; padding: 26px; border: 1px solid var(--line); background: var(--paper); }
+.level-table h3 { font-size: 1.15rem; margin-bottom: 14px; color: var(--ink); }
+.level-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 0; counter-reset: none; }
+.level-list li { display: grid; grid-template-columns: 48px 1fr; gap: 14px; padding: 14px 0; border-top: 1px solid var(--line); }
+.level-list li:first-child { border-top: 0; }
+.level-list b { font-size: .95rem; font-weight: 800; color: #32857f; }
+.level-list strong { display: inline; margin-right: 8px; font-weight: 800; }
+.level-list span { font-size: .9rem; color: var(--ink); line-height: 1.55; }
+.dash-level-result { margin-top: 24px; padding: 22px; background: var(--paper); border: 1px solid var(--line); }
+.dash-level-result[hidden] { display: none; }
+.dash-level-value { font-size: 1.2rem; font-weight: 800; margin: 6px 0 12px; color: var(--ink); }
+.dash-level-actions-label { font-size: .75rem; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; color: #408f89; margin-bottom: 6px; }
+.dash-level-actions { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; }
+.dash-level-actions li { display: flex; gap: 10px; align-items: flex-start; font-size: .88rem; }
+.dash-level-actions li::before { content: "☐"; flex: 0 0 auto; color: #408f89; font-weight: 800; }
 
 @media (max-width: 900px) {
   .dashboard-grid { grid-template-columns: 1fr 1fr; }
@@ -152,4 +165,5 @@ footer p { margin-bottom: 0; }
 @media (max-width: 600px) {
   .dashboard-grid { grid-template-columns: 1fr; }
   .dashboard { padding-top: 64px; padding-bottom: 64px; }
+  .level-list li { grid-template-columns: 36px 1fr; gap: 10px; }
 }
