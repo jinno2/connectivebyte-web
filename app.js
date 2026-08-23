@@ -194,29 +194,47 @@ function showDiagnosticStep(interest) {
   step.hidden = false;
   const list = document.querySelector("#diagnostic-questions");
   if (list && list.childElementCount === 0) {
+    const options = [
+      { value: "はい", text: "はい" },
+      { value: "トライ中（取り組み中）", text: "トライ中" },
+      { value: "いいえ", text: "いいえ／わからない" }
+    ];
     DIAGNOSTIC_QUESTIONS.forEach((question) => {
       const item = document.createElement("li");
       item.className = "diagnostic-question";
-      const label = document.createElement("label");
-      label.className = "check";
-      const checkbox = document.createElement("input");
-      checkbox.type = "checkbox";
-      checkbox.dataset.questionId = question.id;
-      label.append(checkbox, document.createTextNode(` ${question.label}`));
-      item.append(label);
+      const text = document.createElement("p");
+      text.className = "question-text";
+      text.textContent = question.label;
+      item.append(text);
+      const group = document.createElement("div");
+      group.className = "question-options";
+      group.setAttribute("role", "group");
+      group.setAttribute("aria-label", question.label);
+      options.forEach((option) => {
+        const label = document.createElement("label");
+        label.className = "check";
+        const radio = document.createElement("input");
+        radio.type = "radio";
+        radio.name = question.id;
+        radio.value = option.value;
+        radio.dataset.questionId = question.id;
+        label.append(radio, document.createTextNode(` ${option.text}`));
+        group.append(label);
+      });
+      item.append(group);
       list.append(item);
     });
   }
   const heading = document.querySelector("#diagnostic-step-title");
-  if (heading && interest) heading.textContent = `診断ステップ：あなたの最近の行動で当てはまるものを選んでください`;
+  if (heading && interest) heading.textContent = "診断ステップ：最近の行動について、それぞれ一番近い答えを選んでください";
 }
 
 function submitDiagnosis() {
   const declared = readJson("declared_interest", null);
-  const checkboxes = document.querySelectorAll("#diagnostic-questions input[type=checkbox]");
-  const behaviors = Array.from(checkboxes).map((checkbox) => ({
-    id: checkbox.dataset.questionId,
-    answer: checkbox.checked
+  const checked = document.querySelectorAll("#diagnostic-questions input[type=radio]:checked");
+  const behaviors = Array.from(checked).map((radio) => ({
+    id: radio.dataset.questionId,
+    answer: radio.value
   }));
   const result = run_diagnosis(declared, behaviors);
   const completed = buildDiagnosticCompletedEvent(declared, behaviors);

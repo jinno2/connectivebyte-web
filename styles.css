@@ -130,6 +130,8 @@ footer p { margin-bottom: 0; }
 .diagnostic-step[hidden] { display: none; }
 .diagnostic-step h3 { font-size: clamp(1.3rem, 2.4vw, 1.9rem); line-height: 1.2; margin-bottom: 10px; }
 .diagnostic-questions { list-style: none; padding: 0; margin: 18px 0; display: grid; gap: 10px; }
+.diagnostic-question .question-text { margin: 0 0 6px; font-size: .95rem; }
+.diagnostic-question .question-options { display: flex; flex-wrap: wrap; gap: 4px 18px; }
 .diagnostic-question label { display: flex; gap: 10px; align-items: flex-start; font-size: .92rem; }
 .diagnostic-question input { flex: 0 0 auto; margin-top: 5px; }
 .diagnostic-output { margin-top: 22px; padding-top: 18px; border-top: 1px solid var(--line); }

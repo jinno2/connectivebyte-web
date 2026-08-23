@@ -66,49 +66,67 @@ export function getEligibleSegments(selfSelections) {
     .map((interest) => ROUTES[interest].segment);
 }
 
+// Framework Core: connective-intelligence-framework v2.0.1（2026-08-23人間承認）よりコピー。
+// 出典: maturity-framework/cil-0-11.ja.yaml（正本md由来の派生物）。本ファイルでの定義の再構成・追加を禁止する。
+export const FRAMEWORK_VERSION = "2.0.1";
+
 const [redacted]_APPROVED = true;
 
 const LEVELS = Object.freeze([
-  Object.freeze({ level: 0, name_ja: "未接触", definition: "生成AIを自分の意思で使ったことがない。床の上昇を外部ニュースとしてのみ知覚している。", exit_conditions: Object.freeze(["自分の意思で一度でもAIに入力し、出力を受け取る"]) }),
-  Object.freeze({ level: 1, name_ja: "接触", definition: "AIを試したことがある。ただし用途は単発で、結果を仕事や生活に持ち帰っていない。", exit_conditions: Object.freeze(["特定の繰り返しタスクにAIを使い始める"]) }),
-  Object.freeze({ level: 2, name_ja: "日常足場化", definition: "上がってきた床に乗り、日常のタスクの下準備をAIに任せている。日常はLunaで足りる状態。", exit_conditions: Object.freeze(["自分の職務固有のタスクへ意識的に適用範囲を広げる"]) }),
-  Object.freeze({ level: 3, name_ja: "職務適用", definition: "職務固有のタスクにAIを組み込み、成果物の品質・速度が観測可能に変わっている。", exit_conditions: Object.freeze(["単発タスクを超えてワークフロー全体を再設計する"]) }),
-  Object.freeze({ level: 4, name_ja: "ワークフロー再設計", definition: "タスク単位ではなく、仕事の流れそのものをAI前提に組み替えている。天井に自分から触れ始める。", exit_conditions: Object.freeze(["再現可能なシステム・[redacted]として外部化する"]) }),
-  Object.freeze({ level: 5, name_ja: "システム構築", definition: "AIを組み込んだ再現可能なシステム（[redacted]）を構築し、自分以外でも回る状態を作っている。", exit_conditions: Object.freeze(["フロンティアモデルの限界を自分の課題で測定する"]) }),
-  Object.freeze({ level: 6, name_ja: "フロンティア接触", definition: "最新フロンティアモデルに自分の実課題で触れ、天井の位置と限界を実測している。[redacted]の前に限界を測る段。", exit_conditions: Object.freeze(["測定結果に基づく配分（日常/フロンティア）の意思決定"]) }),
-  Object.freeze({ level: 7, name_ja: "増殖", definition: "自分の接続能力を他者・チームへ複製している。使い方が個人技から共有資産になる。", exit_conditions: Object.freeze(["定着した仕組みの劣化を検知する視点を持つ"]) }),
-  Object.freeze({ level: 8, name_ja: "腐敗検知と再登攀", definition: "定着した仕組み・知識が床の上昇によって陳腐化（腐敗）することを検知し、自ら壊して登り直す。腐敗を検知して再登攀する最初の段。", exit_conditions: Object.freeze(["再登攀の仕組み自体を事業・組織構造へ埋め込む"]) }),
-  Object.freeze({ level: 9, name_ja: "事業再構成", definition: "[redacted]を前提に事業・組織の職務設計そのものを再構成している。床の上昇を組織の足場に変換する。", exit_conditions: Object.freeze(["再構成の成果が外部経済との取引に現れる"]) }),
-  Object.freeze({ level: 10, name_ja: "現実経済接続", definition: "[redacted]による価値が市場・顧客・売上など現実経済の変化として観測できる。", exit_conditions: Object.freeze(["自分以外の主体が登るための接続路の提供を始める"]) }),
-  Object.freeze({ level: 11, name_ja: "接続路の社会インフラ化", definition: "他の主体が0–10を登るための接続路（教育・ツール・コミュニティ・事業支援）を社会インフラとして提供・維持している。", exit_conditions: Object.freeze([]) })
+  Object.freeze({ level: 0, name_ja: "[redacted]", definition: "[redacted]", exit_conditions: Object.freeze(["[redacted]"]) }),
+  Object.freeze({ level: 1, name_ja: "[redacted]", definition: "[redacted]", exit_conditions: Object.freeze(["[redacted]"]) }),
+  Object.freeze({ level: 2, name_ja: "[redacted]", definition: "[redacted]", exit_conditions: Object.freeze(["[redacted]"]) }),
+  Object.freeze({ level: 3, name_ja: "[redacted]", definition: "[redacted]", exit_conditions: Object.freeze(["[redacted]"]) }),
+  Object.freeze({ level: 4, name_ja: "[redacted]", definition: "[redacted]", exit_conditions: Object.freeze(["[redacted]"]) }),
+  Object.freeze({ level: 5, name_ja: "[redacted]", definition: "[redacted]", exit_conditions: Object.freeze(["[redacted]"]) }),
+  Object.freeze({ level: 6, name_ja: "[redacted]", definition: "[redacted]", exit_conditions: Object.freeze(["[redacted]"]) }),
+  Object.freeze({ level: 7, name_ja: "[redacted]", definition: "[redacted]", exit_conditions: Object.freeze(["[redacted]"]) }),
+  Object.freeze({ level: 8, name_ja: "[redacted]", definition: "[redacted]", exit_conditions: Object.freeze(["[redacted]"]) }),
+  Object.freeze({ level: 9, name_ja: "[redacted]", definition: "[redacted]", exit_conditions: Object.freeze(["[redacted]"]) }),
+  Object.freeze({ level: 10, name_ja: "[redacted]", definition: "[redacted]", exit_conditions: Object.freeze(["[redacted]"]) }),
+  Object.freeze({ level: 11, name_ja: "[redacted]", definition: "[redacted]", exit_conditions: Object.freeze([]) })
 ]);
 
+// Framework Core: maturity-framework/diagnostic-questions.ja.yaml v2.0.1よりコピー。
+// 「はい」「トライ中（取り組み中）」を該当、「いいえ」「わからない」「該当しない」を非該当として扱う。
+const AFFIRMATIVE_ANSWERS = Object.freeze(new Set(["はい", "トライ中（取り組み中）", "トライ中"]));
+
 const DIAGNOSTIC_QUESTIONS = Object.freeze([
-  Object.freeze({ id: "Q0", level: 0, label: "AIを自分の意思で使ったことがある" }),
-  Object.freeze({ id: "Q1", level: 1, label: "AIに質問や雑談をしたことがある" }),
-  Object.freeze({ id: "Q2", level: 2, label: "週に1回以上、要約や下書きなどの日常タスクにAIを使っている" }),
-  Object.freeze({ id: "Q3", level: 3, label: "職務固有のタスクにAIを組み込んでいる" }),
-  Object.freeze({ id: "Q4", level: 4, label: "タスク単位ではなく仕事の流れ全体をAI前提で組み替えた" }),
-  Object.freeze({ id: "Q5", level: 5, label: "AIを組み込んだ再現可能なシステム（[redacted]）を構築・運用している" }),
-  Object.freeze({ id: "Q6", level: 6, label: "最新フロンティアモデルに自分の実課題で触れ、限界を実測した" }),
-  Object.freeze({ id: "Q7", level: 7, label: "自分の接続能力を他者やチームに複製した" }),
-  Object.freeze({ id: "Q8", level: 8, label: "定着した仕組みが陳腐化したことを検知し、自ら壊して登り直した" }),
-  Object.freeze({ id: "Q9", level: 9, label: "[redacted]を前提に事業や組織の職務設計を再構成した" }),
-  Object.freeze({ id: "Q10", level: 10, label: "[redacted]による価値が市場や売上など現実経済の変化として観測された" }),
-  Object.freeze({ id: "Q11", level: 11, label: "他の主体が0-10を登るための接続路を社会インフラとして提供・維持している" })
+  Object.freeze({ id: "Q0", level: 0, label: "AIを自分の仕事や事業に関係するものとして意識したことがありますか" }),
+  Object.freeze({ id: "Q1", level: 1, label: "現在一番性能が高いとされるAI（フロンティアモデル）を実際に使って、その出力を確認していますか" }),
+  Object.freeze({ id: "Q2", level: 2, label: "複数のAIの間で性能の違い（文章の正確さ、指示の理解、長い資料の扱い、一貫性など）を、自分の言葉で説明できますか" }),
+  Object.freeze({ id: "Q3", level: 3, label: "自分の仕事の中で重要かつ難しい課題（[redacted]）で複数のAIを比べて、どこまでできてどこからうまくいかないかを把握していますか" }),
+  Object.freeze({ id: "Q4", level: 4, label: "今の高性能AIがあるからこそ着手できた新しい仕事を、実際に始めていますか" }),
+  Object.freeze({ id: "Q5", level: 5, label: "今の最高性能のAIでも解けずに止まっている重要な仕事があり、その仕事を進めるための活動をしていますか" }),
+  Object.freeze({ id: "Q6", level: 6, label: "AIを組み込んだ仕組み（[redacted]）を構築し、モデルの苦手な部分を検索・ツール・人間の確認などで補いながら、実際の業務で繰り返し使っていますか" }),
+  Object.freeze({ id: "Q7", level: 7, label: "成功1件あたりの総コスト（費用と手間を含む）を測って、求める品質を保ったまま最適化していますか" }),
+  Object.freeze({ id: "Q8", level: 8, label: "AIの実行結果を評価してプロンプトやモデル構成などを見直す改善ループを、継続的に回していますか" }),
+  Object.freeze({ id: "Q9", level: 9, label: "その仕組みを別の部門・顧客・地域・業務に合わせて調整して展開し、成果を確認していますか" }),
+  Object.freeze({ id: "Q10", level: 10, label: "顧客がつき、売上と利益が生まれる新しい事業を、仕組みが継続的に生み出していますか" }),
+  Object.freeze({ id: "Q11", level: 11, label: "複数の事業と社外の経済主体も含めて、人・金・時間などの配分を共通の物差しで全体として最適化していますか" })
 ]);
+
+function isAffirmative(answer) {
+  if (answer === true) return true;
+  if (typeof answer === "string") return AFFIRMATIVE_ANSWERS.has(answer.trim());
+  return false;
+}
+
+function isAnswered(entry) {
+  return Boolean(entry) && typeof entry === "object"
+    && typeof entry.id === "string"
+    && (typeof entry.answer === "boolean" || (typeof entry.answer === "string" && entry.answer.trim() !== ""));
+}
 
 export function run_diagnosis(declared_interest, self_reported_behaviors) {
   const interest = INTERESTS.includes(declared_interest) ? declared_interest : null;
   const behaviors = Array.isArray(self_reported_behaviors) ? self_reported_behaviors : [];
-  const answeredIds = behaviors
-    .filter((entry) => entry && typeof entry === "object" && typeof entry.id === "string" && typeof entry.answer === "boolean")
-    .map((entry) => entry.id);
-  const yesCount = behaviors.filter((entry) => entry && entry.answer === true).length;
+  const answeredIds = behaviors.filter(isAnswered).map((entry) => entry.id);
+  const yesCount = behaviors.filter((entry) => isAnswered(entry) && isAffirmative(entry.answer)).length;
   const levelById = new Map(DIAGNOSTIC_QUESTIONS.map((question) => [question.id, question.level]));
   let currentLevel = 0;
   for (const entry of behaviors) {
-    if (entry && entry.answer === true && levelById.has(entry.id)) {
+    if (isAffirmative(entry?.answer) && levelById.has(entry?.id)) {
       const entryLevel = levelById.get(entry.id);
       if (entryLevel > currentLevel) currentLevel = entryLevel;
     }
@@ -120,6 +138,7 @@ export function run_diagnosis(declared_interest, self_reported_behaviors) {
     next_actions: Object.freeze([...levelDef.exit_conditions]),
     questions: DIAGNOSTIC_QUESTIONS,
     ready: [redacted]_APPROVED,
+    framework_version: FRAMEWORK_VERSION,
     declared_interest: interest,
     answered: answeredIds.length,
     yes_count: yesCount
@@ -198,4 +217,4 @@ const EVENT_TYPES = Object.freeze(new Set([
   "manual_collaboration_candidate"
 ]));
 
-export { INTERESTS, DIAGNOSTIC_QUESTIONS, EVENT_TYPES, [redacted]_APPROVED, LEVELS };
+export { INTERESTS, DIAGNOSTIC_QUESTIONS, EVENT_TYPES, [redacted]_APPROVED, LEVELS, AFFIRMATIVE_ANSWERS };

@@ -127,24 +127,41 @@ test("全質問trueでL11を返す", () => {
   const behaviors = DIAGNOSTIC_QUESTIONS.map((q) => ({ id: q.id, answer: true }));
   const result = run_diagnosis("A", behaviors);
   assert.equal(result.current_level, 11);
-  assert.equal(result.current_level_name, "接続路の社会インフラ化");
+  assert.equal(result.current_level_name, "[redacted]");
   assert.deepEqual(result.next_actions, []);
+  assert.equal(result.framework_version, "2.0.1");
 });
 
 test("全質問falseでL0を返す", () => {
   const behaviors = DIAGNOSTIC_QUESTIONS.map((q) => ({ id: q.id, answer: false }));
   const result = run_diagnosis(null, behaviors);
   assert.equal(result.current_level, 0);
-  assert.equal(result.current_level_name, "未接触");
+  assert.equal(result.current_level_name, "[redacted]");
   assert.ok(result.next_actions.length > 0);
+});
+
+test("はい・トライ中は該当と数え、わからないは非該当と数える", () => {
+  const trying = DIAGNOSTIC_QUESTIONS.map((q) => ({
+    id: q.id,
+    answer: ["Q0", "Q1", "Q2", "Q3"].includes(q.id) ? "トライ中（取り組み中）" : "いいえ"
+  }));
+  assert.equal(run_diagnosis("D", trying).current_level, 3);
+  const uncertain = DIAGNOSTIC_QUESTIONS.map((q) => ({
+    id: q.id,
+    answer: ["Q0", "Q1", "Q2", "Q3"].includes(q.id) ? "わからない" : "いいえ"
+  }));
+  const result = run_diagnosis("D", uncertain);
+  assert.equal(result.current_level, 0);
+  assert.equal(result.yes_count, 0);
+  assert.equal(result.answered, 12);
 });
 
 test("Q2までtrueでL2を返しnext_actionsはL2のexit_conditions", () => {
   const behaviors = DIAGNOSTIC_QUESTIONS.map((q) => ({ id: q.id, answer: ["Q0", "Q1", "Q2"].includes(q.id) }));
   const result = run_diagnosis("E", behaviors);
   assert.equal(result.current_level, 2);
-  assert.equal(result.current_level_name, "日常足場化");
-  assert.deepEqual(result.next_actions, ["自分の職務固有のタスクへ意識的に適用範囲を広げる"]);
+  assert.equal(result.current_level_name, "[redacted]");
+  assert.deepEqual(result.next_actions, ["[redacted]"]);
 });
 
 test("診断結果に優劣比較を含まない", () => {
