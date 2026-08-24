@@ -1,1 +1,14 @@
-{"asset_id": "02-entry-read", "source_id": "intelligence-floor-ceiling-001", "campaign_id": "floor-ceiling-001", "framework_version": "2.0.1", "revision": 1, "content_hash": "ae07271e8b7355fb8092f917a9b598d874aae743a823cea38006f096c6c03297", "channel": "web", "publish_mode": "auto", "scheduled_at": "2026-08-23T21:00:00+09:00", "approved_at": "2026-08-23T12:00:00+09:00", "approval_id": "approval-verify", "content_path": "content.md"}
+{
+  "asset_id": "02-entry-read",
+  "source_id": "intelligence-floor-ceiling-001",
+  "campaign_id": "floor-ceiling-001",
+  "framework_version": "2.0.1",
+  "revision": 1,
+  "content_hash": "91fc67ed1520fa3ccb805777a17bc1eb5f0a7b619abb94ca94e9188f096cbab8",
+  "channel": "web",
+  "publish_mode": "auto",
+  "scheduled_at": "2026-08-23T21:00:00+09:00",
+  "approved_at": "2026-08-25T05:10:00+09:00",
+  "approval_id": "approval-20260825-revisionwave2",
+  "content_path": "content.md"
+}

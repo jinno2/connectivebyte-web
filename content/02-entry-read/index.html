@@ -18,15 +18,46 @@
 <body>
   <header><a href="../../">ConnectiveByte LPへ戻る</a></header>
   <main>
-    <p class="meta">asset_id: 02-entry-read / campaign: floor-ceiling-001 / [redacted] / content_hash: ae07271e8b7355fb8092f917a9b598d874aae743a823cea38006f096c6c03297</p>
+    <p class="meta">asset_id: 02-entry-read / campaign: floor-ceiling-001 / [redacted] / content_hash: 91fc67ed1520fa3ccb805777a17bc1eb5f0a7b619abb94ca94e9188f096cbab8</p>
     <pre id="asset-body">
 # 上がってくる床は、乗れば足場になる
 
-公開前の人間レビューを前提とするドラフト骨子。未検証の外部事実は仮説または検証項目として扱い、事実として断定しない。
+公開前の人間レビューを前提とするドラフト。未検証の外部事実は仮説または検証項目として扱い、事実として断定しない。
 
-## 構成骨子
+AIは使っている。でも、どれを使っても同じに見える。
 
-難しい資料を二つの比較対象へ渡し、差分を観察する入口を示す。
+その状態の抜け方は簡単で、手元の難しい資料を、安いモデルと高いモデルの両方に渡してみることだ。この記事はその前に、いま何が起きているかを3つだけ説明する。
+
+## 1. 安いモデルの値段が、下がり続けている
+
+OpenAI の GPT-5.6 Luna は、2026-07-30に前世代比80%の値下げで投入された。API単価は input $0.20/1M・output $1.20/1M（2026-08時点・為替150円/$）。典型的な日常タスク（入力2,000・出力500トークン）は、1回約0.15円で済む。
+
+15銭で、要約・下調べ・たたき台の類が買える。この「誰でも使える水準（床）」は、放置していても毎月上がっていく。
+
+## 2. 床は、乗れば足場になる
+
+上がる床を怖がる必要はない。床の上の作業を0.15円で外注して、空いた時間を難しい仕事に使えば、床は足場になる。外注せずに同じ作業を続けると、その部分だけ毎月相対的に沈んでいく。
+
+## 3. 難しい資料は、高いモデルに渡した分だけ効く
+
+GPT-5.6 Sol のような最高性能モデルが差を出すのは、難しい資料・複雑な条件・長い文脈の処理である。ここは「自分の天井」に関わる部分で、差を実感した分だけ、自分の仕事の上限が上がっていく。
+
+## 今日の入口（10分）
+
+1. 手元の難しい資料を1つ選ぶ（論文、判例、仕様書、決算資料など）
+2. 同じ質問を GPT-5.6 Luna と GPT-5.6 Sol の両方に渡す
+3. 出力を並べて眺める。差がなければ、その仕事は床で足りる。差が出たら、そこが天井側の仕事である
+
+この10分を数回繰り返すと、「何を安いモデルに任せ、何を高いモデルに渡すか」が、感覚ではなく自分の記録で決まっていく。
+
+この先の全体像（床と天井の対比とレベル構造）は<a href="../01-canonical/index.html">「[redacted]」</a>へ。入口の選び方は<a href="../../">診断のLP</a>で関心から1つ選べる。
+
+## 出典
+
+- OpenAI API 料金ページ: <https://developers.openai.com/api/docs/pricing?utm_source=web&utm_medium=entry&utm_campaign=intelligence-floor-ceiling-001>
+- GPT-5.6 の価格性能に関する発表（Luna の前世代比80%値下げ）: <https://openai.com/index/advancing-the-price-performance-frontier-with-gpt-5-6/?utm_source=web&utm_medium=entry&utm_campaign=intelligence-floor-ceiling-001>
+
+価格と為替は 2026-08-22 時点の公開情報に基づく。改定後は再計算のこと。
 
 ## Campaign locked propositions
 
@@ -48,7 +79,7 @@
 
 ## CTA
 
-難しい資料を両モデルへ
+<a href="../../">難しい資料を両モデルへ</a>
 </pre>
   </main>
 </body>
