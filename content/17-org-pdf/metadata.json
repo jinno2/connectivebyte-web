@@ -1,14 +1,1 @@
-{
-  "asset_id": "17-org-pdf",
-  "source_id": "intelligence-floor-ceiling-001",
-  "campaign_id": "floor-ceiling-001",
-  "framework_version": "2.0.1",
-  "revision": 1,
-  "content_hash": "2698833de7997a0b254231717f3c1388c797cf6045457a9a856f9b38044ecc6d",
-  "channel": "web",
-  "publish_mode": "manual_confirm",
-  "scheduled_at": "2026-08-27T21:00:00+09:00",
-  "approved_at": "2026-08-25T05:10:00+09:00",
-  "approval_id": "approval-20260825-revisionwave2",
-  "content_path": "content.md"
-}
+{"asset_id": "17-org-pdf", "source_id": "intelligence-floor-ceiling-001", "campaign_id": "floor-ceiling-001", "framework_version": "2.0.1", "revision": 1, "content_hash": "2698833de7997a0b254231717f3c1388c797cf6045457a9a856f9b38044ecc6d", "channel": "web", "publish_mode": "manual_confirm", "scheduled_at": "2026-09-14T21:00:00+09:00", "approved_at": "2026-08-28T08:05:00+09:00", "approval_id": "approval-20260828-prelaunch", "content_path": "content.md"}
