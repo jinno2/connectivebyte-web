@@ -1,0 +1,17 @@
+{
+  "accounts": [
+    {
+      "alias": "cb_discoverer",
+      "role": "discoverer",
+      "status": "not_created",
+      "env_prefix": "CBD",
+      "tier": "url"
+    }
+  ],
+  "warmup": {
+    "post_every_n_days": 1
+  },
+  "budget": {
+    "monthly_cap_usd": 10.0
+  }
+}

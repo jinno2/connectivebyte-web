@@ -75,10 +75,22 @@ def http_json(url: str, timeout: int = 15):
         return json.loads(r.read().decode())
 
 
+def load_env_file() -> None:
+    """cron用: ~/.local/share/cb-fleet/.env を os.environ へ (既存env優先)。"""
+    try:
+        for line in (STATE_DIR / '.env').read_text().splitlines():
+            line = line.strip()
+            if line and not line.startswith('#') and '=' in line:
+                k, v = line.split('=', 1)
+                os.environ.setdefault(k, v)
+    except OSError:
+        pass
+
+
 def collect_hn(queries: list[str]) -> list[dict]:
     """HN Algolia: フロントページ + ジャンルクエリ (created within 48h)。"""
     items: dict[str, dict] = {}
-    urls = ['https://hn.algolia.com/api/v1/front_page?hitsPerPage=50']
+    urls = ['https://hn.algolia.com/api/v1/search?tags=front_page&hitsPerPage=50']
     epoch = int(dt.datetime.now(dt.timezone.utc).timestamp()) - 48 * 3600
     for q in queries:
         from urllib.parse import quote
@@ -185,6 +197,7 @@ def main() -> int:
     ap.add_argument('--no-llm', action='store_true', help='LLM起草をスキップ')
     args = ap.parse_args()
 
+    load_env_file()
     today = dt.date.today()
     genre = calendar_genre(today)
     spec = GENRES[genre]
