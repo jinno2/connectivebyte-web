@@ -10,14 +10,19 @@
 前提: app共通の X_API_KEY / X_API_SECRET を ~/.local/share/cb-fleet/.env に配置済み
 (site_meiro-a/.env の同名値をコピー — 承認画面に出るappはmeiroと同一)。
 
-使い方:
+使い方 (対話・従来形):
   python3 authorize.py --account cb_discoverer
+
+使い方 (2 phased・対話端末が無い/agent経由のonboard用・Xのrequest tokenは15分で失効):
+  python3 authorize.py --print-url   # phase1: URL表示・request tokenはpending fileへ(600)
+  python3 authorize.py --pin 1234567 # phase2: PINと交換して鍵保存+warming化・pending削除
 """
 from __future__ import annotations
 
 import argparse
 import datetime as dt
 import importlib.util
+import json
 import os
 import sys
 import urllib.error
@@ -29,6 +34,8 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 _spec = importlib.util.spec_from_file_location('cbpost', os.path.join(HERE, 'post.py'))
 post = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(post)
+
+PENDING_FILE = os.path.join(post.STATE_DIR, '.authorize-pending.json')
 
 
 def _consumer_header(url: str, params: dict, env: dict) -> str:
@@ -71,9 +78,39 @@ def fingerprint(v: str) -> str:
     return f'{v[:4]}…{v[-4:]}'
 
 
+def exchange_access(rt: dict, pin: str, env: dict) -> dict:
+    return oauth_post('https://api.twitter.com/oauth/access_token',
+                      {'oauth_verifier': pin},
+                      {**env, 'X_ACCESS_TOKEN': rt['oauth_token'],
+                       'X_ACCESS_SECRET': rt['oauth_token_secret']})
+
+
+def save_and_activate(config: dict, acct: dict, prefix: str, at: dict) -> str:
+    """access鍵を.envへ追記 (鍵は表示しない) し config を warming 化。戻り値=screen_name。"""
+    screen_name = at.get('screen_name', '?')
+    existing = open(post.ENV_FILE).read() if os.path.exists(post.ENV_FILE) else ''
+    with open(post.ENV_FILE, 'a', encoding='utf-8') as f:
+        if existing and not existing.endswith('\n'):
+            f.write('\n')
+        f.write(f'# x-discover {acct["alias"]} ({screen_name}) added {dt.date.today().isoformat()}\n')
+        f.write(f'{prefix}_ACCESS_TOKEN={at["oauth_token"]}\n')
+        f.write(f'{prefix}_ACCESS_SECRET={at["oauth_token_secret"]}\n')
+
+    acct['status'] = 'warming'
+    post.save_config(config)
+    post.log({'event': 'account_authorized', 'account': acct['alias'],
+              'screen_name': screen_name, 'token_fp': fingerprint(at['oauth_token']),
+              'to': 'warming'})
+    return screen_name
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument('--account', default='cb_discoverer')
+    ap.add_argument('--print-url', action='store_true',
+                    help='phase1のみ: 認証URL表示しrequest tokenをpending fileへ保存')
+    ap.add_argument('--pin', metavar='PIN',
+                    help='phase2のみ: pendingのrequest tokenとPINを交換して保存+warming化')
     args = ap.parse_args()
 
     config = post.load_config()
@@ -88,33 +125,46 @@ def main() -> int:
         return 1
     prefix = acct.get('env_prefix', 'CBD')
 
+    if args.pin:  # phase2: --print-url が保存した request token と交換
+        try:
+            rt = json.load(open(PENDING_FILE, encoding='utf-8'))
+        except OSError:
+            print(f'pending file が無い (先に --print-url を実行): {PENDING_FILE}',
+                  file=sys.stderr)
+            return 1
+        at = exchange_access(rt, args.pin, env)
+        if 'oauth_token' not in at or 'oauth_token_secret' not in at:
+            print(f'exchange failed: {at}', file=sys.stderr)
+            return 1
+        os.remove(PENDING_FILE)
+        screen_name = save_and_activate(config, acct, prefix, at)
+        print(f'OK: {acct["alias"]} (@{screen_name}) — .env追記 + warming開始 '
+              f'(token {fingerprint(at["oauth_token"])})')
+        return 0
+
     rt = oauth_post('https://api.twitter.com/oauth/request_token', {}, env, consumer_only=True)
+    authorize_url = f"https://api.twitter.com/oauth/authorize?oauth_token={rt['oauth_token']}"
+    if args.print_url:  # phase1: URLだけ出して終わる (PINは後から --pin で)
+        with open(PENDING_FILE, 'w', encoding='utf-8') as f:
+            json.dump({'account': acct['alias'], 'prefix': prefix,
+                       'oauth_token': rt['oauth_token'],
+                       'oauth_token_secret': rt['oauth_token_secret']}, f)
+        os.chmod(PENDING_FILE, 0o600)
+        print('=== このURLをブラウザで開き、「投稿用の新垢」でログインして app を承認 ===')
+        print(authorize_url)
+        print(f'(PINを取得した15分以内に: python3 authorize.py --account {acct["alias"]} '
+              f'--pin <7桁> — request tokenは15分で失効)')
+        return 0
+
     print('=== このURLをブラウザで開き、「投稿用の新垢」でログインして app を承認 ===')
-    print(f"https://api.twitter.com/oauth/authorize?oauth_token={rt['oauth_token']}")
+    print(authorize_url)
     print('(既に別垢でログイン中なら先にログアウト)')
     pin = input('7桁のPIN: ').strip()
-    at = oauth_post('https://api.twitter.com/oauth/access_token',
-                    {'oauth_verifier': pin},
-                    {**env, 'X_ACCESS_TOKEN': rt['oauth_token'],
-                     'X_ACCESS_SECRET': rt['oauth_token_secret']})
+    at = exchange_access(rt, pin, env)
     if 'oauth_token' not in at or 'oauth_token_secret' not in at:
         print(f'exchange failed: {at}', file=sys.stderr)
         return 1
-    screen_name = at.get('screen_name', '?')
-
-    existing = open(post.ENV_FILE).read() if os.path.exists(post.ENV_FILE) else ''
-    with open(post.ENV_FILE, 'a', encoding='utf-8') as f:
-        if existing and not existing.endswith('\n'):
-            f.write('\n')
-        f.write(f'# x-discover {acct["alias"]} ({screen_name}) added {dt.date.today().isoformat()}\n')
-        f.write(f'{prefix}_ACCESS_TOKEN={at["oauth_token"]}\n')
-        f.write(f'{prefix}_ACCESS_SECRET={at["oauth_token_secret"]}\n')
-
-    acct['status'] = 'warming'
-    post.save_config(config)
-    post.log({'event': 'account_authorized', 'account': acct['alias'],
-              'screen_name': screen_name, 'token_fp': fingerprint(at['oauth_token']),
-              'to': 'warming'})
+    screen_name = save_and_activate(config, acct, prefix, at)
     print(f'OK: {acct["alias"]} (@{screen_name}) — .env追記 + warming開始 '
           f'(token {fingerprint(at["oauth_token"])})')
     return 0
