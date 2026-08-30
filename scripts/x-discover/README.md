@@ -3,6 +3,8 @@
 AI情報の発見・速報を担う X垢 (cb_discoverer) の素材収集〜投稿パイプライン。
 設計の背景・ジャンル選定は [GENRES.md](./GENRES.md) と
 business_notes `横断/2026-08-28-x_account_fleet_strategy.md` (正本) へ。
+監視・異常時復旧・authorize手順などの**運用手順の正本は business_notes
+`横断/2026-08-30-x-discover-operations.md`** (非公開)。
 
 ## 流れ (1日1サイクル)
 
