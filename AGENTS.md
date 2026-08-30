@@ -26,6 +26,12 @@
 - 診断・newsletterの仕様変更は `logic.js`(判定) と `app.js`(UI/送信) が対。`server.js` は本番Workerの検証ロジックの写し — 片方だけ変えない。
 - 計測・登録endpoint (`api.connectivebyte.com`) 自体の変更はこのrepoでは行わない。別管理のIaC経由のみ。
 
+## scripts/t0007-outreach (提携候補パイプライン)
+
+- 承認ゲート付き: `draft`(LLM起草)→jinno `show`/`approve`→`publish-article`(このrepoのblogへ公開・npm testガード)→browser送信→`sent`。**外部に出るのはapprove後のみ**。
+- 配信順序の正本は business_notes `t0007_日本展開/配信タイムスケジュール.md`(非公開)。要点: 検証→記事公開→X投稿→計測24h→送信の順序固定・LLM記事は承認前に実測値と事実照合。詳細は `scripts/t0007-outreach/README.md`。
+- 記事の実体は `content/18-blog/<slug>/index.html` = **公開ファイル**。dossierの非公開事実(価格原価・戦略)を記事に混入させない。
+
 ## scripts/x-discover (CB発見者パイプライン)
 
 - 外部state (`~/.local/share/cb-fleet/`) を持つ運用code。queue/state/log/秘密は**repo外**。
