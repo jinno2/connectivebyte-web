@@ -140,7 +140,7 @@ def cmd_engagement(args) -> int:
 
 # ---------------------------------------------------------------- 起草 (LLM)
 
-def llm(prompt: str, max_tokens: int = 4000) -> str | None:
+def llm(prompt: str, max_tokens: int = 8000) -> str | None:
     key = os.environ.get('LITELLM_API_KEY')
     if not key:
         return None

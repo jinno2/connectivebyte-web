@@ -39,6 +39,13 @@ D1保存 → gmail転送 (構成の正本 = saas-infra `cloudflare/connectivebyt
 ベンダーごとの受信アドレス = `<vendor>@connectivebyte.com` (catch-allなため設定不要)。
 検証progressの記録はdossierへ (mail.pyは読み取り専用・送信はしない)。
 
+## タイムライン規約
+
+検証→記事公開→X投稿→計測→送信の順序と各phaseの完了条件の正本 =
+business_notes `t0007_日本展開/配信タイムスケジュール.md` (2026-08-30制定・非公開repo)。
+要点: 記事はX投稿の**前**に公開 (URL 200実確認までが完了)、送信は計測≥1サイクル後、
+承認前のLLM記事には実測値との事実照合を必ず1回。
+
 ## 対象追加
 
 `outreach.py` の `DOSSIER` に `{target: {dossier: パス, url, slug}}` を追加。
