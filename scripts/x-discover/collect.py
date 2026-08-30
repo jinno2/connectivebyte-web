@@ -22,6 +22,8 @@ import pathlib
 import sys
 import urllib.request
 
+from x_discover_rules import BANNED_WORDS, ask_is_interrogative, banned_hits
+
 STATE_DIR = pathlib.Path.home() / '.local/share/cb-fleet'
 STATE = STATE_DIR / 'discover-state.json'
 QUEUE = STATE_DIR / 'discover-queue.jsonl'
@@ -162,33 +164,71 @@ def classify(title: str, desc: str) -> str | None:
     return None
 
 
-def llm_draft(item: dict, genre_jp: str) -> dict | None:
-    """litellm proxy経由で一句+自説+問いを起草。keyは環境変数のみ。"""
+def llm_prompt(item: dict, genre_jp: str, recent_hooks: list[str]) -> str:
+    """起草prompt — X運用基本計画§11 (生成ルール) 準拠。"""
+    lines = ['あなたはAI情報発掘メディアの起草者。X投稿1件分の日本語案のみを出力する。']
+    lines += [
+        '形式 (3要素をそれぞれ1行、区切りなし、余計な説明禁止):',
+        '1行目: 発見の一句 (40字以内・断定調・書き出しの型を固定しない)',
+        '2行目: 自説1-2文 (なぜ重要か・独自の視点・80字以内・個人体験を語らない)',
+        '3行目: 読者への問い1つ (replyを誘う・30字以内・「？」で終える)',
+        '禁止語 (誇張・代入肯定・X運用基本計画§11): ' + '/'.join(BANNED_WORDS),
+        '賞賛の形容詞で始めず、事実と含意を分けて書く (評価は根拠の後に限る)。',
+        '制約: 題名に無い固有名詞・製品名を作らない (一般形で書く)。'
+        '数字の独自推計もしない。',
+    ]
+    if recent_hooks:
+        lines.append('直近の投稿の一句 (書き出し・語尾がこれらと重複しないこと):')
+        lines += [f'・{h}' for h in recent_hooks]
+    lines += [
+        f'ジャンル: {genre_jp}', f'題名: {item["title"]}', f'URL: {item["url"]}',
+        'URLは出力に含めない (投稿システムが別途付与する)。',
+    ]
+    return '\n'.join(lines)
+
+
+def llm_draft(item: dict, genre_jp: str, recent_hooks: list[str]) -> dict | None:
+    """litellm proxy経由で一句+自説+問いを起草。keyは環境変数のみ。
+
+    起草結果が§11機械検査 (禁止語/問い形) に落ちたら1回だけ再試行する。
+    """
     key = os.environ.get('LITELLM_API_KEY')
     if not key:
         return None
-    prompt = (
-        'あなたはAI情報発掘メディアの起草者。X投稿1件分の日本語案のみを出力する。\n'
-        '形式 (3要素をそれぞれ1行、区切りなし、余計な説明禁止):\n'
-        '1行目: 発見の一句 (「〜を見付けた」体・40字以内・断定調)\n'
-        '2行目: 自説1-2文 (なぜ重要か・独自の視点・80字以内・個人体験を語らない)\n'
-        '3行目: 読者への問い1つ (replyを誘う・30字以内)\n'
-        '制約: 題名に無い固有名詞・製品名を絶対に作らない (一般形で書く)。'
-        '数字の独自推計もしない。\n'
-        f'ジャンル: {genre_jp}\n題名: {item["title"]}\nURL: {item["url"]}\n'
-        'URLは出力に含めない (投稿システムが別途付与する)。')
-    body = json.dumps({'model': 'default', 'max_tokens': 2500,
-                       'messages': [{'role': 'user', 'content': prompt}]}).encode()
-    req = urllib.request.Request(
-        'http://localhost:14000/v1/chat/completions', data=body,
-        headers={'Content-Type': 'application/json', 'Authorization': f'Bearer {key}'})
-    with urllib.request.urlopen(req, timeout=60) as r:
-        data = json.loads(r.read().decode())
-    text = data['choices'][0]['message']['content'].strip()
-    lines = [l.strip() for l in text.splitlines() if l.strip()]
-    if len(lines) < 3:
+    prompt = llm_prompt(item, genre_jp, recent_hooks)
+    def call(p: str) -> dict | None:
+        body = json.dumps({'model': 'default', 'max_tokens': 2500,
+                           'messages': [{'role': 'user', 'content': p}]}).encode()
+        req = urllib.request.Request(
+            'http://localhost:14000/v1/chat/completions', data=body,
+            headers={'Content-Type': 'application/json', 'Authorization': f'Bearer {key}'})
+        with urllib.request.urlopen(req, timeout=60) as r:
+            data = json.loads(r.read().decode())
+        text = data['choices'][0]['message']['content'].strip()
+        lines = [l.strip() for l in text.splitlines() if l.strip()]
+        if len(lines) < 3:
+            return None
+        return {'hook': lines[0], 'take': lines[1], 'ask': lines[2]}
+
+    draft = call(prompt)
+    if draft is None:
         return None
-    return {'hook': lines[0], 'take': lines[1], 'ask': lines[2]}
+    hits = banned_hits(draft['hook'], draft['take'], draft['ask'])
+    if hits or not ask_is_interrogative(draft['ask']):
+        note = f'前案は規律違反 (禁止語: {"/".join(hits) or "なし"}・問い形不備)。書き直す。'
+        retry = call(prompt + '\n' + note)
+        if retry is not None:
+            draft = retry
+    return draft
+
+
+def recent_hooks(limit: int = 6) -> list[str]:
+    """キュー末尾のhook一覧 (均一化回避のため起草promptへ渡す)。"""
+    try:
+        rows = [json.loads(l) for l in QUEUE.read_text().splitlines() if l.strip()]
+    except OSError:
+        return []
+    return [r['hook'] for r in rows if r.get('hook')][-limit:]
 
 
 def main() -> int:
@@ -227,6 +267,7 @@ def main() -> int:
         return 0
 
     STATE_DIR.mkdir(parents=True, exist_ok=True)
+    hooks = recent_hooks()
     drafts = []
     for item in picked:
         draft = {
@@ -242,13 +283,16 @@ def main() -> int:
         if args.no_llm:
             draft.update({'hook': '【要起草】', 'take': '【自説: 要記入】', 'ask': '【問い: 要記入】'})
         else:
-            got = llm_draft(item, GENRES[item['genre']]['jp'])
+            got = llm_draft(item, GENRES[item['genre']]['jp'], hooks)
             draft.update(got or {'hook': '【要起草】', 'take': '【LLM失敗: 要記入】', 'ask': '【問い: 要記入】'})
         drafts.append(draft)
         seen.add(item['url'])
         print(f'  [{item["genre"]}] {item["score"]:>8.2f} {item["title"][:70]}')
         print(f'      hook: {draft["hook"]}')
         print(f'      take: {draft["take"]}')
+        hits = banned_hits(draft['hook'], draft['take'], draft['ask'])
+        if hits:
+            print(f'      ⚠ 禁止語残存 (review/postで検出): {"/".join(hits)}')
 
     if not args.dry:
         with QUEUE.open('a') as f:

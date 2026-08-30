@@ -19,6 +19,12 @@ import json
 import os
 import sys
 
+HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, HERE)
+
+from x_discover_rules import (ask_is_interrogative, banned_hits,  # noqa: E402
+                              uniformity_warning)
+
 STATE_DIR = os.path.expanduser('~/.local/share/cb-fleet')
 QUEUE_FILE = os.path.join(STATE_DIR, 'discover-queue.jsonl')
 
@@ -62,7 +68,18 @@ def show(entries: list[dict]) -> None:
         print(f'      hook: {d.get("hook")}')
         print(f'      take: {d.get("take")}')
         print(f'      ask : {d.get("ask")}')
-        print(f'      url : {d.get("url")}\n')
+        print(f'      url : {d.get("url")}')
+        warns = []
+        hits = banned_hits(d.get('hook', ''), d.get('take', ''), d.get('ask', ''))
+        if hits:
+            warns.append('禁止語 ' + '/'.join(hits) + ' → post.pyが投稿拒否 (blocked)')
+        if not ask_is_interrogative(d.get('ask', '')):
+            warns.append('askが問い形でない (「？」で終える)')
+        others = [e.get('hook', '') for _, e in rows if e is not d]
+        warns += [w for w in [uniformity_warning(d.get('hook', ''), others)] if w]
+        for w in warns:
+            print(f'      ⚠ {w}')
+        print()
     print('→ review.py approve <番号> / reject <番号>')
 
 

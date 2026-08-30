@@ -26,6 +26,9 @@ import urllib.parse
 import urllib.request
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, HERE)
+
+from x_discover_rules import banned_hits  # noqa: E402  (§11機械検査・兄弟module)
 STATE_DIR = os.path.expanduser('~/.local/share/cb-fleet')
 ENV_FILE = os.path.join(STATE_DIR, '.env')
 QUEUE_FILE = os.path.join(STATE_DIR, 'discover-queue.jsonl')
@@ -221,6 +224,17 @@ def main() -> int:
             log({'event': 'skip', 'account': alias, 'reason': 'no approved draft within 48h'})
             continue
         text = build_text(d)
+        # §11機械検査 (fail-closed): 承認済みでも誇張語を含めば投稿拒否し
+        # status=blocked で再選択対象外にする (毎晩の無駄retryを防ぐ)。
+        hits = banned_hits(d.get('hook', ''), d.get('take', ''), d.get('ask', ''))
+        if hits:
+            log({'event': 'fail', 'account': alias, 'kind': 'banned_word',
+                 'words': hits, 'url': d['url']})
+            d['status'] = 'blocked'
+            d['blocked_reason'] = 'banned_word: ' + '/'.join(hits)
+            save_queue(entries)
+            rc = 1
+            continue
         if len(text) - len(d['url']) + 23 > 280:  # URLはX上23字扱い
             log({'event': 'fail', 'account': alias, 'kind': 'too_long',
                  'length': len(text) - len(d['url']) + 23})
