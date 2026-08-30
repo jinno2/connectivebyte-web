@@ -24,6 +24,21 @@ approved (kind=outreach) ─browser送信 (Claude workset)─▶ sent --channel=
 | `publish-article <id>` | approve後 | `content/18-blog/<slug>/index.html` 生成 → **npm test (publication guard)** → git add/commit/push → URL記録 |
 | `sent <id> --channel=...` | 送信後 | 文面送信済みとして記録 (browser送信はClaude worksetが実施) |
 
+## 受信メール (mail.py — 2026-08-30 完全自動化)
+
+connectivebyte.com の受信は CF Email Routing → `cb-email-inbox` worker が生MIMEを
+D1保存 → gmail転送 (構成の正本 = saas-infra `cloudflare/connectivebyte/inbox.tf`)。
+読み出しtoken = cb-fleet `.env` の `CB_INBOX_TOKEN` (repo外)。
+
+| コマンド | 動作 |
+|---|---|
+| `mail.py list [--to quetab@connectivebyte.com]` | 受信一覧 (30日で自動削除) |
+| `mail.py show <id>` | MIME解析した本文まで表示 |
+| `mail.py wait --to quetab@connectivebyte.com [--from-substr quetab] [--timeout 300]` | 新着をポーリングし認証コード候補をJSON出力 (サインアップ検証の定型) |
+
+ベンダーごとの受信アドレス = `<vendor>@connectivebyte.com` (catch-allなため設定不要)。
+検証progressの記録はdossierへ (mail.pyは読み取り専用・送信はしない)。
+
 ## 対象追加
 
 `outreach.py` の `DOSSIER` に `{target: {dossier: パス, url, slug}}` を追加。
