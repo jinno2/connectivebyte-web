@@ -24,6 +24,7 @@ import json
 import os
 import subprocess
 import sys
+import urllib.parse
 import urllib.request
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -113,13 +114,17 @@ def cmd_engagement(args) -> int:
                 if m.get('date') == today:
                     done.add(m['tweet_id'])
     rows = [json.loads(l) for l in open(DISCOVER_QUEUE).read().splitlines() if l.strip()]
-    posted = [r for r in rows if r.get('tweet_id') and r.get('status') == 'posted']
+    # post.pyは投稿後もstatus='approved'のままposted_atだけ付ける (=投稿済みmarker)
+    posted = [r for r in rows if r.get('tweet_id') and r.get('posted_at')]
     for r in posted:
         tid = r['tweet_id']
         if tid in done:
             continue
-        url = f'https://api.twitter.com/2/tweets/{tid}?tweet.fields=public_metrics'
-        req = urllib.request.Request(url, headers={'Authorization': oauth_header('GET', url, {}, aenv)})
+        # OAuth1はquery stringを署名paramsに入れる必要がある (urlに埋めたまま署名すると401)
+        base = f'https://api.twitter.com/2/tweets/{tid}'
+        q = {'tweet.fields': 'public_metrics'}
+        url = f'{base}?{urllib.parse.urlencode(q)}'
+        req = urllib.request.Request(url, headers={'Authorization': oauth_header('GET', base, q, aenv)})
         try:
             with urllib.request.urlopen(req, timeout=15) as resp:
                 data = json.loads(resp.read().decode())
