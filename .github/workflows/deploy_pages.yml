@@ -28,7 +28,7 @@ jobs:
       - name: Prepare publish tree
         run: |
           mkdir -p _site
-          cp index.html styles.css app.js logic.js _site/
+          cp index.html styles.css app.js logic.js share.js _site/
           cp -r content _site/
       - uses: actions/upload-pages-artifact@v5
         with:

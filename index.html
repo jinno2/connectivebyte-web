@@ -35,6 +35,15 @@
       </div>
     </section>
 
+    <section class="shared-result" id="shared-result" hidden aria-labelledby="shared-result-title">
+      <div class="section-label">SHARED RESULT</div>
+      <p class="shared-note">共有された診断結果です。</p>
+      <h2 id="shared-result-title"><span id="shared-level"></span> <span id="shared-level-name"></span></h2>
+      <p id="shared-next"></p>
+      <button class="button button-primary" type="button" data-action="trial-same-condition">同じ条件で試す <span aria-hidden="true">→</span></button>
+      <p class="privacy-note">個人属性の入力なし・所要30秒・結果の保存は端末内のみ</p>
+    </section>
+
     <section class="statement section-dark" id="purpose">
       <div class="section-label">01 / PURPOSE</div>
       <div class="statement-grid">
@@ -86,6 +95,29 @@
           <p>次のアクション：</p>
           <ul id="diagnostic-actions"></ul>
           <a class="button button-primary" id="diagnostic-comparison-link" href="#comparison" hidden>比較テンプレートを開く <span aria-hidden="true">→</span></a>
+          <div class="share-block" id="share-block" hidden>
+            <p class="share-lead">結果を共有する</p>
+            <div class="share-url">
+              <label class="sr-only" for="share-url-input">共有用URL</label>
+              <input id="share-url-input" type="text" readonly>
+              <button class="plain-button" type="button" data-action="copy-share-url">コピー</button>
+            </div>
+            <fieldset class="share-templates">
+              <legend>投稿テンプレート</legend>
+              <label><input type="radio" name="share-template" value="result" checked>成果</label>
+              <label><input type="radio" name="share-template" value="free">自由入力</label>
+            </fieldset>
+            <label class="sr-only" for="share-free-text">自由入力本文</label>
+            <textarea id="share-free-text" rows="3" hidden placeholder="自由に入力してください(個人情報は書かないでください)"></textarea>
+            <label class="sr-only" for="share-preview">投稿プレビュー</label>
+            <textarea id="share-preview" rows="5" readonly></textarea>
+            <button class="button button-primary" type="button" data-action="open-share-intent">Xで下書きを確認 <span aria-hidden="true">→</span></button>
+            <div class="share-card">
+              <img id="share-card-img" alt="成果カード画像" hidden>
+              <button class="plain-button" type="button" data-action="download-share-card">成果カードを画像で保存</button>
+            </div>
+            <p class="privacy-note">投稿はあなたの操作でX上に確認画面が出ます。このページが代わりに投稿することはありません。</p>
+          </div>
         </div>
       </div>
     </section>

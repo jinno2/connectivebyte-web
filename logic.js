@@ -214,7 +214,13 @@ const EVENT_TYPES = Object.freeze(new Set([
   "org_pdf_downloaded",
   "newsletter_subscribed",
   "outbound_cta_clicked",
-  "manual_collaboration_candidate"
+  "manual_collaboration_candidate",
+  "result_page_viewed",
+  "share_template_selected",
+  "share_draft_generated",
+  "x_intent_opened",
+  "result_card_downloaded",
+  "same_condition_trial_started"
 ]));
 
 export { INTERESTS, DIAGNOSTIC_QUESTIONS, EVENT_TYPES, [redacted]_APPROVED, LEVELS, AFFIRMATIVE_ANSWERS };

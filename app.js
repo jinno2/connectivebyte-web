@@ -8,6 +8,7 @@ import {
   run_diagnosis,
   shouldUseStrongCMessage
 } from "./logic.js";
+import * as share from "./share.js";
 
 const STORAGE_KEYS = Object.freeze([
   "anonymous_id",
@@ -32,7 +33,13 @@ const EVENT_NAMES = new Set([
   "org_pdf_downloaded",
   "newsletter_subscribed",
   "outbound_cta_clicked",
-  "manual_collaboration_candidate"
+  "manual_collaboration_candidate",
+  "result_page_viewed",
+  "share_template_selected",
+  "share_draft_generated",
+  "x_intent_opened",
+  "result_card_downloaded",
+  "same_condition_trial_started"
 ]);
 
 const campaign = (() => {
@@ -258,6 +265,109 @@ function submitDiagnosis() {
   if (link) link.hidden = false;
   writeJson("diagnosis_result", { current_level: result.current_level, current_level_name: result.current_level_name, next_actions: [...result.next_actions] });
   renderDashboard();
+  renderShareBlock({
+    level: result.current_level,
+    levelName: result.current_level_name,
+    nextAction: result.next_actions[0] ?? "",
+    yesCount: result.yes_count
+  });
+}
+
+// --- share loop (X運用基本計画 v1) -------------------------------------------------
+
+let shareState = null;
+
+function shareBaseUrl() {
+  return `${window.location.origin}${window.location.pathname}`;
+}
+
+function currentShareTemplate() {
+  const checked = document.querySelector("input[name=share-template]:checked");
+  return checked ? checked.value : "result";
+}
+
+function regenerateShareDraft(options = {}) {
+  if (!shareState) return;
+  shareState.template = currentShareTemplate();
+  const draft = share.buildShareText(shareState.template, {
+    level: shareState.level,
+    levelName: shareState.levelName,
+    nextAction: shareState.nextAction,
+    freeText: document.querySelector("#share-free-text").value,
+    url: shareState.url
+  });
+  document.querySelector("#share-preview").value = draft ? draft.text : "";
+  if (options.announce) track("share_draft_generated", { asset_id: "share_block", cta_id: `template_${shareState.template}` });
+}
+
+function renderShareBlock(result) {
+  const block = document.querySelector("#share-block");
+  if (!block) return;
+  shareState = {
+    ...result,
+    url: share.shareUrlFor(shareBaseUrl(), result.level),
+    template: "result"
+  };
+  document.querySelector("#share-url-input").value = shareState.url;
+  regenerateShareDraft({ announce: true });
+  renderResultCard();
+  block.hidden = false;
+}
+
+function renderResultCard() {
+  if (!shareState) return;
+  const canvas = document.createElement("canvas");
+  canvas.width = 1200;
+  canvas.height = 630;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return;
+  ctx.fillStyle = "#f4f1e9";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.fillStyle = "#c8ff52";
+  ctx.fillRect(0, 0, canvas.width, 12);
+  ctx.textBaseline = "top";
+  const styles = {
+    title: { font: "600 44px sans-serif", color: "#566273", y: 90 },
+    level: { font: "700 96px sans-serif", color: "#101c2c", y: 170 },
+    next: { font: "500 44px sans-serif", color: "#101c2c", y: 340 },
+    meta: { font: "400 34px sans-serif", color: "#566273", y: 470 }
+  };
+  for (const line of share.cardLines(shareState)) {
+    const spec = styles[line.kind];
+    if (!spec) continue;
+    ctx.font = spec.font;
+    ctx.fillStyle = spec.color;
+    ctx.fillText(line.text, 80, spec.y);
+  }
+  ctx.fillStyle = "#43d9d0";
+  ctx.fillRect(80, 560, 120, 8);
+  const img = document.querySelector("#share-card-img");
+  img.src = canvas.toDataURL("image/png");
+  img.hidden = false;
+  shareState.cardCanvas = canvas;
+}
+
+function initializeSharedResult() {
+  const { level } = share.parseShareParams(window.location.search);
+  if (level === null) return;
+  const section = document.querySelector("#shared-result");
+  if (!section) return;
+  document.querySelector("#shared-level").textContent = `L${level}`;
+  document.querySelector("#shared-level-name").textContent = share.levelName(level);
+  const next = share.nextActionFor(level);
+  const nextEl = document.querySelector("#shared-next");
+  if (next) nextEl.textContent = `次の一手:${share.truncateJa(next, 60)}`;
+  else nextEl.hidden = true;
+  section.hidden = false;
+  track("result_page_viewed", { asset_id: "shared_result", cta_id: `r_L${level}` });
+}
+
+function trialSameCondition() {
+  const section = document.querySelector("#shared-result");
+  if (section) section.hidden = true;
+  window.history.replaceState(null, "", window.location.pathname);
+  document.querySelector("#diagnostic").scrollIntoView({ behavior: "smooth" });
+  track("same_condition_trial_started", { asset_id: "shared_result", cta_id: "trial_same_condition" });
 }
 
 function renderDashboard() {
@@ -438,6 +548,40 @@ document.addEventListener("click", (event) => {
   if (action === "reject-analytics") saveConsent(false);
   if (action === "show-consent") document.querySelector("#consent-panel").hidden = false;
   if (action === "submit-diagnosis") submitDiagnosis();
+  if (action === "copy-share-url") {
+    const input = document.querySelector("#share-url-input");
+    input.select();
+    const done = () => {
+      const button = event.target.closest("[data-action]");
+      const label = button.textContent;
+      button.textContent = "コピーしました";
+      setTimeout(() => { button.textContent = label; }, 1600);
+    };
+    if (navigator.clipboard?.writeText) {
+      navigator.clipboard.writeText(input.value).then(done).catch(() => { document.execCommand("copy"); done(); });
+    } else {
+      document.execCommand("copy");
+      done();
+    }
+  }
+  if (action === "open-share-intent") {
+    if (!shareState) return;
+    track("x_intent_opened", { asset_id: "share_block", cta_id: `template_${shareState.template}` });
+    window.open(share.buildIntentUrl(document.querySelector("#share-preview").value), "_blank", "noopener");
+  }
+  if (action === "download-share-card") {
+    if (!shareState?.cardCanvas) return;
+    track("result_card_downloaded", { asset_id: "share_block", cta_id: "result_card" });
+    shareState.cardCanvas.toBlob((blob) => {
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `connectivebyte-result-L${shareState.level}.png`;
+      link.click();
+      URL.revokeObjectURL(url);
+    }, "image/png");
+  }
+  if (action === "trial-same-condition") trialSameCondition();
   if (action === "refresh-dashboard") renderDashboard();
   if (action === "open-comparison" || action === "complete-comparison" || action === "download-org") {
     setTimeout(renderDashboard, 0);
@@ -473,6 +617,17 @@ document.querySelector("#newsletter-form").addEventListener("submit", (event) =>
 
 const restoredInterest = readJson("declared_interest", null);
 if (getInterestRoute(restoredInterest)) renderRoute(restoredInterest, false);
+document.querySelectorAll("input[name=share-template]").forEach((radio) => {
+  radio.addEventListener("change", () => {
+    document.querySelector("#share-free-text").hidden = currentShareTemplate() !== "free";
+    if (radio.checked) {
+      track("share_template_selected", { asset_id: "share_block", cta_id: `template_${radio.value}` });
+      regenerateShareDraft({ announce: true });
+    }
+  });
+});
+document.querySelector("#share-free-text").addEventListener("input", () => regenerateShareDraft());
+initializeSharedResult();
 initializeConsent();
 initializeReadingEvents();
 renderDashboard();
