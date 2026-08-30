@@ -42,3 +42,10 @@ python3 review.py --all           # 全queue簡易履歴
 - 画像添付はv0では無し (CLIP埋め込み強化は将来課題 — GENRES.md 参照)
 - ハッシュタグ無し (copy linkされやすい無装飾形を優先)
 - 予算backstop = config `budget.monthly_cap_usd` ($10/mo = URL付き31投稿分超えでskip)
+
+## プロファイル管理 (実測 2026-08-30)
+
+- bio / profile url は投稿用OAuth鍵のまま **v1.1 `account/update_profile.json`** で更新可 (200実測)。
+  v2 `PATCH /2/users/me` は405で不可。form paramsは署名に込み (`post.oauth_header` のparams引数)。
+- アイコンは v1.1 `account/update_profile_image.json` (base64) で更新可 — 画像の選定・用意が必要
+- 2FAのみWeb UI手動 (パスワード+認証アプリ設定はAPI不可)
