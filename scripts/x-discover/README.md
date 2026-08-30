@@ -48,4 +48,6 @@ python3 review.py --all           # 全queue簡易履歴
 - bio / profile url は投稿用OAuth鍵のまま **v1.1 `account/update_profile.json`** で更新可 (200実測)。
   v2 `PATCH /2/users/me` は405で不可。form paramsは署名に込み (`post.oauth_header` のparams引数)。
 - アイコンは v1.1 `account/update_profile_image.json` (base64) で更新可 — 画像の選定・用意が必要
+- 言語/タイムゾーンは v1.1 `account/settings.json` (`lang` / `time_zone`) で更新可
+  (@ailabpost は 08-30 に `lang=ja`・`time_zone=Asia/Tokyo` 適用・200実測)
 - 2FAのみWeb UI手動 (パスワード+認証アプリ設定はAPI不可)
