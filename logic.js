@@ -66,44 +66,59 @@ export function getEligibleSegments(selfSelections) {
     .map((interest) => ROUTES[interest].segment);
 }
 
-// Framework Core: connective-intelligence-framework v2.0.1（2026-08-23人間承認）よりコピー。
-// 出典: maturity-framework/cil-0-11.ja.yaml（正本md由来の派生物）。本ファイルでの定義の再構成・追加を禁止する。
-export const FRAMEWORK_VERSION = "2.0.1";
-
-const [redacted]_APPROVED = true;
-
-const LEVELS = Object.freeze([
-  Object.freeze({ level: 0, name_ja: "[redacted]", definition: "[redacted]", exit_conditions: Object.freeze(["[redacted]"]) }),
-  Object.freeze({ level: 1, name_ja: "[redacted]", definition: "[redacted]", exit_conditions: Object.freeze(["[redacted]"]) }),
-  Object.freeze({ level: 2, name_ja: "[redacted]", definition: "[redacted]", exit_conditions: Object.freeze(["[redacted]"]) }),
-  Object.freeze({ level: 3, name_ja: "[redacted]", definition: "[redacted]", exit_conditions: Object.freeze(["[redacted]"]) }),
-  Object.freeze({ level: 4, name_ja: "[redacted]", definition: "[redacted]", exit_conditions: Object.freeze(["[redacted]"]) }),
-  Object.freeze({ level: 5, name_ja: "[redacted]", definition: "[redacted]", exit_conditions: Object.freeze(["[redacted]"]) }),
-  Object.freeze({ level: 6, name_ja: "[redacted]", definition: "[redacted]", exit_conditions: Object.freeze(["[redacted]"]) }),
-  Object.freeze({ level: 7, name_ja: "[redacted]", definition: "[redacted]", exit_conditions: Object.freeze(["[redacted]"]) }),
-  Object.freeze({ level: 8, name_ja: "[redacted]", definition: "[redacted]", exit_conditions: Object.freeze(["[redacted]"]) }),
-  Object.freeze({ level: 9, name_ja: "[redacted]", definition: "[redacted]", exit_conditions: Object.freeze(["[redacted]"]) }),
-  Object.freeze({ level: 10, name_ja: "[redacted]", definition: "[redacted]", exit_conditions: Object.freeze(["[redacted]"]) }),
-  Object.freeze({ level: 11, name_ja: "[redacted]", definition: "[redacted]", exit_conditions: Object.freeze([]) })
+// 公開サイト向けの段階モデル。AI活用の成熟度を一般論レベルの4段階で示す。
+// 詳細な段階の定義は非公開（研究開発中）。
+const PHASES = Object.freeze([
+  Object.freeze({
+    id: "P1",
+    label: "AIを知る・比べる段階",
+    next_hints: Object.freeze([
+      "気になる仕事で、複数のAIに同じ指示を出して出力を比べてみる",
+      "違いを感じた仕事をメモし、次に確かめたいことを1つ決める"
+    ])
+  }),
+  Object.freeze({
+    id: "P2",
+    label: "AIで試す・扱う段階",
+    next_hints: Object.freeze([
+      "自分の仕事の中で難しく重要なタスクを選び、AIにどこまでできるか試す",
+      "うまくいった例といかなかった例を、記録として残す"
+    ])
+  }),
+  Object.freeze({
+    id: "P3",
+    label: "AIを仕組みにする段階",
+    next_hints: Object.freeze([
+      "繰り返し使う手順をまとめ、同じ結果を出しやすい形にする",
+      "かかった費用と手間を記録し、次の見直しに使う"
+    ])
+  }),
+  Object.freeze({
+    id: "P4",
+    label: "AIを広げて事業にする段階",
+    next_hints: Object.freeze([
+      "他の部門・顧客・業務にも同じ仕組みを試し、成果を比べる",
+      "事業全体の費用と成果を、共通の物差しで眺める"
+    ])
+  })
 ]);
 
-// Framework Core: maturity-framework/diagnostic-questions.ja.yaml v2.0.1よりコピー。
 // 「はい」「トライ中（取り組み中）」を該当、「いいえ」「わからない」「該当しない」を非該当として扱う。
 const AFFIRMATIVE_ANSWERS = Object.freeze(new Set(["はい", "トライ中（取り組み中）", "トライ中"]));
 
 const DIAGNOSTIC_QUESTIONS = Object.freeze([
-  Object.freeze({ id: "Q0", level: 0, label: "AIを自分の仕事や事業に関係するものとして意識したことがありますか" }),
-  Object.freeze({ id: "Q1", level: 1, label: "現在一番性能が高いとされるAI（フロンティアモデル）を実際に使って、その出力を確認していますか" }),
-  Object.freeze({ id: "Q2", level: 2, label: "複数のAIの間で性能の違い（文章の正確さ、指示の理解、長い資料の扱い、一貫性など）を、自分の言葉で説明できますか" }),
-  Object.freeze({ id: "Q3", level: 3, label: "自分の仕事の中で重要かつ難しい課題（[redacted]）で複数のAIを比べて、どこまでできてどこからうまくいかないかを把握していますか" }),
-  Object.freeze({ id: "Q4", level: 4, label: "今の高性能AIがあるからこそ着手できた新しい仕事を、実際に始めていますか" }),
-  Object.freeze({ id: "Q5", level: 5, label: "今の最高性能のAIでも解けずに止まっている重要な仕事があり、その仕事を進めるための活動をしていますか" }),
-  Object.freeze({ id: "Q6", level: 6, label: "AIを組み込んだ仕組み（[redacted]）を構築し、モデルの苦手な部分を検索・ツール・人間の確認などで補いながら、実際の業務で繰り返し使っていますか" }),
-  Object.freeze({ id: "Q7", level: 7, label: "成功1件あたりの総コスト（費用と手間を含む）を測って、求める品質を保ったまま最適化していますか" }),
-  Object.freeze({ id: "Q8", level: 8, label: "AIの実行結果を評価してプロンプトやモデル構成などを見直す改善ループを、継続的に回していますか" }),
-  Object.freeze({ id: "Q9", level: 9, label: "その仕組みを別の部門・顧客・地域・業務に合わせて調整して展開し、成果を確認していますか" }),
-  Object.freeze({ id: "Q10", level: 10, label: "顧客がつき、売上と利益が生まれる新しい事業を、仕組みが継続的に生み出していますか" }),
-  Object.freeze({ id: "Q11", level: 11, label: "複数の事業と社外の経済主体も含めて、人・金・時間などの配分を共通の物差しで全体として最適化していますか" })
+  Object.freeze({ id: "Q0", phase: 1, label: "AIを自分の仕事や事業に関係するものとして意識したことがありますか" }),
+  Object.freeze({ id: "Q1", phase: 1, label: "現在一番性能が高いとされるAIを実際に使って、その出力を確認していますか" }),
+  Object.freeze({ id: "Q2", phase: 1, label: "複数のAIの間で性能の違い（文章の正確さ、指示の理解、長い資料の扱い、一貫性など）を、自分の言葉で説明できますか" }),
+  Object.freeze({ id: "Q3", phase: 2, label: "自分の仕事の中で重要かつ難しい課題で複数のAIを比べて、どこまでできてどこからうまくいかないかを把握していますか" }),
+  Object.freeze({ id: "Q4", phase: 2, label: "今の高性能AIがあるからこそ着手できた新しい仕事を、実際に始めていますか" }),
+  Object.freeze({ id: "Q5", phase: 2, label: "今の最高性能のAIでも解けずに止まっている重要な仕事があり、その仕事を進めるための活動をしていますか" }),
+  Object.freeze({ id: "Q6", phase: 3, label: "AIを組み込んだ仕組みを構築し、モデルの苦手な部分を検索・ツール・人間の確認などで補いながら、実際の業務で繰り返し使っていますか" }),
+  Object.freeze({ id: "Q7", phase: 3, label: "成功1件あたりの総コスト（費用と手間を含む）を測って、求める品質を保ったまま最適化していますか" }),
+  Object.freeze({ id: "Q8", phase: 3, label: "AIの実行結果を評価してプロンプトやモデル構成などを見直す改善ループを、継続的に回していますか" }),
+  Object.freeze({ id: "Q9", phase: 4, label: "その仕組みを別の部門・顧客・地域・業務に合わせて調整して展開し、成果を確認していますか" }),
+  Object.freeze({ id: "Q10", phase: 4, label: "AIを活用する仕組みを通じて、顧客がつき売上と利益が生まれる新しい事業を始めていますか" }),
+  Object.freeze({ id: "Q11", phase: 4, label: "事業全体で人・金・時間などの配分を、全体としてより良くしようと取り組んでいますか" })
 ]);
 
 function isAffirmative(answer) {
@@ -123,22 +138,21 @@ export function run_diagnosis(declared_interest, self_reported_behaviors) {
   const behaviors = Array.isArray(self_reported_behaviors) ? self_reported_behaviors : [];
   const answeredIds = behaviors.filter(isAnswered).map((entry) => entry.id);
   const yesCount = behaviors.filter((entry) => isAnswered(entry) && isAffirmative(entry.answer)).length;
-  const levelById = new Map(DIAGNOSTIC_QUESTIONS.map((question) => [question.id, question.level]));
-  let currentLevel = 0;
+  const phaseById = new Map(DIAGNOSTIC_QUESTIONS.map((question) => [question.id, question.phase]));
+  let currentPhase = 1;
   for (const entry of behaviors) {
-    if (isAffirmative(entry?.answer) && levelById.has(entry?.id)) {
-      const entryLevel = levelById.get(entry.id);
-      if (entryLevel > currentLevel) currentLevel = entryLevel;
+    if (isAffirmative(entry?.answer) && phaseById.has(entry?.id)) {
+      const entryPhase = phaseById.get(entry.id);
+      if (entryPhase > currentPhase) currentPhase = entryPhase;
     }
   }
-  const levelDef = LEVELS[currentLevel];
+  const phase = PHASES[currentPhase - 1];
   return {
-    current_level: currentLevel,
-    current_level_name: levelDef.name_ja,
-    next_actions: Object.freeze([...levelDef.exit_conditions]),
+    current_phase: currentPhase,
+    current_phase_label: phase.label,
+    next_hints: Object.freeze([...phase.next_hints]),
     questions: DIAGNOSTIC_QUESTIONS,
-    ready: [redacted]_APPROVED,
-    framework_version: FRAMEWORK_VERSION,
+    ready: true,
     declared_interest: interest,
     answered: answeredIds.length,
     yes_count: yesCount
@@ -224,4 +238,4 @@ const EVENT_TYPES = Object.freeze(new Set([
   "feedback_submitted"
 ]));
 
-export { INTERESTS, DIAGNOSTIC_QUESTIONS, EVENT_TYPES, [redacted]_APPROVED, LEVELS, AFFIRMATIVE_ANSWERS };
+export { INTERESTS, DIAGNOSTIC_QUESTIONS, EVENT_TYPES, PHASES, AFFIRMATIVE_ANSWERS };

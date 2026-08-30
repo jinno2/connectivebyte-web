@@ -52,13 +52,13 @@ test("production host sends events to the api Worker, others stay same-origin", 
 });
 
 test("consent grant re-emits shared_result_viewed dropped before consent", () => {
-  // 初回visitorが共有URL (?r=L{n}) で来ると track() は同意前にdropする。
+  // 初回visitorが共有URL (?r=P{n}) で来ると track() は同意前にdropする。
   // 同意時に補発しないと成長loopの核心指標 (shared_result_viewed) が
   // 初回visitor分だけ永遠に欠ける → saveConsent 内の補発をpinする。
   const source = readFileSync(fileURLToPath(new URL("../app.js", import.meta.url)), "utf8");
-  assert.match(source, /sharedResultLevelThisView = level;/);
+  assert.match(source, /sharedResultPhaseThisView = phase;/);
   assert.match(
     source,
-    /if \(sharedResultLevelThisView !== null && !document\.querySelector\("#shared-result"\)\?\.hidden\) \{\s*\n\s*track\("shared_result_viewed", \{ asset_id: "shared_result", cta_id: `r_L\$\{sharedResultLevelThisView\}` \}\);/
+    /if \(sharedResultPhaseThisView !== null && !document\.querySelector\("#shared-result"\)\?\.hidden\) \{\s*\n\s*track\("shared_result_viewed", \{ asset_id: "shared_result", cta_id: `r_P\$\{sharedResultPhaseThisView\}` \}\);/
   );
 });

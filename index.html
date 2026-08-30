@@ -38,7 +38,7 @@
     <section class="shared-result" id="shared-result" hidden aria-labelledby="shared-result-title">
       <div class="section-label">SHARED RESULT</div>
       <p class="shared-note">共有された診断結果です。</p>
-      <h2 id="shared-result-title"><span id="shared-level"></span> <span id="shared-level-name"></span></h2>
+      <h2 id="shared-result-title"><span id="shared-level"></span></h2>
       <p id="shared-next"></p>
       <button class="button button-primary" type="button" data-action="trial-same-condition">同じ条件で試す <span aria-hidden="true">→</span></button>
       <p class="privacy-note">個人属性の入力なし・所要30秒・結果の保存は端末内のみ</p>
@@ -91,7 +91,7 @@
         <ul class="diagnostic-questions" id="diagnostic-questions"></ul>
         <button class="button button-secondary" type="button" data-action="submit-diagnosis">診断を完了する</button>
         <div class="diagnostic-output" id="diagnostic-output" hidden aria-live="polite">
-          <p>現在の段階：<span id="diagnostic-level"></span> <span id="diagnostic-level-name"></span></p>
+          <p>現在の段階：<span id="diagnostic-level"></span></p>
           <p>次のアクション：</p>
           <ul id="diagnostic-actions"></ul>
           <a class="button button-primary" id="diagnostic-comparison-link" href="#comparison" hidden>比較テンプレートを開く <span aria-hidden="true">→</span></a>
@@ -176,28 +176,14 @@
       </div>
       <button class="plain-button" type="button" data-action="refresh-dashboard">進捗を更新</button>
       <div class="dash-level-result" id="dash-level-result" hidden aria-live="polite">
-        <p class="card-type">現在の[redacted]</p>
+        <p class="card-type">現在のAI活用段階</p>
         <p class="dash-level-value" id="dash-level">未診断</p>
         <p class="dash-level-actions-label">次のアクション</p>
         <ul class="dash-level-actions" id="dash-level-actions"></ul>
       </div>
       <div class="level-table" aria-labelledby="level-table-title">
-        <h3 id="level-table-title">[redacted]</h3>
-        <ol class="level-list" id="level-list">
-          <li><b>L0</b><span><strong>[redacted]</strong>[redacted]</span></li>
-          <li><b>L1</b><span><strong>[redacted]</strong>最高性能モデルを使用した経験はあるが、下位モデルとの実質的な性能差を認識できていない状態。</span></li>
-          <li><b>L2</b><span><strong>[redacted]</strong>モデル間の性能差を認識しているが、その差が仕事の可能性をどう変えるかまでは理解していない状態。</span></li>
-          <li><b>L3</b><span><strong>[redacted]</strong>自分の重要かつ高難度なタスクで複数モデルを比べ、性能差、成功条件、失敗条件を実証的に把握している状態。</span></li>
-          <li><b>L4</b><span><strong>[redacted]</strong>最高性能モデルの能力を前提に、それまで不可能だった仕事を新たに開始している状態。</span></li>
-          <li><b>L5</b><span><strong>[redacted]</strong>新しい仕事を実務上使い切り、現行モデルでも越えられない具体的な壁を把握している状態。</span></li>
-          <li><b>L6</b><span><strong>[redacted]</strong>モデル単体に依存させず、実行環境（[redacted]）を構築して限界を補完、迂回または突破している状態。</span></li>
-          <li><b>L7</b><span><strong>[redacted]</strong>要求品質を満たした成功一件当たりの総コストを最適化している状態。</span></li>
-          <li><b>L8</b><span><strong>[redacted]</strong>実行結果の評価に基づいて構成を継続的に改善できる状態。</span></li>
-          <li><b>L9</b><span><strong>[redacted]</strong>自己進化能力を持つシステムが、別環境へ適応しながら新しい実行主体として複製される状態。</span></li>
-          <li><b>L10</b><span><strong>[redacted]</strong>市場機会と顧客課題を発見し、顧客価値と収益構造を持つ事業主体を継続的に立ち上げられる状態。</span></li>
-          <li><b>L11</b><span><strong>[redacted]</strong>複数の事業主体と外部経済主体を一つの事業生態系として捉え、事業群全体の長期価値を最適化している状態。</span></li>
-        </ol>
-        <a class="text-link" href="content/01-canonical/index.html" target="_blank" rel="noopener noreferrer" data-track="outbound_cta_clicked" data-cta-id="canonical_article_open">レベル定義の正本記事を読む <span>↗</span></a>
+        <h3 id="level-table-title">AI活用の成熟度について</h3>
+        <p>AIとの付き合い方は、知る・試す・仕組みにする・広げるといった段階を経て深まります。ConnectiveByteでは、この成熟度を多段階で捉える独自モデルを研究・開発中です。詳細な段階の定義は現在非公開です。</p>
       </div>
     </section>
 

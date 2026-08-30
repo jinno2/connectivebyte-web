@@ -257,12 +257,10 @@ function submitDiagnosis() {
   if (output) {
     output.hidden = false;
     const levelEl = document.querySelector("#diagnostic-level");
-    if (levelEl) levelEl.textContent = `L${result.current_level}`;
-    const levelNameEl = document.querySelector("#diagnostic-level-name");
-    if (levelNameEl) levelNameEl.textContent = result.current_level_name ?? "";
+    if (levelEl) levelEl.textContent = result.current_phase_label;
     const actionsEl = document.querySelector("#diagnostic-actions");
     if (actionsEl) actionsEl.innerHTML = "";
-    if (actionsEl) result.next_actions.forEach((action) => {
+    if (actionsEl) result.next_hints.forEach((action) => {
       const li = document.createElement("li");
       li.textContent = action;
       actionsEl.append(li);
@@ -270,14 +268,14 @@ function submitDiagnosis() {
   }
   const link = document.querySelector("#diagnostic-comparison-link");
   if (link) link.hidden = false;
-  writeJson("diagnosis_result", { current_level: result.current_level, current_level_name: result.current_level_name, next_actions: [...result.next_actions] });
+  writeJson("diagnosis_result", { current_phase: result.current_phase, phase_label: result.current_phase_label, next_hints: [...result.next_hints] });
   renderDashboard();
   renderFeedbackBlock();
   renderShareBlock({
-    level: result.current_level,
-    levelName: result.current_level_name,
-    nextAction: result.next_actions[0] ?? "",
-    nextActions: [...result.next_actions],
+    phase: result.current_phase,
+    phaseLabel: result.current_phase_label,
+    nextHint: result.next_hints[0] ?? "",
+    nextHints: [...result.next_hints],
     yesCount: result.yes_count
   });
 }
@@ -352,7 +350,7 @@ function saveFeedbackNote() {
 function saveResultText() {
   if (!shareState) return;
   const text = share.resultText(shareState, new Date().toISOString());
-  download(`connectivebyte-result-L${shareState.level}.txt`, "text/plain;charset=utf-8", text);
+  download("connectivebyte-result.txt", "text/plain;charset=utf-8", text);
 }
 
 function shareBaseUrl() {
@@ -368,9 +366,9 @@ function regenerateShareDraft(options = {}) {
   if (!shareState) return;
   shareState.template = currentShareTemplate();
   const draft = share.buildShareText(shareState.template, {
-    level: shareState.level,
-    levelName: shareState.levelName,
-    nextAction: shareState.nextAction,
+    phase: shareState.phase,
+    phaseLabel: shareState.phaseLabel,
+    nextHint: shareState.nextHint,
     freeText: document.querySelector("#share-free-text").value,
     url: shareState.url
   });
@@ -383,7 +381,7 @@ function renderShareBlock(result) {
   if (!block) return;
   shareState = {
     ...result,
-    url: share.shareUrlFor(shareBaseUrl(), result.level),
+    url: share.shareUrlFor(shareBaseUrl(), result.phase),
     template: "result"
   };
   document.querySelector("#share-url-input").value = shareState.url;
@@ -425,25 +423,24 @@ function renderResultCard() {
   shareState.cardCanvas = canvas;
 }
 
-// 今回のpageviewで共有結果 (?r=L{n}) を表示したか。初回visitorは同意前に
+// 今回のpageviewで共有結果 (?r=P{n}) を表示したか。初回visitorは同意前に
 // initializeSharedResult が走るため track() が同意前dropする — 同意時に
 // shared_result_viewed を補発するための状態 (成長loopの核心指標)。
-let sharedResultLevelThisView = null;
+let sharedResultPhaseThisView = null;
 
 function initializeSharedResult() {
-  const { level } = share.parseShareParams(window.location.search);
-  if (level === null) return;
+  const { phase } = share.parseShareParams(window.location.search);
+  if (phase === null) return;
   const section = document.querySelector("#shared-result");
   if (!section) return;
-  document.querySelector("#shared-level").textContent = `L${level}`;
-  document.querySelector("#shared-level-name").textContent = share.levelName(level);
-  const next = share.nextActionFor(level);
+  document.querySelector("#shared-level").textContent = share.phaseLabel(phase);
+  const next = share.nextHintFor(phase);
   const nextEl = document.querySelector("#shared-next");
   if (next) nextEl.textContent = `次の一手:${share.truncateJa(next, 60)}`;
   else nextEl.hidden = true;
   section.hidden = false;
-  sharedResultLevelThisView = level;
-  track("shared_result_viewed", { asset_id: "shared_result", cta_id: `r_L${level}` });
+  sharedResultPhaseThisView = phase;
+  track("shared_result_viewed", { asset_id: "shared_result", cta_id: `r_P${phase}` });
 }
 
 function trialSameCondition() {
@@ -495,14 +492,14 @@ function renderDashboard() {
   const levelResultEl = document.querySelector("#dash-level-result");
   if (levelResultEl) {
     const stored = readJson("diagnosis_result", null);
-    if (stored && typeof stored.current_level === "number") {
+    if (stored && typeof stored.current_phase === "number") {
       levelResultEl.hidden = false;
       const levelEl = document.querySelector("#dash-level");
-      if (levelEl) levelEl.textContent = `L${stored.current_level}${stored.current_level_name ? " " + stored.current_level_name : ""}`;
+      if (levelEl) levelEl.textContent = stored.phase_label ?? "";
       const actionsEl = document.querySelector("#dash-level-actions");
       if (actionsEl) {
         actionsEl.innerHTML = "";
-        (Array.isArray(stored.next_actions) ? stored.next_actions : []).forEach((action) => {
+        (Array.isArray(stored.next_hints) ? stored.next_hints : []).forEach((action) => {
           const li = document.createElement("li");
           li.textContent = action;
           actionsEl.append(li);
@@ -570,8 +567,8 @@ function saveConsent(analytics) {
     track("landing_viewed", { cta_id: "consent_accepted" });
     // 同意前に表示済みの共有結果 (?r=) のviewをここで補発。
     // trial_same_condition で共有sectionが閉じた後は補発しない (viewでなかったため)。
-    if (sharedResultLevelThisView !== null && !document.querySelector("#shared-result")?.hidden) {
-      track("shared_result_viewed", { asset_id: "shared_result", cta_id: `r_L${sharedResultLevelThisView}` });
+    if (sharedResultPhaseThisView !== null && !document.querySelector("#shared-result")?.hidden) {
+      track("shared_result_viewed", { asset_id: "shared_result", cta_id: `r_P${sharedResultPhaseThisView}` });
     }
   } else {
     localStorage.removeItem("events");
@@ -669,7 +666,7 @@ document.addEventListener("click", (event) => {
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
-      link.download = `connectivebyte-result-L${shareState.level}.png`;
+      link.download = "connectivebyte-result.png";
       link.click();
       URL.revokeObjectURL(url);
     }, "image/png");

@@ -4,13 +4,12 @@ import test from "node:test";
 import {
   buildDiagnosticCompletedEvent,
   buildEventBatch,
-  [redacted]_APPROVED,
   DIAGNOSTIC_QUESTIONS,
   filterForbiddenAttributes,
   FORBIDDEN_ATTRIBUTES,
   getEligibleSegments,
   getInterestRoute,
-  LEVELS,
+  PHASES,
   promoteBySelfSelection,
   run_diagnosis,
   shouldUseStrongCMessage
@@ -102,43 +101,42 @@ test("イベント仕様と保存キーを静的検証する", async () => {
   ]);
 });
 
-test("公開画面に承認済みの[redacted]一覧を含み禁止属性を含まない", async () => {
+test("公開画面にレベル定義を含まず一般論の案内を含む", async () => {
   const html = await readFile(new URL("index.html", root), "utf8");
-  assert.match(html, /[redacted]一覧/);
-  for (const name of LEVELS) assert.match(html, new RegExp(name.name_ja));
+  assert.match(html, /AI活用の成熟度/);
+  assert.match(html, /詳細な段階の定義は現在非公開/);
+  assert.doesNotMatch(html, /[redacted]|[redacted]|L1[01]|[redacted]|[redacted]/);
   assert.doesNotMatch(html, /職業|年収|AI習熟度|外部履歴/);
   assert.doesNotMatch(html, /優劣|ランキング|順位|比較判定/);
 });
 
-test("[redacted]_APPROVEDがtrueであり診断はcurrent_levelを数値で返す", () => {
-  assert.equal([redacted]_APPROVED, true);
+test("診断はreadyを返しcurrent_phaseを数値で返す", () => {
   const result = run_diagnosis("C", [
     { id: "Q0", answer: true },
     { id: "Q1", answer: true },
     { id: "Q2", answer: false }
   ]);
   assert.equal(result.ready, true);
-  assert.equal(typeof result.current_level, "number");
-  assert.equal(Number.isFinite(result.current_level), true);
-  assert.ok(Array.isArray(result.next_actions));
-  assert.ok(result.next_actions.length > 0);
+  assert.equal(typeof result.current_phase, "number");
+  assert.equal(Number.isFinite(result.current_phase), true);
+  assert.ok(Array.isArray(result.next_hints));
+  assert.ok(result.next_hints.length > 0);
 });
 
-test("全質問trueでL11を返す", () => {
+test("全質問trueでP4を返す", () => {
   const behaviors = DIAGNOSTIC_QUESTIONS.map((q) => ({ id: q.id, answer: true }));
   const result = run_diagnosis("A", behaviors);
-  assert.equal(result.current_level, 11);
-  assert.equal(result.current_level_name, "[redacted]");
-  assert.deepEqual(result.next_actions, []);
-  assert.equal(result.framework_version, "2.0.1");
+  assert.equal(result.current_phase, 4);
+  assert.equal(result.current_phase_label, PHASES[3].label);
+  assert.ok(result.next_hints.length > 0);
 });
 
-test("全質問falseでL0を返す", () => {
+test("全質問falseでP1を返す", () => {
   const behaviors = DIAGNOSTIC_QUESTIONS.map((q) => ({ id: q.id, answer: false }));
   const result = run_diagnosis(null, behaviors);
-  assert.equal(result.current_level, 0);
-  assert.equal(result.current_level_name, "[redacted]");
-  assert.ok(result.next_actions.length > 0);
+  assert.equal(result.current_phase, 1);
+  assert.equal(result.current_phase_label, PHASES[0].label);
+  assert.ok(result.next_hints.length > 0);
 });
 
 test("はい・トライ中は該当と数え、わからないは非該当と数える", () => {
@@ -146,23 +144,23 @@ test("はい・トライ中は該当と数え、わからないは非該当と�
     id: q.id,
     answer: ["Q0", "Q1", "Q2", "Q3"].includes(q.id) ? "トライ中（取り組み中）" : "いいえ"
   }));
-  assert.equal(run_diagnosis("D", trying).current_level, 3);
+  assert.equal(run_diagnosis("D", trying).current_phase, 2);
   const uncertain = DIAGNOSTIC_QUESTIONS.map((q) => ({
     id: q.id,
     answer: ["Q0", "Q1", "Q2", "Q3"].includes(q.id) ? "わからない" : "いいえ"
   }));
   const result = run_diagnosis("D", uncertain);
-  assert.equal(result.current_level, 0);
+  assert.equal(result.current_phase, 1);
   assert.equal(result.yes_count, 0);
   assert.equal(result.answered, 12);
 });
 
-test("Q2までtrueでL2を返しnext_actionsはL2のexit_conditions", () => {
+test("Q2までtrueでP1を返しnext_hintsはP1のもの", () => {
   const behaviors = DIAGNOSTIC_QUESTIONS.map((q) => ({ id: q.id, answer: ["Q0", "Q1", "Q2"].includes(q.id) }));
   const result = run_diagnosis("E", behaviors);
-  assert.equal(result.current_level, 2);
-  assert.equal(result.current_level_name, "[redacted]");
-  assert.deepEqual(result.next_actions, ["[redacted]"]);
+  assert.equal(result.current_phase, 1);
+  assert.equal(result.current_phase_label, PHASES[0].label);
+  assert.deepEqual(result.next_hints, [...PHASES[0].next_hints]);
 });
 
 test("診断結果に優劣比較を含まない", () => {
@@ -181,11 +179,11 @@ test("診断結果に禁止属性を含まない", () => {
   }
 });
 
-test("診断は質問リストを公開し12問の[redacted]チェックリストを返す", () => {
+test("診断は質問リストを公開し12問の行動チェックリストを返す", () => {
   assert.ok(Array.isArray(DIAGNOSTIC_QUESTIONS));
   assert.equal(DIAGNOSTIC_QUESTIONS.length, 12);
   assert.deepEqual(DIAGNOSTIC_QUESTIONS.map((q) => q.id), ["Q0","Q1","Q2","Q3","Q4","Q5","Q6","Q7","Q8","Q9","Q10","Q11"]);
-  assert.deepEqual(DIAGNOSTIC_QUESTIONS.map((q) => q.level), [0,1,2,3,4,5,6,7,8,9,10,11]);
+  assert.deepEqual(DIAGNOSTIC_QUESTIONS.map((q) => q.phase), [1,1,1,2,2,2,3,3,3,4,4,4]);
   const result = run_diagnosis(null, []);
   assert.equal(result.questions, DIAGNOSTIC_QUESTIONS);
   assert.equal(result.answered, 0);

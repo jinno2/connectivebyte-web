@@ -1,42 +1,40 @@
 // share.js — 成果物共有ループ (X運用基本計画 v1) の純関数モジュール。
-// DOM非依存 (canvas描画は app.js 側)。logic.js のコピーlocked枠組みには触れない。
-import { LEVELS } from "./logic.js";
+// DOM非依存 (canvas描画は app.js 側)。段階の表示は logic.js の公開用PHASESのみを使う。
+import { PHASES } from "./logic.js";
 
 export const MAX_POST_LENGTH = 280;
 export const URL_WEIGHTED_LENGTH = 23; // X上のURLは t.co 展開で23字扱い
 const FREE_TEXT_MAX = MAX_POST_LENGTH - URL_WEIGHTED_LENGTH - 1; // 改行1字分
 const NEXT_ACTION_MAX = 40;
 
-// 共有可能URL: ?r=L{n} + UTM (campaign解析は既存の utm_* 読み取りに乗る)
-export function shareUrlFor(baseUrl, level) {
+// 共有可能URL: ?r=P{n} + UTM (campaign解析は既存の utm_* 読み取りに乗る)
+export function shareUrlFor(baseUrl, phase) {
   const url = new URL(baseUrl);
-  url.searchParams.set("r", `L${level}`);
+  url.searchParams.set("r", `P${phase}`);
   url.searchParams.set("utm_source", "shared");
   url.searchParams.set("utm_medium", "social");
   url.searchParams.set("utm_campaign", "diag_v1");
   return url.toString();
 }
 
-// ?r= の検証付きparse。不正なら level: null (成果ページを表示しない)
+// ?r= の検証付きparse。不正なら phase: null (成果ページを表示しない)
 export function parseShareParams(search) {
   const params = new URLSearchParams(search);
   const raw = params.get("r");
-  if (!raw) return { level: null };
-  const match = /^L(1[01]|[0-9])$/.exec(raw);
-  if (!match) return { level: null };
-  const level = Number(match[1]);
-  const def = LEVELS.find((entry) => entry.level === level);
-  return def ? { level } : { level: null };
+  if (!raw) return { phase: null };
+  const match = /^P([1-4])$/.exec(raw);
+  if (!match) return { phase: null };
+  const phase = Number(match[1]);
+  return PHASES[phase - 1] ? { phase } : { phase: null };
 }
 
-export function levelName(level) {
-  const def = LEVELS.find((entry) => entry.level === level);
-  return def ? def.name_ja : "";
+export function phaseLabel(phase) {
+  return PHASES[phase - 1]?.label ?? "";
 }
 
-export function nextActionFor(level) {
-  const def = LEVELS.find((entry) => entry.level === level);
-  return def && def.exit_conditions.length > 0 ? def.exit_conditions[0] : "";
+export function nextHintFor(phase) {
+  const hints = PHASES[phase - 1]?.next_hints;
+  return hints && hints.length > 0 ? hints[0] : "";
 }
 
 export function truncateJa(text, max) {
@@ -56,10 +54,10 @@ export function buildShareText(templateId, ctx) {
     const free = truncateJa((ctx.freeText ?? "").trim(), FREE_TEXT_MAX - 1);
     return { text: `${free}\n${url}`, template: templateId };
   }
-  const name = ctx.levelName || levelName(ctx.level);
-  const rawNext = ctx.nextAction ?? nextActionFor(ctx.level);
+  const label = ctx.phaseLabel || phaseLabel(ctx.phase);
+  const rawNext = ctx.nextHint ?? nextHintFor(ctx.phase);
   const lines = [
-    `AI活用の現在地を診断したら「${name}」(L${ctx.level})でした。`,
+    `AI活用の現在地を診断したら「${label}」でした。`,
     "あなたの現在地はどこですか?",
     url
   ];
@@ -74,11 +72,11 @@ export function buildIntentUrl(text) {
 
 // 成果カードの行構成 (計画§12)。個人情報は構成上含まない (入力欄がないため)。
 export function cardLines(ctx) {
-  const name = ctx.levelName || levelName(ctx.level);
-  const rawNext = ctx.nextAction ?? nextActionFor(ctx.level);
+  const label = ctx.phaseLabel || phaseLabel(ctx.phase);
+  const rawNext = ctx.nextHint ?? nextHintFor(ctx.phase);
   const lines = [
     { kind: "title", text: "AI活用 現在地の診断" },
-    { kind: "level", text: `L${ctx.level} ${name}` }
+    { kind: "level", text: label }
   ];
   if (rawNext) lines.push({ kind: "next", text: `次の一手:${truncateJa(rawNext, NEXT_ACTION_MAX)}` });
   lines.push({ kind: "meta", text: `12問中${ctx.yesCount ?? 0}問が該当・ ConnectiveByte` });
@@ -99,18 +97,17 @@ export function feedbackLabel(id) {
 
 // 「成果を保存」のテキスト成果物 (§7 達成branch)。日時は呼び出し側から渡す。
 export function resultText(ctx, isoDate) {
-  const name = ctx.levelName || levelName(ctx.level);
+  const label = ctx.phaseLabel || phaseLabel(ctx.phase);
   const lines = [
     "ConnectiveByte AI活用 現在地の診断結果",
     `診断日時: ${isoDate}`,
-    `現在地: L${ctx.level} ${name}`,
+    `現在地: ${label}`,
     `該当: 12問中${ctx.yesCount ?? 0}問`,
     "",
     "次のアクション:"
   ];
-  const actions = ctx.nextActions ?? (ctx.nextAction ? [ctx.nextAction] : []);
+  const actions = ctx.nextHints ?? (ctx.nextHint ? [ctx.nextHint] : []);
   for (const action of actions) lines.push(`- ${action}`);
-  if (actions.length === 0) lines.push("- (最上位のため次の一手の定義なし)");
   lines.push("", "このファイルには個人情報は含まれません。");
   return lines.join("\n");
 }

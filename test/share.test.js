@@ -6,8 +6,8 @@ import {
   SHARE_TEMPLATES,
   shareUrlFor,
   parseShareParams,
-  levelName,
-  nextActionFor,
+  phaseLabel,
+  nextHintFor,
   truncateJa,
   buildShareText,
   buildIntentUrl,
@@ -16,39 +16,41 @@ import {
   feedbackLabel,
   resultText
 } from "../share.js";
-import { LEVELS } from "../logic.js";
+import { PHASES } from "../logic.js";
 
 function weightedLength(text, url) {
   return text.length - url.length + URL_WEIGHTED_LENGTH;
 }
 
-test("shareUrlFor → parseShareParams round trip for every level", () => {
-  for (const def of LEVELS) {
-    const url = shareUrlFor("https://lab.connectivebyte.com/", def.level);
-    assert.match(url, /\/\?r=L\d+&utm_source=shared&utm_medium=social&utm_campaign=diag_v1$/);
-    assert.equal(parseShareParams(new URL(url).search).level, def.level);
-  }
+test("shareUrlFor → parseShareParams round trip for every phase", () => {
+  PHASES.forEach((def, index) => {
+    const phase = index + 1;
+    const url = shareUrlFor("https://lab.connectivebyte.com/", phase);
+    assert.match(url, /\/\?r=P[1-4]&utm_source=shared&utm_medium=social&utm_campaign=diag_v1$/);
+    assert.equal(parseShareParams(new URL(url).search).phase, phase);
+  });
 });
 
 test("parseShareParams rejects malformed r", () => {
-  assert.equal(parseShareParams("").level, null);
-  assert.equal(parseShareParams("?r=").level, null);
-  assert.equal(parseShareParams("?r=abc").level, null);
-  assert.equal(parseShareParams("?r=L").level, null);
-  assert.equal(parseShareParams("?r=L12").level, null);
-  assert.equal(parseShareParams("?r=L-1").level, null);
-  assert.equal(parseShareParams("?r=l3").level, null);
+  assert.equal(parseShareParams("").phase, null);
+  assert.equal(parseShareParams("?r=").phase, null);
+  assert.equal(parseShareParams("?r=abc").phase, null);
+  assert.equal(parseShareParams("?r=P").phase, null);
+  assert.equal(parseShareParams("?r=P0").phase, null);
+  assert.equal(parseShareParams("?r=P5").phase, null);
+  assert.equal(parseShareParams("?r=L4").phase, null);
+  assert.equal(parseShareParams("?r=p3").phase, null);
 });
 
 test("parseShareParams ignores unrelated params", () => {
-  assert.equal(parseShareParams("?utm_source=x&r=L4&foo=bar").level, 4);
+  assert.equal(parseShareParams("?utm_source=x&r=P2&foo=bar").phase, 2);
 });
 
-test("levelName / nextActionFor resolve from LEVELS", () => {
-  assert.equal(levelName(0), LEVELS[0].name_ja);
-  assert.equal(levelName(11), LEVELS[11].name_ja);
-  assert.equal(nextActionFor(3), LEVELS[3].exit_conditions[0]);
-  assert.equal(levelName(99), "");
+test("phaseLabel / nextHintFor resolve from PHASES", () => {
+  assert.equal(phaseLabel(1), PHASES[0].label);
+  assert.equal(phaseLabel(4), PHASES[3].label);
+  assert.equal(nextHintFor(2), PHASES[1].next_hints[0]);
+  assert.equal(phaseLabel(99), "");
 });
 
 test("truncateJa counts code points and appends ellipsis", () => {
@@ -57,29 +59,29 @@ test("truncateJa counts code points and appends ellipsis", () => {
   assert.equal(truncateJa(null, 3), "");
 });
 
-test("result template fits 280 weighted chars for every level", () => {
+test("result template fits 280 weighted chars for every phase", () => {
   const url = shareUrlFor("https://lab.connectivebyte.com/", 4);
-  for (const def of LEVELS) {
+  PHASES.forEach((def, index) => {
+    const phase = index + 1;
     const draft = buildShareText("result", {
-      level: def.level,
-      levelName: def.name_ja,
-      nextAction: def.exit_conditions[0],
+      phase,
+      phaseLabel: def.label,
+      nextHint: def.next_hints[0],
       url
     });
-    assert.ok(draft, `draft missing for L${def.level}`);
-    assert.ok(draft.text.includes(`L${def.level}`));
-    assert.ok(draft.text.includes(def.name_ja));
+    assert.ok(draft, `draft missing for P${phase}`);
+    assert.ok(draft.text.includes(def.label));
     assert.ok(draft.text.includes(url));
     assert.ok(weightedLength(draft.text, url) <= MAX_POST_LENGTH,
-      `L${def.level} over cap: ${weightedLength(draft.text, url)}`);
-  }
+      `P${phase} over cap: ${weightedLength(draft.text, url)}`);
+  });
 });
 
-test("result template truncates long next actions", () => {
+test("result template truncates long next hints", () => {
   const url = "https://lab.connectivebyte.com/";
-  const longAction = LEVELS[5].exit_conditions[0];
-  const draft = buildShareText("result", { level: 5, nextAction: longAction, url });
-  assert.ok(!draft.text.includes(longAction));
+  const longHint = "次の一手としてとても長い文章を指定した場合には末尾が省略されること".repeat(3);
+  const draft = buildShareText("result", { phase: 2, nextHint: longHint, url });
+  assert.ok(!draft.text.includes(longHint));
   assert.ok(draft.text.includes("…"));
 });
 
@@ -98,16 +100,15 @@ test("unknown template returns null", () => {
 });
 
 test("buildIntentUrl encodes text into the web intent", () => {
-  const intent = buildIntentUrl("診断結果 L4\nhttps://lab.connectivebyte.com/?r=L4");
+  const intent = buildIntentUrl("診断結果 P2\nhttps://lab.connectivebyte.com/?r=P2");
   assert.ok(intent.startsWith("https://twitter.com/intent/tweet?text="));
-  assert.equal(decodeURIComponent(intent.split("text=")[1]), "診断結果 L4\nhttps://lab.connectivebyte.com/?r=L4");
+  assert.equal(decodeURIComponent(intent.split("text=")[1]), "診断結果 P2\nhttps://lab.connectivebyte.com/?r=P2");
 });
 
-test("cardLines carries level info and no personal fields", () => {
-  const lines = cardLines({ level: 4, levelName: LEVELS[4].name_ja, nextAction: LEVELS[4].exit_conditions[0], yesCount: 5 });
+test("cardLines carries phase info and no personal fields", () => {
+  const lines = cardLines({ phase: 2, phaseLabel: PHASES[1].label, nextHint: PHASES[1].next_hints[0], yesCount: 5 });
   const text = lines.map((line) => line.text).join("\n");
-  assert.match(text, /L4/);
-  assert.ok(text.includes(LEVELS[4].name_ja));
+  assert.ok(text.includes(PHASES[1].label));
   assert.ok(text.includes("12問中5問"));
   const serialized = JSON.stringify(lines).toLowerCase();
   for (const banned of ["name", "email", "mail", "address", "phone", "tel", "company", "ip"]) {
@@ -122,23 +123,24 @@ test("FEEDBACK_OPTIONS carries the three §7 choices without ranking", () => {
   assert.equal(feedbackLabel("nope"), "");
 });
 
-test("resultText renders the full next-action list with no personal fields", () => {
+test("resultText renders the full next-hint list with no personal fields", () => {
   const text = resultText({
-    level: 4,
-    levelName: LEVELS[4].name_ja,
-    nextActions: [...LEVELS[4].exit_conditions],
+    phase: 2,
+    phaseLabel: PHASES[1].label,
+    nextHints: [...PHASES[1].next_hints],
     yesCount: 5
   }, "2026-08-30T00:00:00.000Z");
-  assert.ok(text.includes("L4 [redacted]"));
+  assert.ok(text.includes(PHASES[1].label));
   assert.ok(text.includes("12問中5問"));
-  assert.ok(text.includes(`- ${LEVELS[4].exit_conditions[0]}`));
+  assert.ok(text.includes(`- ${PHASES[1].next_hints[0]}`));
   assert.ok(text.includes("個人情報は含まれません"));
   for (const banned of ["occupation", "email", "氏名", "会社名"]) {
     assert.ok(!text.toLowerCase().includes(banned.toLowerCase()));
   }
 });
 
-test("resultText notes absent next actions at the top level", () => {
-  const text = resultText({ level: 11, levelName: LEVELS[11].name_ja, nextActions: [] }, "x");
-  assert.ok(text.includes("最上位のため次の一手の定義なし"));
+test("resultText renders without bullets when no hints are given", () => {
+  const text = resultText({ phase: 4, phaseLabel: PHASES[3].label, nextHints: [] }, "x");
+  assert.ok(!text.includes("\n- "));
+  assert.ok(text.includes(PHASES[3].label));
 });
