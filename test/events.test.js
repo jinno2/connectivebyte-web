@@ -50,3 +50,15 @@ test("production host sends events to the api Worker, others stay same-origin", 
   // lab (GH Pages・静的) だけ絶対URL。それ以外は server.js 相対PATHのまま。
   assert.match(source, /location\.hostname === "lab\.connectivebyte\.com"\s*\n\s*\?\s*"https:\/\/api\.connectivebyte\.com\/events"\s*\n\s*:\s*"\/api\/events"/);
 });
+
+test("consent grant re-emits shared_result_viewed dropped before consent", () => {
+  // 初回visitorが共有URL (?r=L{n}) で来ると track() は同意前にdropする。
+  // 同意時に補発しないと成長loopの核心指標 (shared_result_viewed) が
+  // 初回visitor分だけ永遠に欠ける → saveConsent 内の補発をpinする。
+  const source = readFileSync(fileURLToPath(new URL("../app.js", import.meta.url)), "utf8");
+  assert.match(source, /sharedResultLevelThisView = level;/);
+  assert.match(
+    source,
+    /if \(sharedResultLevelThisView !== null && !document\.querySelector\("#shared-result"\)\?\.hidden\) \{\s*\n\s*track\("shared_result_viewed", \{ asset_id: "shared_result", cta_id: `r_L\$\{sharedResultLevelThisView\}` \}\);/
+  );
+});

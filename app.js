@@ -425,6 +425,11 @@ function renderResultCard() {
   shareState.cardCanvas = canvas;
 }
 
+// 今回のpageviewで共有結果 (?r=L{n}) を表示したか。初回visitorは同意前に
+// initializeSharedResult が走るため track() が同意前dropする — 同意時に
+// shared_result_viewed を補発するための状態 (成長loopの核心指標)。
+let sharedResultLevelThisView = null;
+
 function initializeSharedResult() {
   const { level } = share.parseShareParams(window.location.search);
   if (level === null) return;
@@ -437,6 +442,7 @@ function initializeSharedResult() {
   if (next) nextEl.textContent = `次の一手:${share.truncateJa(next, 60)}`;
   else nextEl.hidden = true;
   section.hidden = false;
+  sharedResultLevelThisView = level;
   track("shared_result_viewed", { asset_id: "shared_result", cta_id: `r_L${level}` });
 }
 
@@ -560,8 +566,16 @@ function saveConsent(analytics) {
   const current = getConsent();
   writeJson("consent", { analytics, email: current.email, decided: true });
   document.querySelector("#consent-panel").hidden = true;
-  if (analytics) track("landing_viewed", { cta_id: "consent_accepted" });
-  else localStorage.removeItem("events");
+  if (analytics) {
+    track("landing_viewed", { cta_id: "consent_accepted" });
+    // 同意前に表示済みの共有結果 (?r=) のviewをここで補発。
+    // trial_same_condition で共有sectionが閉じた後は補発しない (viewでなかったため)。
+    if (sharedResultLevelThisView !== null && !document.querySelector("#shared-result")?.hidden) {
+      track("shared_result_viewed", { asset_id: "shared_result", cta_id: `r_L${sharedResultLevelThisView}` });
+    }
+  } else {
+    localStorage.removeItem("events");
+  }
 }
 
 function initializeConsent() {
