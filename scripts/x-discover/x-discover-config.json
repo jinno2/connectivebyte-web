@@ -3,7 +3,7 @@
     {
       "alias": "cb_discoverer",
       "role": "discoverer",
-      "status": "not_created",
+      "status": "warming",
       "env_prefix": "CBD",
       "tier": "url"
     }
