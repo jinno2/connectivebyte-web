@@ -164,7 +164,24 @@ def classify(title: str, desc: str) -> str | None:
     return None
 
 
-def llm_prompt(item: dict, genre_jp: str, recent_hooks: list[str]) -> str:
+def fetch_excerpt(url: str, limit: int = 1600) -> str:
+    """URL本文の抜粋 (best-effort・起草の根拠付け用)。失敗/重い/非テキストは空。"""
+    import re
+    try:
+        req = urllib.request.Request(url, headers=UA)
+        with urllib.request.urlopen(req, timeout=8) as r:
+            ctype = r.headers.get_content_type()
+            if r.status != 200 or not ctype.startswith(('text/', 'application/json')):
+                return ''
+            raw = r.read(300_000).decode('utf-8', 'ignore')
+    except Exception:
+        return ''
+    raw = re.sub(r'(?is)<(script|style|nav|header|footer|svg)[^>]*>.*?</\1>', ' ', raw)
+    text = re.sub(r'(?s)<[^>]+>', ' ', raw)
+    return re.sub(r'\s+', ' ', text).strip()[:limit]
+
+
+def llm_prompt(item: dict, genre_jp: str, recent_hooks: list[str], excerpt: str = '') -> str:
     """起草prompt — X運用基本計画§11 (生成ルール) 準拠。"""
     lines = ['あなたはAI情報発掘メディアの起草者。X投稿1件分の日本語案のみを出力する。']
     lines += [
@@ -184,10 +201,16 @@ def llm_prompt(item: dict, genre_jp: str, recent_hooks: list[str]) -> str:
         f'ジャンル: {genre_jp}', f'題名: {item["title"]}', f'URL: {item["url"]}',
         'URLは出力に含めない (投稿システムが別途付与する)。',
     ]
+    if excerpt:
+        lines += [
+            f'本文抜粋 (実際に取得したページ内容): {excerpt}',
+            '自説はこの抜粋の内容に根拠を置く。抜粋から読み取れないことは書かない。',
+        ]
     return '\n'.join(lines)
 
 
-def llm_draft(item: dict, genre_jp: str, recent_hooks: list[str]) -> dict | None:
+def llm_draft(item: dict, genre_jp: str, recent_hooks: list[str],
+              excerpt: str = '') -> dict | None:
     """litellm proxy経由で一句+自説+問いを起草。keyは環境変数のみ。
 
     起草結果が§11機械検査 (禁止語/問い形) に落ちたら1回だけ再試行する。
@@ -195,7 +218,7 @@ def llm_draft(item: dict, genre_jp: str, recent_hooks: list[str]) -> dict | None
     key = os.environ.get('LITELLM_API_KEY')
     if not key:
         return None
-    prompt = llm_prompt(item, genre_jp, recent_hooks)
+    prompt = llm_prompt(item, genre_jp, recent_hooks, excerpt)
     def call(p: str) -> dict | None:
         body = json.dumps({'model': 'default', 'max_tokens': 2500,
                            'messages': [{'role': 'user', 'content': p}]}).encode()
@@ -278,12 +301,16 @@ def main() -> int:
             'url': item['url'],
             'source': item['source'],
             'score': item['score'],
+            'points': item.get('points'),
+            'comments': item.get('comments'),
+            'created': item.get('created'),
             'status': 'draft',
         }
         if args.no_llm:
             draft.update({'hook': '【要起草】', 'take': '【自説: 要記入】', 'ask': '【問い: 要記入】'})
         else:
-            got = llm_draft(item, GENRES[item['genre']]['jp'], hooks)
+            got = llm_draft(item, GENRES[item['genre']]['jp'], hooks,
+                            fetch_excerpt(item['url']))
             draft.update(got or {'hook': '【要起草】', 'take': '【LLM失敗: 要記入】', 'ask': '【問い: 要記入】'})
         drafts.append(draft)
         seen.add(item['url'])

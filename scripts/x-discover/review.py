@@ -64,7 +64,22 @@ def show(entries: list[dict]) -> None:
     print(f'未承認 {len(rows)}件 (新しい方から表示。推奨=★本日 最高score):\n')
     for i, d in rows:
         mark = '★ ' if d is best_today else '  '
-        print(f'{mark}[{i}] {d.get("date")} {d.get("genre")} score={d.get("score")} ({d.get("source")})')
+        sig = ''
+        if d.get('source') == 'hn':
+            sig = f'P{d.get("points", "?")} C{d.get("comments", "?")}'
+        elif d.get('source') == 'github':
+            sig = f'star{d.get("points", "?")}'
+        age = ''
+        if d.get('created'):
+            try:
+                t = dt.datetime.fromisoformat(d['created'].replace('Z', '+00:00'))
+                h = (dt.datetime.now(dt.timezone.utc) - t).total_seconds() / 3600
+                age = f' {h:.0f}h前' if h < 48 else f' {h / 24:.0f}d前'
+            except ValueError:
+                pass
+        sig_part = f' {sig}{age}' if sig else ''
+        print(f'{mark}[{i}] {d.get("date")} {d.get("genre")} score={d.get("score")}'
+              f' ({d.get("source")}{sig_part})')
         print(f'      hook: {d.get("hook")}')
         print(f'      take: {d.get("take")}')
         print(f'      ask : {d.get("ask")}')

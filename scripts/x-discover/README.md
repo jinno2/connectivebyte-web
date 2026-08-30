@@ -15,6 +15,9 @@ business_notes `横断/2026-08-28-x_account_fleet_strategy.md` (正本) へ。
 - queue/state/log = `~/.local/share/cb-fleet/` (repo外・git管理外)
 - 秘密 = `~/.local/share/cb-fleet/.env` のみ (LITELLM_API_KEY・X access鍵)
 - 投稿形 = hook / take / URL / ask の4行 — copy link 20.0 最重量actionへの最適化
+- 選定 = score=(points+2×comments)÷経過時間 (HN議論速度) + 曜日ジャンルカレンダー。
+  起草は**本文抜粋を取得して根拠付け** (2026-08-30〜・fetch失敗は題名のみ)。
+  `review.py` に P/C/経過時間 を表示 — 「なぜこれが選ばれたか」を30秒reviewで確認可
 
 ## コマンド
 
