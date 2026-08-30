@@ -106,19 +106,11 @@ const PHASES = Object.freeze([
 // 「はい」「トライ中（取り組み中）」を該当、「いいえ」「わからない」「該当しない」を非該当として扱う。
 const AFFIRMATIVE_ANSWERS = Object.freeze(new Set(["はい", "トライ中（取り組み中）", "トライ中"]));
 
+// 初回visitor向けの3問。全ていいえならP1。max-affirmative-phaseで判定。
 const DIAGNOSTIC_QUESTIONS = Object.freeze([
-  Object.freeze({ id: "Q0", phase: 1, label: "AIを自分の仕事や事業に関係するものとして意識したことがありますか" }),
-  Object.freeze({ id: "Q1", phase: 1, label: "現在一番性能が高いとされるAIを実際に使って、その出力を確認していますか" }),
-  Object.freeze({ id: "Q2", phase: 1, label: "複数のAIの間で性能の違い（文章の正確さ、指示の理解、長い資料の扱い、一貫性など）を、自分の言葉で説明できますか" }),
-  Object.freeze({ id: "Q3", phase: 2, label: "自分の仕事の中で重要かつ難しい課題で複数のAIを比べて、どこまでできてどこからうまくいかないかを把握していますか" }),
-  Object.freeze({ id: "Q4", phase: 2, label: "今の高性能AIがあるからこそ着手できた新しい仕事を、実際に始めていますか" }),
-  Object.freeze({ id: "Q5", phase: 2, label: "今の最高性能のAIでも解けずに止まっている重要な仕事があり、その仕事を進めるための活動をしていますか" }),
-  Object.freeze({ id: "Q6", phase: 3, label: "AIを組み込んだ仕組みを構築し、モデルの苦手な部分を検索・ツール・人間の確認などで補いながら、実際の業務で繰り返し使っていますか" }),
-  Object.freeze({ id: "Q7", phase: 3, label: "成功1件あたりの総コスト（費用と手間を含む）を測って、求める品質を保ったまま最適化していますか" }),
-  Object.freeze({ id: "Q8", phase: 3, label: "AIの実行結果を評価してプロンプトやモデル構成などを見直す改善ループを、継続的に回していますか" }),
-  Object.freeze({ id: "Q9", phase: 4, label: "その仕組みを別の部門・顧客・地域・業務に合わせて調整して展開し、成果を確認していますか" }),
-  Object.freeze({ id: "Q10", phase: 4, label: "AIを活用する仕組みを通じて、顧客がつき売上と利益が生まれる新しい事業を始めていますか" }),
-  Object.freeze({ id: "Q11", phase: 4, label: "事業全体で人・金・時間などの配分を、全体としてより良くしようと取り組んでいますか" })
+  Object.freeze({ id: "Q0", phase: 2, label: "自分の仕事のタスクをAIに実際に試して、どこまでできるかを確かめていますか" }),
+  Object.freeze({ id: "Q1", phase: 3, label: "AIを組み込んだ仕組みを作って、業務で繰り返し使っていますか" }),
+  Object.freeze({ id: "Q2", phase: 4, label: "AI活用を通じて、顧客がつき売上や利益が生まれる事業を始めていますか" })
 ]);
 
 function isAffirmative(answer) {

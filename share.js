@@ -79,7 +79,7 @@ export function cardLines(ctx) {
     { kind: "level", text: label }
   ];
   if (rawNext) lines.push({ kind: "next", text: `次の一手:${truncateJa(rawNext, NEXT_ACTION_MAX)}` });
-  lines.push({ kind: "meta", text: `12問中${ctx.yesCount ?? 0}問が該当・ ConnectiveByte` });
+  lines.push({ kind: "meta", text: `3問中${ctx.yesCount ?? 0}問が該当・ ConnectiveByte` });
   return lines;
 }
 
@@ -102,7 +102,7 @@ export function resultText(ctx, isoDate) {
     "ConnectiveByte AI活用 現在地の診断結果",
     `診断日時: ${isoDate}`,
     `現在地: ${label}`,
-    `該当: 12問中${ctx.yesCount ?? 0}問`,
+    `該当: 3問中${ctx.yesCount ?? 0}問`,
     "",
     "次のアクション:"
   ];

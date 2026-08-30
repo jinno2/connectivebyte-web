@@ -142,25 +142,25 @@ test("全質問falseでP1を返す", () => {
 test("はい・トライ中は該当と数え、わからないは非該当と数える", () => {
   const trying = DIAGNOSTIC_QUESTIONS.map((q) => ({
     id: q.id,
-    answer: ["Q0", "Q1", "Q2", "Q3"].includes(q.id) ? "トライ中（取り組み中）" : "いいえ"
+    answer: ["Q0", "Q1"].includes(q.id) ? "トライ中（取り組み中）" : "いいえ"
   }));
-  assert.equal(run_diagnosis("D", trying).current_phase, 2);
+  assert.equal(run_diagnosis("D", trying).current_phase, 3);
   const uncertain = DIAGNOSTIC_QUESTIONS.map((q) => ({
     id: q.id,
-    answer: ["Q0", "Q1", "Q2", "Q3"].includes(q.id) ? "わからない" : "いいえ"
+    answer: ["Q0", "Q1"].includes(q.id) ? "わからない" : "いいえ"
   }));
   const result = run_diagnosis("D", uncertain);
   assert.equal(result.current_phase, 1);
   assert.equal(result.yes_count, 0);
-  assert.equal(result.answered, 12);
+  assert.equal(result.answered, 3);
 });
 
-test("Q2までtrueでP1を返しnext_hintsはP1のもの", () => {
-  const behaviors = DIAGNOSTIC_QUESTIONS.map((q) => ({ id: q.id, answer: ["Q0", "Q1", "Q2"].includes(q.id) }));
+test("Q0だけtrueでP2を返しnext_hintsはP2のもの", () => {
+  const behaviors = DIAGNOSTIC_QUESTIONS.map((q) => ({ id: q.id, answer: q.id === "Q0" }));
   const result = run_diagnosis("E", behaviors);
-  assert.equal(result.current_phase, 1);
-  assert.equal(result.current_phase_label, PHASES[0].label);
-  assert.deepEqual(result.next_hints, [...PHASES[0].next_hints]);
+  assert.equal(result.current_phase, 2);
+  assert.equal(result.current_phase_label, PHASES[1].label);
+  assert.deepEqual(result.next_hints, [...PHASES[1].next_hints]);
 });
 
 test("診断結果に優劣比較を含まない", () => {
@@ -179,11 +179,11 @@ test("診断結果に禁止属性を含まない", () => {
   }
 });
 
-test("診断は質問リストを公開し12問の行動チェックリストを返す", () => {
+test("診断は質問リストを公開し3問の行動チェックリストを返す", () => {
   assert.ok(Array.isArray(DIAGNOSTIC_QUESTIONS));
-  assert.equal(DIAGNOSTIC_QUESTIONS.length, 12);
-  assert.deepEqual(DIAGNOSTIC_QUESTIONS.map((q) => q.id), ["Q0","Q1","Q2","Q3","Q4","Q5","Q6","Q7","Q8","Q9","Q10","Q11"]);
-  assert.deepEqual(DIAGNOSTIC_QUESTIONS.map((q) => q.phase), [1,1,1,2,2,2,3,3,3,4,4,4]);
+  assert.equal(DIAGNOSTIC_QUESTIONS.length, 3);
+  assert.deepEqual(DIAGNOSTIC_QUESTIONS.map((q) => q.id), ["Q0","Q1","Q2"]);
+  assert.deepEqual(DIAGNOSTIC_QUESTIONS.map((q) => q.phase), [2,3,4]);
   const result = run_diagnosis(null, []);
   assert.equal(result.questions, DIAGNOSTIC_QUESTIONS);
   assert.equal(result.answered, 0);

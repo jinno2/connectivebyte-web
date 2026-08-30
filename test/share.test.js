@@ -106,10 +106,10 @@ test("buildIntentUrl encodes text into the web intent", () => {
 });
 
 test("cardLines carries phase info and no personal fields", () => {
-  const lines = cardLines({ phase: 2, phaseLabel: PHASES[1].label, nextHint: PHASES[1].next_hints[0], yesCount: 5 });
+  const lines = cardLines({ phase: 2, phaseLabel: PHASES[1].label, nextHint: PHASES[1].next_hints[0], yesCount: 2 });
   const text = lines.map((line) => line.text).join("\n");
   assert.ok(text.includes(PHASES[1].label));
-  assert.ok(text.includes("12問中5問"));
+  assert.ok(text.includes("3問中2問"));
   const serialized = JSON.stringify(lines).toLowerCase();
   for (const banned of ["name", "email", "mail", "address", "phone", "tel", "company", "ip"]) {
     assert.ok(!serialized.includes(`"${banned}`), `card must not carry ${banned}`);
@@ -128,10 +128,10 @@ test("resultText renders the full next-hint list with no personal fields", () =>
     phase: 2,
     phaseLabel: PHASES[1].label,
     nextHints: [...PHASES[1].next_hints],
-    yesCount: 5
+    yesCount: 2
   }, "2026-08-30T00:00:00.000Z");
   assert.ok(text.includes(PHASES[1].label));
-  assert.ok(text.includes("12問中5問"));
+  assert.ok(text.includes("3問中2問"));
   assert.ok(text.includes(`- ${PHASES[1].next_hints[0]}`));
   assert.ok(text.includes("個人情報は含まれません"));
   for (const banned of ["occupation", "email", "氏名", "会社名"]) {
