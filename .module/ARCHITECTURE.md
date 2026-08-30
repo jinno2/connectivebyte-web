@@ -8,7 +8,7 @@
 
 ## 設計
 
-静的HTML、CSS、vanilla JavaScript ES modulesのみを採用する。表示、純粋な導線判定、ブラウザ状態管理を分離する。保存先はlocalStorageに限定し、許可された5キーのみを扱う。メール登録はMVP内で外部送信せず、同意後の登録イベントだけを匿名IDへ関連付ける。
+静的HTML、CSS、vanilla JavaScript ES modulesのみを採用する。表示、純粋な導線判定、ブラウザ状態管理を分離する。保存先はlocalStorageに限定し、許可されたキーのみを扱う。メール登録は明示同意の上で登録endpointへ送信し、メールアドレスは匿名イベントとは別の保存先で管理する。
 
 ## コンポーネント
 

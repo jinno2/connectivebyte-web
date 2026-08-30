@@ -8,7 +8,7 @@
 
 ## 方針
 
-`getInterestRoute`、`shouldUseStrongCMessage`、`promoteBySelfSelection`を副作用のない関数として実装する。状態層は保存キーを固定し、イベント属性を共通生成する。入力値は許可リストで検証し、メールアドレス自体は保存しない。
+`getInterestRoute`、`shouldUseStrongCMessage`、`promoteBySelfSelection`を副作用のない関数として実装する。状態層は保存キーを固定し、イベント属性を共通生成する。入力値は許可リストで検証する。メールアドレスは登録endpoint経由でのみ送信し、匿名イベントには混ぜない。
 
 ## 制約
 

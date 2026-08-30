@@ -206,6 +206,34 @@ test("events.jsonl は静的配信から保護され403になる", async () => {
   }
 });
 
+test("POST /api/subscribe は有効な登録に202・不正入力に400を返す", async () => {
+  const ctx = await startServer();
+  try {
+    const postSub = (body) => fetch(`${ctx.base}/api/subscribe`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: typeof body === "string" ? body : JSON.stringify(body)
+    });
+    const ok = await postSub({ email: "user@example.com", consent: true });
+    assert.equal(ok.status, 202);
+    assert.equal((await ok.json()).accepted, true);
+    const withId = await postSub({ email: "user2@example.com", consent: true, anonymous_id: "abc-123_X" });
+    assert.equal(withId.status, 202);
+    for (const bad of [
+      { email: "nope", consent: true },
+      { email: "user@example.com" },
+      { email: "user@example.com", consent: "yes" },
+      { email: "user@example.com", consent: true, anonymous_id: "不正" },
+      "not-json"
+    ]) {
+      const res = await postSub(bad);
+      assert.equal(res.status, 400, JSON.stringify(bad));
+    }
+  } finally {
+    await ctx.cleanup();
+  }
+});
+
 test("GET /api/events は静的扱いで404になる", async () => {
   const ctx = await startServer();
   try {

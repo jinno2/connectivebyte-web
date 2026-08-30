@@ -22,4 +22,4 @@ Given 自己選択履歴、When より進んだ選択を本人が行う、Then �
 
 ### 同意
 
-Given analytics未同意、When 操作する、Then 行動イベントを保存しない。Given email明示同意、When メール登録する、Then 匿名IDに登録イベントを関連付ける。
+Given analytics未同意、When 操作する、Then 行動イベントを保存しない。Given email明示同意、When メール登録する、Then 登録endpointへ送信し匿名IDに登録イベントを関連付ける。
