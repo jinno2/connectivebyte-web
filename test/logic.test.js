@@ -105,7 +105,7 @@ test("公開画面にレベル定義を含まず一般論の案内を含む", as
   const html = await readFile(new URL("index.html", root), "utf8");
   assert.match(html, /AI活用の成熟度/);
   assert.match(html, /詳細な段階の定義は現在非公開/);
-  assert.doesNotMatch(html, /[redacted]|[redacted]|L1[01]|[redacted]|[redacted]/);
+  assert.doesNotMatch(html, /知能接続|CIL Framework|L1[01]|フロンティア未認知|自己進化システム/);
   assert.doesNotMatch(html, /職業|年収|AI習熟度|外部履歴/);
   assert.doesNotMatch(html, /優劣|ランキング|順位|比較判定/);
 });
