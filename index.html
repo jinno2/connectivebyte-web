@@ -95,6 +95,17 @@
           <p>次のアクション：</p>
           <ul id="diagnostic-actions"></ul>
           <a class="button button-primary" id="diagnostic-comparison-link" href="#comparison" hidden>比較テンプレートを開く <span aria-hidden="true">→</span></a>
+          <div class="feedback-block" id="feedback-block" hidden>
+            <p class="feedback-question">今回の目的は達成できましたか?</p>
+            <fieldset class="feedback-options">
+              <legend class="sr-only">目的達成の程度</legend>
+              <label><input type="radio" name="feedback-answer" value="achieved">達成できた</label>
+              <label><input type="radio" name="feedback-answer" value="partial">一部達成できた</label>
+              <label><input type="radio" name="feedback-answer" value="not_achieved">達成できなかった</label>
+            </fieldset>
+            <button class="button button-secondary" type="button" data-action="submit-feedback">回答する</button>
+            <div id="feedback-branch" hidden></div>
+          </div>
           <div class="share-block" id="share-block" hidden>
             <p class="share-lead">結果を共有する</p>
             <div class="share-url">

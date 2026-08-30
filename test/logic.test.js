@@ -97,7 +97,8 @@ test("イベント仕様と保存キーを静的検証する", async () => {
     "eligible_segments",
     "consent",
     "events",
-    "diagnosis_result"
+    "diagnosis_result",
+    "feedback_notes"
   ]);
 });
 

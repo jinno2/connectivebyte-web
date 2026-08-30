@@ -27,7 +27,14 @@ const EVENT_TYPES = Object.freeze(new Set([
   "org_pdf_downloaded",
   "newsletter_subscribed",
   "outbound_cta_clicked",
-  "manual_collaboration_candidate"
+  "manual_collaboration_candidate",
+  "shared_result_viewed",
+  "shared_result_trial_started",
+  "share_template_selected",
+  "share_draft_generated",
+  "x_intent_opened",
+  "result_card_created",
+  "feedback_submitted"
 ]));
 
 const REQUIRED_FIELDS = Object.freeze([

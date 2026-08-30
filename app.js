@@ -16,7 +16,8 @@ const STORAGE_KEYS = Object.freeze([
   "eligible_segments",
   "consent",
   "events",
-  "diagnosis_result"
+  "diagnosis_result",
+  "feedback_notes"
 ]);
 
 const EVENT_NAMES = new Set([
@@ -34,12 +35,13 @@ const EVENT_NAMES = new Set([
   "newsletter_subscribed",
   "outbound_cta_clicked",
   "manual_collaboration_candidate",
-  "result_page_viewed",
+  "shared_result_viewed",
+  "shared_result_trial_started",
   "share_template_selected",
   "share_draft_generated",
   "x_intent_opened",
-  "result_card_downloaded",
-  "same_condition_trial_started"
+  "result_card_created",
+  "feedback_submitted"
 ]);
 
 const campaign = (() => {
@@ -265,10 +267,12 @@ function submitDiagnosis() {
   if (link) link.hidden = false;
   writeJson("diagnosis_result", { current_level: result.current_level, current_level_name: result.current_level_name, next_actions: [...result.next_actions] });
   renderDashboard();
+  renderFeedbackBlock();
   renderShareBlock({
     level: result.current_level,
     levelName: result.current_level_name,
     nextAction: result.next_actions[0] ?? "",
+    nextActions: [...result.next_actions],
     yesCount: result.yes_count
   });
 }
@@ -276,6 +280,75 @@ function submitDiagnosis() {
 // --- share loop (X運用基本計画 v1) -------------------------------------------------
 
 let shareState = null;
+
+// §7 フィードバック: 成果表示直後に1問。branchは追加UIの出し分けのみ (共有・カードは常時利用可)
+function renderFeedbackBlock() {
+  const block = document.querySelector("#feedback-block");
+  if (!block) return;
+  document.querySelector("#feedback-branch").hidden = true;
+  document.querySelector("#feedback-branch").innerHTML = "";
+  block.hidden = false;
+}
+
+function submitFeedback() {
+  const checked = document.querySelector("input[name=feedback-answer]:checked");
+  const branch = document.querySelector("#feedback-branch");
+  if (!checked || !branch) return;
+  track("feedback_submitted", { asset_id: "feedback_block", cta_id: `answer_${checked.value}` });
+  branch.innerHTML = "";
+  if (checked.value === "achieved") {
+    const save = document.createElement("button");
+    save.className = "button button-secondary";
+    save.type = "button";
+    save.dataset.action = "save-result";
+    save.textContent = "結果をテキストで保存する";
+    const note = document.createElement("p");
+    note.className = "privacy-note";
+    note.textContent = "保存したファイルに個人情報は含まれません。";
+    branch.append(save, note);
+  } else {
+    const label = document.createElement("label");
+    label.htmlFor = "feedback-note";
+    label.textContent = checked.value === "partial" ? "修正が必要だった箇所・改善要望(任意)" : "改善要望・エラー報告(任意)";
+    const area = document.createElement("textarea");
+    area.id = "feedback-note";
+    area.rows = 3;
+    area.placeholder = "個人情報は書かないでください";
+    const save = document.createElement("button");
+    save.className = "plain-button";
+    save.type = "button";
+    save.dataset.action = "save-feedback-note";
+    save.textContent = "端末に保存する";
+    const status = document.createElement("p");
+    status.className = "privacy-note";
+    status.dataset.role = "feedback-status";
+    status.textContent = "回答はこの端末にのみ保存されます。";
+    branch.append(label, area, save, status);
+  }
+  branch.hidden = false;
+}
+
+function saveFeedbackNote() {
+  const area = document.querySelector("#feedback-note");
+  const answer = document.querySelector("input[name=feedback-answer]:checked")?.value ?? "";
+  const status = document.querySelector("[data-role=feedback-status]");
+  const text = (area?.value ?? "").trim();
+  if (!text) {
+    if (status) status.textContent = "未入力のため保存しませんでした。";
+    return;
+  }
+  const notes = readJson("feedback_notes", []);
+  notes.push({ answer, text, ts: new Date().toISOString() });
+  writeJson("feedback_notes", notes.slice(-50));
+  area.value = "";
+  if (status) status.textContent = "この端末に保存しました。個人情報は送信していません。";
+}
+
+function saveResultText() {
+  if (!shareState) return;
+  const text = share.resultText(shareState, new Date().toISOString());
+  download(`connectivebyte-result-L${shareState.level}.txt`, "text/plain;charset=utf-8", text);
+}
 
 function shareBaseUrl() {
   return `${window.location.origin}${window.location.pathname}`;
@@ -359,7 +432,7 @@ function initializeSharedResult() {
   if (next) nextEl.textContent = `次の一手:${share.truncateJa(next, 60)}`;
   else nextEl.hidden = true;
   section.hidden = false;
-  track("result_page_viewed", { asset_id: "shared_result", cta_id: `r_L${level}` });
+  track("shared_result_viewed", { asset_id: "shared_result", cta_id: `r_L${level}` });
 }
 
 function trialSameCondition() {
@@ -367,7 +440,7 @@ function trialSameCondition() {
   if (section) section.hidden = true;
   window.history.replaceState(null, "", window.location.pathname);
   document.querySelector("#diagnostic").scrollIntoView({ behavior: "smooth" });
-  track("same_condition_trial_started", { asset_id: "shared_result", cta_id: "trial_same_condition" });
+  track("shared_result_trial_started", { asset_id: "shared_result", cta_id: "trial_same_condition" });
 }
 
 function renderDashboard() {
@@ -571,7 +644,8 @@ document.addEventListener("click", (event) => {
   }
   if (action === "download-share-card") {
     if (!shareState?.cardCanvas) return;
-    track("result_card_downloaded", { asset_id: "share_block", cta_id: "result_card" });
+    // §19 result_card_created: カードは自動生成されるため、ユーザーが取得した時に発火
+    track("result_card_created", { asset_id: "share_block", cta_id: "result_card" });
     shareState.cardCanvas.toBlob((blob) => {
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
@@ -582,6 +656,9 @@ document.addEventListener("click", (event) => {
     }, "image/png");
   }
   if (action === "trial-same-condition") trialSameCondition();
+  if (action === "submit-feedback") submitFeedback();
+  if (action === "save-feedback-note") saveFeedbackNote();
+  if (action === "save-result") saveResultText();
   if (action === "refresh-dashboard") renderDashboard();
   if (action === "open-comparison" || action === "complete-comparison" || action === "download-org") {
     setTimeout(renderDashboard, 0);

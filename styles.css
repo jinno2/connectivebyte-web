@@ -193,3 +193,10 @@ footer p { margin-bottom: 0; }
 @media (max-width: 600px) {
   .share-url { flex-direction: column; align-items: stretch; }
 }
+
+/* --- §7 feedback --- */
+.feedback-block { margin-top: 24px; padding-top: 18px; border-top: 1px solid var(--line); display: grid; gap: 12px; justify-items: start; }
+.feedback-question { font-weight: 750; }
+.feedback-options { border: 1px solid var(--line); border-radius: 2px; padding: 10px 14px; display: flex; flex-wrap: wrap; gap: 16px; }
+#feedback-branch { display: grid; gap: 10px; justify-items: start; width: 100%; }
+#feedback-branch textarea { width: 100%; padding: 10px 12px; border: 1px solid var(--line); border-radius: 2px; font: inherit; font-size: .88rem; color: var(--ink); background: var(--white); }

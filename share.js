@@ -84,3 +84,33 @@ export function cardLines(ctx) {
   lines.push({ kind: "meta", text: `12問中${ctx.yesCount ?? 0}問が該当・ ConnectiveByte` });
   return lines;
 }
+
+// §7 フィードバックの3択 (肯定・否定で差を付けない。回答者全員が対象)
+export const FEEDBACK_OPTIONS = Object.freeze([
+  Object.freeze({ id: "achieved", label: "達成できた" }),
+  Object.freeze({ id: "partial", label: "一部達成できた" }),
+  Object.freeze({ id: "not_achieved", label: "達成できなかった" })
+]);
+
+export function feedbackLabel(id) {
+  const option = FEEDBACK_OPTIONS.find((entry) => entry.id === id);
+  return option ? option.label : "";
+}
+
+// 「成果を保存」のテキスト成果物 (§7 達成branch)。日時は呼び出し側から渡す。
+export function resultText(ctx, isoDate) {
+  const name = ctx.levelName || levelName(ctx.level);
+  const lines = [
+    "ConnectiveByte AI活用 現在地の診断結果",
+    `診断日時: ${isoDate}`,
+    `現在地: L${ctx.level} ${name}`,
+    `該当: 12問中${ctx.yesCount ?? 0}問`,
+    "",
+    "次のアクション:"
+  ];
+  const actions = ctx.nextActions ?? (ctx.nextAction ? [ctx.nextAction] : []);
+  for (const action of actions) lines.push(`- ${action}`);
+  if (actions.length === 0) lines.push("- (最上位のため次の一手の定義なし)");
+  lines.push("", "このファイルには個人情報は含まれません。");
+  return lines.join("\n");
+}

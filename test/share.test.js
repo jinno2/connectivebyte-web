@@ -11,7 +11,10 @@ import {
   truncateJa,
   buildShareText,
   buildIntentUrl,
-  cardLines
+  cardLines,
+  FEEDBACK_OPTIONS,
+  feedbackLabel,
+  resultText
 } from "../share.js";
 import { LEVELS } from "../logic.js";
 
@@ -110,4 +113,32 @@ test("cardLines carries level info and no personal fields", () => {
   for (const banned of ["name", "email", "mail", "address", "phone", "tel", "company", "ip"]) {
     assert.ok(!serialized.includes(`"${banned}`), `card must not carry ${banned}`);
   }
+});
+
+test("FEEDBACK_OPTIONS carries the three §7 choices without ranking", () => {
+  assert.deepEqual(FEEDBACK_OPTIONS.map((o) => o.id), ["achieved", "partial", "not_achieved"]);
+  assert.deepEqual(FEEDBACK_OPTIONS.map((o) => o.label), ["達成できた", "一部達成できた", "達成できなかった"]);
+  assert.equal(feedbackLabel("achieved"), "達成できた");
+  assert.equal(feedbackLabel("nope"), "");
+});
+
+test("resultText renders the full next-action list with no personal fields", () => {
+  const text = resultText({
+    level: 4,
+    levelName: LEVELS[4].name_ja,
+    nextActions: [...LEVELS[4].exit_conditions],
+    yesCount: 5
+  }, "2026-08-30T00:00:00.000Z");
+  assert.ok(text.includes("L4 [redacted]"));
+  assert.ok(text.includes("12問中5問"));
+  assert.ok(text.includes(`- ${LEVELS[4].exit_conditions[0]}`));
+  assert.ok(text.includes("個人情報は含まれません"));
+  for (const banned of ["occupation", "email", "氏名", "会社名"]) {
+    assert.ok(!text.toLowerCase().includes(banned.toLowerCase()));
+  }
+});
+
+test("resultText notes absent next actions at the top level", () => {
+  const text = resultText({ level: 11, levelName: LEVELS[11].name_ja, nextActions: [] }, "x");
+  assert.ok(text.includes("最上位のため次の一手の定義なし"));
 });
