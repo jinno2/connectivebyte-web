@@ -116,7 +116,12 @@ function track(name, details = {}) {
   scheduleFlush();
 }
 
-const EVENTS_ENDPOINT = "/api/events";
+// 本番 (lab.connectivebyte.com, GH Pages) は静的のため /api/events が無い →
+// 計測backend Worker (api.connectivebyte.com/events・saas-infra terraform管理) へ。
+// それ以外 (localhost・server.js) は従来どおり同一originの相対PATH。
+const EVENTS_ENDPOINT = typeof location !== "undefined" && location.hostname === "lab.connectivebyte.com"
+  ? "https://api.connectivebyte.com/events"
+  : "/api/events";
 let flushInFlight = false;
 let flushScheduled = false;
 

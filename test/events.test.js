@@ -44,3 +44,9 @@ test("feedback options are exactly the three plan §7 choices", () => {
     .matchAll(/name="feedback-answer" value="([a-z_]+)"/g)].map((m) => m[1]);
   assert.deepEqual(ids, ["achieved", "partial", "not_achieved"]);
 });
+
+test("production host sends events to the api Worker, others stay same-origin", () => {
+  const source = readFileSync(fileURLToPath(new URL("../app.js", import.meta.url)), "utf8");
+  // lab (GH Pages・静的) だけ絶対URL。それ以外は server.js 相対PATHのまま。
+  assert.match(source, /location\.hostname === "lab\.connectivebyte\.com"\s*\n\s*\?\s*"https:\/\/api\.connectivebyte\.com\/events"\s*\n\s*:\s*"\/api\/events"/);
+});
