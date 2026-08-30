@@ -113,6 +113,24 @@ const DIAGNOSTIC_QUESTIONS = Object.freeze([
   Object.freeze({ id: "Q2", phase: 4, label: "AI活用を通じて、顧客がつき売上や利益が生まれる事業を始めていますか" })
 ]);
 
+// メルアド登録者向けの詳細版 (12問・各段階3問)。idは D プレフィックスで
+// 初回3問 (Q*) と衝突させない — 両セットで Q0 のphase意味が異なるため、
+// ラジオのchecked状態や回答の持ち越しを構造的に防ぐ。
+const DETAILED_QUESTIONS = Object.freeze([
+  Object.freeze({ id: "D0", phase: 1, label: "AIを自分の仕事や事業に関係するものとして意識したことがありますか" }),
+  Object.freeze({ id: "D1", phase: 1, label: "現在一番性能が高いとされるAIを実際に使って、その出力を確認していますか" }),
+  Object.freeze({ id: "D2", phase: 1, label: "複数のAIの間で性能の違い（文章の正確さ、指示の理解、長い資料の扱い、一貫性など）を、自分の言葉で説明できますか" }),
+  Object.freeze({ id: "D3", phase: 2, label: "自分の仕事の中で重要かつ難しい課題で複数のAIを比べて、どこまでできてどこからうまくいかないかを把握していますか" }),
+  Object.freeze({ id: "D4", phase: 2, label: "今の高性能AIがあるからこそ着手できた新しい仕事を、実際に始めていますか" }),
+  Object.freeze({ id: "D5", phase: 2, label: "今の最高性能のAIでも解けずに止まっている重要な仕事があり、その仕事を進めるための活動をしていますか" }),
+  Object.freeze({ id: "D6", phase: 3, label: "AIを組み込んだ仕組みを構築し、モデルの苦手な部分を検索・ツール・人間の確認などで補いながら、実際の業務で繰り返し使っていますか" }),
+  Object.freeze({ id: "D7", phase: 3, label: "成功1件あたりの総コスト（費用と手間を含む）を測って、求める品質を保ったまま最適化していますか" }),
+  Object.freeze({ id: "D8", phase: 3, label: "AIの実行結果を評価してプロンプトやモデル構成などを見直す改善ループを、継続的に回していますか" }),
+  Object.freeze({ id: "D9", phase: 4, label: "その仕組みを別の部門・顧客・地域・業務に合わせて調整して展開し、成果を確認していますか" }),
+  Object.freeze({ id: "D10", phase: 4, label: "AIを活用する仕組みを通じて、顧客がつき売上と利益が生まれる新しい事業を始めていますか" }),
+  Object.freeze({ id: "D11", phase: 4, label: "事業全体で人・金・時間などの配分を、全体としてより良くしようと取り組んでいますか" })
+]);
+
 function isAffirmative(answer) {
   if (answer === true) return true;
   if (typeof answer === "string") return AFFIRMATIVE_ANSWERS.has(answer.trim());
@@ -125,12 +143,13 @@ function isAnswered(entry) {
     && (typeof entry.answer === "boolean" || (typeof entry.answer === "string" && entry.answer.trim() !== ""));
 }
 
-export function run_diagnosis(declared_interest, self_reported_behaviors) {
+export function run_diagnosis(declared_interest, self_reported_behaviors, questions = DIAGNOSTIC_QUESTIONS) {
   const interest = INTERESTS.includes(declared_interest) ? declared_interest : null;
   const behaviors = Array.isArray(self_reported_behaviors) ? self_reported_behaviors : [];
+  const questionSet = Array.isArray(questions) && questions.length > 0 ? questions : DIAGNOSTIC_QUESTIONS;
   const answeredIds = behaviors.filter(isAnswered).map((entry) => entry.id);
   const yesCount = behaviors.filter((entry) => isAnswered(entry) && isAffirmative(entry.answer)).length;
-  const phaseById = new Map(DIAGNOSTIC_QUESTIONS.map((question) => [question.id, question.phase]));
+  const phaseById = new Map(questionSet.map((question) => [question.id, question.phase]));
   let currentPhase = 1;
   for (const entry of behaviors) {
     if (isAffirmative(entry?.answer) && phaseById.has(entry?.id)) {
@@ -143,7 +162,7 @@ export function run_diagnosis(declared_interest, self_reported_behaviors) {
     current_phase: currentPhase,
     current_phase_label: phase.label,
     next_hints: Object.freeze([...phase.next_hints]),
-    questions: DIAGNOSTIC_QUESTIONS,
+    questions: questionSet,
     ready: true,
     declared_interest: interest,
     answered: answeredIds.length,
@@ -151,8 +170,8 @@ export function run_diagnosis(declared_interest, self_reported_behaviors) {
   };
 }
 
-export function buildDiagnosticCompletedEvent(declared_interest, self_reported_behaviors) {
-  const result = run_diagnosis(declared_interest, self_reported_behaviors);
+export function buildDiagnosticCompletedEvent(declared_interest, self_reported_behaviors, questions = DIAGNOSTIC_QUESTIONS) {
+  const result = run_diagnosis(declared_interest, self_reported_behaviors, questions);
   return {
     name: "diagnostic_completed",
     asset_id: "diagnostic_flow",
@@ -230,4 +249,4 @@ const EVENT_TYPES = Object.freeze(new Set([
   "feedback_submitted"
 ]));
 
-export { INTERESTS, DIAGNOSTIC_QUESTIONS, EVENT_TYPES, PHASES, AFFIRMATIVE_ANSWERS };
+export { INTERESTS, DIAGNOSTIC_QUESTIONS, DETAILED_QUESTIONS, EVENT_TYPES, PHASES, AFFIRMATIVE_ANSWERS };

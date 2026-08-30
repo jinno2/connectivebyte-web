@@ -123,6 +123,15 @@ test("FEEDBACK_OPTIONS carries the three §7 choices without ranking", () => {
   assert.equal(feedbackLabel("nope"), "");
 });
 
+test("cardLines and resultText carry the question-set total (detailed = 12)", () => {
+  const lines = cardLines({ phase: 2, phaseLabel: PHASES[1].label, yesCount: 7, total: 12 });
+  assert.ok(lines.map((l) => l.text).join("\n").includes("12問中7問"));
+  const text = resultText({ phase: 3, phaseLabel: PHASES[2].label, nextHints: [], yesCount: 7, total: 12 }, "x");
+  assert.ok(text.includes("12問中7問"));
+  // total未指定は初回3問のまま
+  assert.ok(cardLines({ phase: 1, phaseLabel: PHASES[0].label, yesCount: 1 }).map((l) => l.text).join("\n").includes("3問中1問"));
+});
+
 test("resultText renders the full next-hint list with no personal fields", () => {
   const text = resultText({
     phase: 2,

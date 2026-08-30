@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   buildDiagnosticCompletedEvent,
   buildEventBatch,
+  DETAILED_QUESTIONS,
   DIAGNOSTIC_QUESTIONS,
   filterForbiddenAttributes,
   FORBIDDEN_ATTRIBUTES,
@@ -97,7 +98,8 @@ test("イベント仕様と保存キーを静的検証する", async () => {
     "consent",
     "events",
     "diagnosis_result",
-    "feedback_notes"
+    "feedback_notes",
+    "newsletter_registered"
   ]);
 });
 
@@ -201,6 +203,41 @@ test("診断完了イベントがdiagnostic_completedとして発火される", 
   assert.equal(event.diagnostic_answered, 2);
   assert.equal(event.diagnostic_yes, 1);
   assert.equal(event.diagnostic_ready, true);
+});
+
+test("詳細版は12問・D0-D11で各段階3問・初回3問とidが衝突しない", () => {
+  assert.equal(DETAILED_QUESTIONS.length, 12);
+  assert.deepEqual(DETAILED_QUESTIONS.map((q) => q.id), Array.from({ length: 12 }, (_, i) => `D${i}`));
+  assert.deepEqual(DETAILED_QUESTIONS.map((q) => q.phase), [1, 1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 4]);
+  const overlap = DETAILED_QUESTIONS.filter((q) => DIAGNOSTIC_QUESTIONS.some((b) => b.id === q.id));
+  assert.deepEqual(overlap, []);
+  for (const question of [...DIAGNOSTIC_QUESTIONS, ...DETAILED_QUESTIONS]) {
+    assert.ok(question.label.length > 10, `too short: ${question.id}`);
+    assert.doesNotMatch(question.label, /知能接続|CIL|ハーネス|限界タスク|自己進化|フロンティア未認知/);
+  }
+});
+
+test("run_diagnosisは質問セットを差し替えられる (詳細版)", () => {
+  const behaviors = DETAILED_QUESTIONS.map((q) => ({
+    id: q.id,
+    answer: q.id === "D5" ? "はい" : "いいえ"
+  }));
+  const result = run_diagnosis("D", behaviors, DETAILED_QUESTIONS);
+  assert.equal(result.current_phase, 2);
+  assert.equal(result.answered, 12);
+  assert.equal(result.yes_count, 1);
+  assert.equal(result.questions, DETAILED_QUESTIONS);
+  // セット外の回答 (初回3問の残骸) は判定に影響しない
+  const mixed = run_diagnosis("D", [{ id: "Q2", answer: true }, ...behaviors], DETAILED_QUESTIONS);
+  assert.equal(mixed.current_phase, 2);
+  assert.equal(mixed.answered, 13);
+});
+
+test("詳細版の完了イベントも診断数をセットに即して数える", () => {
+  const behaviors = DETAILED_QUESTIONS.map((q) => ({ id: q.id, answer: q.id === "D6" ? true : false }));
+  const event = buildDiagnosticCompletedEvent("D", behaviors, DETAILED_QUESTIONS);
+  assert.equal(event.diagnostic_answered, 12);
+  assert.equal(event.diagnostic_yes, 1);
 });
 
 test("禁止属性を含むイベントから当該属性をフィルタする", () => {

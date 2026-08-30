@@ -86,6 +86,23 @@ const MAX_EVENTS_PER_WINDOW = 30;
 const RATE_WINDOW_MS = 60_000;
 const MAX_BODY_BYTES = 256 * 1024;
 
+// /api/subscribe — 本番 (api.connectivebyte.com/subscribe・Worker+D1) と同じ検証を
+// ローカルでも通すための写し。dev serverは保存しない (202を返すだけ)。
+const EMAIL_PATTERN = /^[^\s@,;:"'<>()[\]\\]{1,64}@[^\s@.]+(\.[^\s@.]+)+$/;
+const ANONYMOUS_ID_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
+
+function validateSubscription(payload) {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) return "invalid payload shape";
+  const email = typeof payload.email === "string" ? payload.email.trim().toLowerCase() : "";
+  if (email.length === 0 || email.length > 254 || !EMAIL_PATTERN.test(email)) return "invalid_email";
+  if (payload.consent !== true) return "consent_required";
+  if ("anonymous_id" in payload
+    && !(typeof payload.anonymous_id === "string" && ANONYMOUS_ID_PATTERN.test(payload.anonymous_id))) {
+    return "invalid_anonymous_id";
+  }
+  return null;
+}
+
 function isNonEmptyString(value) {
   return typeof value === "string" && value.length > 0 && value.length <= 512;
 }
@@ -248,6 +265,38 @@ export function createRequestHandler(options = {}) {
         "Access-Control-Max-Age": "600"
       });
       response.end();
+      return;
+    }
+
+    if (pathname === "/api/subscribe" && request.method === "POST") {
+      const origin = request.headers.origin;
+      if (typeof origin === "string" && origin.length > 0) {
+        const requested = new URL(origin);
+        const expectedHost = request.headers.host ?? "";
+        if (requested.host !== expectedHost) {
+          sendJson(response, 403, { error: "cross_origin_denied" });
+          return;
+        }
+        response.setHeader("Access-Control-Allow-Origin", origin);
+      }
+      const raw = await readBody(request);
+      if (raw === null) {
+        sendJson(response, 413, { error: "body_too_large" });
+        return;
+      }
+      let payload;
+      try {
+        payload = JSON.parse(raw);
+      } catch {
+        sendJson(response, 400, { error: "invalid_json" });
+        return;
+      }
+      const error = validateSubscription(payload);
+      if (error) {
+        sendJson(response, 400, { error });
+        return;
+      }
+      sendJson(response, 202, { accepted: true });
       return;
     }
 

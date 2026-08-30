@@ -1,6 +1,7 @@
 import {
   buildDiagnosticCompletedEvent,
   buildEventBatch,
+  DETAILED_QUESTIONS,
   DIAGNOSTIC_QUESTIONS,
   getEligibleSegments,
   getInterestRoute,
@@ -17,7 +18,8 @@ const STORAGE_KEYS = Object.freeze([
   "consent",
   "events",
   "diagnosis_result",
-  "feedback_notes"
+  "feedback_notes",
+  "newsletter_registered"
 ]);
 
 const EVENT_NAMES = new Set([
@@ -122,6 +124,12 @@ function track(name, details = {}) {
 const EVENTS_ENDPOINT = typeof location !== "undefined" && location.hostname === "lab.connectivebyte.com"
   ? "https://api.connectivebyte.com/events"
   : "/api/events";
+
+// ニュースレター登録 (メールアドレス=PII) の送信先。/events と同じbackend Worker
+// の別endpoint (saas-infra管理。subscribers表へ保存・匿名eventsとは分離)。
+const SUBSCRIBE_ENDPOINT = typeof location !== "undefined" && location.hostname === "lab.connectivebyte.com"
+  ? "https://api.connectivebyte.com/subscribe"
+  : "/api/subscribe";
 let flushInFlight = false;
 let flushScheduled = false;
 
@@ -202,56 +210,92 @@ function renderRoute(interest, focus = true) {
   showDiagnosticStep(interest);
 }
 
+// 詳細版 (12問) はメルアド登録者のみ。登録成否で切り替わるため、renders毎に
+// 現在のmodeとlistのmodeが一致するか見て、変わっていたら全組み替え (checkedも
+// クリア — Q*とD*でid体系が異なるため持ち越しは起きない)。
+function isDetailedUnlocked() {
+  const registered = readJson("newsletter_registered", null);
+  return Boolean(registered && typeof registered === "object" && registered.email_registered === true);
+}
+
+function activeQuestions() {
+  return isDetailedUnlocked() ? DETAILED_QUESTIONS : DIAGNOSTIC_QUESTIONS;
+}
+
+function questionSetHeading() {
+  return isDetailedUnlocked()
+    ? "診断ステップ：詳細版（12問）— 最近の行動について、それぞれ一番近い答えを選んでください"
+    : "診断ステップ：最近の行動について、それぞれ一番近い答えを選んでください";
+}
+
+function renderDiagnosticQuestions() {
+  const list = document.querySelector("#diagnostic-questions");
+  if (!list) return;
+  const variant = isDetailedUnlocked() ? "detailed" : "basic";
+  if (list.childElementCount > 0 && list.dataset.variant === variant) return;
+  list.dataset.variant = variant;
+  list.innerHTML = "";
+  const options = [
+    { value: "はい", text: "はい" },
+    { value: "トライ中（取り組み中）", text: "トライ中" },
+    { value: "いいえ", text: "いいえ／わからない" }
+  ];
+  activeQuestions().forEach((question) => {
+    const item = document.createElement("li");
+    item.className = "diagnostic-question";
+    const text = document.createElement("p");
+    text.className = "question-text";
+    text.textContent = question.label;
+    item.append(text);
+    const group = document.createElement("div");
+    group.className = "question-options";
+    group.setAttribute("role", "group");
+    group.setAttribute("aria-label", question.label);
+    options.forEach((option) => {
+      const label = document.createElement("label");
+      label.className = "check";
+      const radio = document.createElement("input");
+      radio.type = "radio";
+      radio.name = question.id;
+      radio.value = option.value;
+      radio.dataset.questionId = question.id;
+      label.append(radio, document.createTextNode(` ${option.text}`));
+      group.append(label);
+    });
+    item.append(group);
+    list.append(item);
+  });
+}
+
+// 登録完了直後の切り替え — 診断stepが表示済みのときだけ効かせる (未表示なら
+// 次に表示されるタイミングで詳細版になる)。
+function refreshDiagnosticQuestions() {
+  const step = document.querySelector("#diagnostic-step");
+  if (!step || step.hidden) return;
+  const heading = document.querySelector("#diagnostic-step-title");
+  if (heading) heading.textContent = questionSetHeading();
+  renderDiagnosticQuestions();
+}
+
 function showDiagnosticStep(interest) {
   const step = document.querySelector("#diagnostic-step");
   if (!step) return;
   step.hidden = false;
-  const list = document.querySelector("#diagnostic-questions");
-  if (list && list.childElementCount === 0) {
-    const options = [
-      { value: "はい", text: "はい" },
-      { value: "トライ中（取り組み中）", text: "トライ中" },
-      { value: "いいえ", text: "いいえ／わからない" }
-    ];
-    DIAGNOSTIC_QUESTIONS.forEach((question) => {
-      const item = document.createElement("li");
-      item.className = "diagnostic-question";
-      const text = document.createElement("p");
-      text.className = "question-text";
-      text.textContent = question.label;
-      item.append(text);
-      const group = document.createElement("div");
-      group.className = "question-options";
-      group.setAttribute("role", "group");
-      group.setAttribute("aria-label", question.label);
-      options.forEach((option) => {
-        const label = document.createElement("label");
-        label.className = "check";
-        const radio = document.createElement("input");
-        radio.type = "radio";
-        radio.name = question.id;
-        radio.value = option.value;
-        radio.dataset.questionId = question.id;
-        label.append(radio, document.createTextNode(` ${option.text}`));
-        group.append(label);
-      });
-      item.append(group);
-      list.append(item);
-    });
-  }
+  renderDiagnosticQuestions();
   const heading = document.querySelector("#diagnostic-step-title");
-  if (heading && interest) heading.textContent = "診断ステップ：最近の行動について、それぞれ一番近い答えを選んでください";
+  if (heading && interest) heading.textContent = questionSetHeading();
 }
 
 function submitDiagnosis() {
   const declared = readJson("declared_interest", null);
+  const questions = activeQuestions();
   const checked = document.querySelectorAll("#diagnostic-questions input[type=radio]:checked");
   const behaviors = Array.from(checked).map((radio) => ({
     id: radio.dataset.questionId,
     answer: radio.value
   }));
-  const result = run_diagnosis(declared, behaviors);
-  const completed = buildDiagnosticCompletedEvent(declared, behaviors);
+  const result = run_diagnosis(declared, behaviors, questions);
+  const completed = buildDiagnosticCompletedEvent(declared, behaviors, questions);
   track("diagnostic_completed", { asset_id: completed.asset_id, cta_id: completed.cta_id });
   const output = document.querySelector("#diagnostic-output");
   if (output) {
@@ -276,7 +320,8 @@ function submitDiagnosis() {
     phaseLabel: result.current_phase_label,
     nextHint: result.next_hints[0] ?? "",
     nextHints: [...result.next_hints],
-    yesCount: result.yes_count
+    yesCount: result.yes_count,
+    total: questions.length
   });
 }
 
@@ -693,19 +738,35 @@ comparisonWorkflow.querySelectorAll("input").forEach((input) => {
 
 document.querySelector("#newsletter-form").addEventListener("submit", (event) => {
   event.preventDefault();
-  const email = document.querySelector("#email");
+  const emailInput = document.querySelector("#email");
   const explicitConsent = document.querySelector("#email-consent").checked;
   const status = document.querySelector("#newsletter-status");
-  if (!email.checkValidity() || !explicitConsent) {
+  if (!emailInput.checkValidity() || !explicitConsent) {
     status.textContent = "有効なメールアドレスと明示同意が必要です。";
     return;
   }
-  const current = getConsent();
-  writeJson("consent", { analytics: current.analytics, email: true, decided: true });
-  track("newsletter_subscribed", { asset_id: "newsletter", cta_id: "newsletter_submit" });
-  email.value = "";
-  document.querySelector("#email-consent").checked = false;
-  status.textContent = "登録操作を受け付けました。このMVPはメールアドレスを送信・保存しません。";
+  const payload = { email: emailInput.value.trim(), consent: true };
+  // anonymous_idは匿名計測に同意済みのvisitorのみ関連付ける
+  // (未同意なら新規生成しない — subscribe自体は明示同意があるため送れる)。
+  if (getConsent().analytics) payload.anonymous_id = anonymousId();
+  status.textContent = "登録を送信しています…";
+  fetch(SUBSCRIBE_ENDPOINT, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  }).then((response) => {
+    if (response.status !== 202) throw new Error(`subscribe_rejected_${response.status}`);
+    const current = getConsent();
+    writeJson("consent", { analytics: current.analytics, email: true, decided: true });
+    track("newsletter_subscribed", { asset_id: "newsletter", cta_id: "newsletter_submit" });
+    writeJson("newsletter_registered", { email_registered: true, at: new Date().toISOString() });
+    emailInput.value = "";
+    document.querySelector("#email-consent").checked = false;
+    status.textContent = "登録を受け付けました。診断が詳細版（12問）に切り替わります。";
+    refreshDiagnosticQuestions();
+  }).catch(() => {
+    status.textContent = "登録できませんでした。通信状況を確認して、もう一度お試しください。";
+  });
 });
 
 const restoredInterest = readJson("declared_interest", null);

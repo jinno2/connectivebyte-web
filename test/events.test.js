@@ -51,6 +51,46 @@ test("production host sends events to the api Worker, others stay same-origin", 
   assert.match(source, /location\.hostname === "lab\.connectivebyte\.com"\s*\n\s*\?\s*"https:\/\/api\.connectivebyte\.com\/events"\s*\n\s*:\s*"\/api\/events"/);
 });
 
+test("newsletter subscribe posts to the Worker /subscribe (email=PII, not the events stream)", () => {
+  const source = readFileSync(fileURLToPath(new URL("../app.js", import.meta.url)), "utf8");
+  assert.match(source, /"https:\/\/api\.connectivebyte\.com\/subscribe"/);
+  assert.match(source, /"\/api\/subscribe"/);
+  // 登録が202でのみ成立すること (失敗時にconsent/フラグを書かない)
+  assert.match(source, /response\.status !== 202/);
+});
+
+test("server.js mirrors the production /subscribe validation", async () => {
+  const { Readable } = await import("node:stream");
+  const { createRequestHandler } = await import("../server.js");
+  const handler = createRequestHandler({ dataDir: "/tmp/cb-sub-test" });
+  const cases = [
+    [{ email: "a@example.com", consent: true }, 202],
+    [{ email: "A@Example.COM ", consent: true }, 202],
+    [{ email: "nope", consent: true }, 400],
+    [{ email: "a@example.com" }, 400],
+    [{ email: "a@example.com", consent: true, anonymous_id: "zz-01_x" }, 202],
+    [{ email: "a@example.com", consent: true, anonymous_id: "不正なid" }, 400],
+    ["not-json", 400]
+  ];
+  for (const [body, expected] of cases) {
+    const raw = typeof body === "string" ? body : JSON.stringify(body);
+    const request = Readable.from([Buffer.from(raw)]);
+    request.method = "POST";
+    request.url = "/api/subscribe";
+    request.headers = { host: "localhost" };
+    let status = 0;
+    let responseBody = "";
+    const response = {
+      setHeader: () => {},
+      writeHead: (code) => { status = code; },
+      end: (payload) => { responseBody = String(payload ?? ""); }
+    };
+    await handler(request, response);
+    assert.equal(status, expected, `${raw} → ${status}`);
+    if (expected === 202) assert.match(responseBody, /"accepted":true/);
+  }
+});
+
 test("consent grant re-emits shared_result_viewed dropped before consent", () => {
   // 初回visitorが共有URL (?r=P{n}) で来ると track() は同意前にdropする。
   // 同意時に補発しないと成長loopの核心指標 (shared_result_viewed) が
