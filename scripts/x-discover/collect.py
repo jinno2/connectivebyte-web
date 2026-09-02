@@ -225,15 +225,27 @@ def llm_draft(item: dict, genre_jp: str, recent_hooks: list[str],
         req = urllib.request.Request(
             'http://localhost:14000/v1/chat/completions', data=body,
             headers={'Content-Type': 'application/json', 'Authorization': f'Bearer {key}'})
-        with urllib.request.urlopen(req, timeout=60) as r:
-            data = json.loads(r.read().decode())
-        text = data['choices'][0]['message']['content'].strip()
+        try:
+            with urllib.request.urlopen(req, timeout=120) as r:
+                data = json.loads(r.read().decode())
+        except Exception as e:  # 安定稼働: 失敗理由をlogに残す (握り潰さない)
+            print(f'      [llm] request fail: {type(e).__name__}: {str(e)[:120]}')
+            return None
+        msg = data['choices'][0]['message']
+        # proxy経由でcontent空+reasoning_contentのみの応答が間欠発生 → 両方見る
+        text = (msg.get('content') or msg.get('reasoning_content') or '').strip()
         lines = [l.strip() for l in text.splitlines() if l.strip()]
         if len(lines) < 3:
+            print(f'      [llm] short/empty reply (content_len={len(msg.get("content") or "")})')
             return None
         return {'hook': lines[0], 'take': lines[1], 'ask': lines[2]}
 
-    draft = call(prompt)
+    # 間欠失敗 (空応答・proxy一時障害) 対策: 最大3回
+    draft = None
+    for _ in range(3):
+        draft = call(prompt)
+        if draft is not None:
+            break
     if draft is None:
         return None
     hits = banned_hits(draft['hook'], draft['take'], draft['ask'])
@@ -254,10 +266,47 @@ def recent_hooks(limit: int = 6) -> list[str]:
     return [r['hook'] for r in rows if r.get('hook')][-limit:]
 
 
+def refill_placeholders(dry: bool = False, limit: int = 3) -> int:
+    """queue内の未起草draft (【要起草】) を再起草して置き換える。
+
+    LLM失敗でappendされたdraftは誰も再処理せず滞留し承認draftが枯渇する
+    (2026-09-03時点で9件滞留が実測) — 毎回のcollectで回収する。冪等:
+    起草できた行だけ置換・できなければ残して翌朝再試行。
+    limit/回で実行時間をboundedに (残りは翌朝へ)。
+    """
+    if limit <= 0 or not QUEUE.exists():
+        return 0
+    try:
+        rows = [json.loads(l) for l in QUEUE.read_text().splitlines() if l.strip()]
+    except OSError:
+        return 0
+    hooks = recent_hooks()
+    n = 0
+    for r in rows:
+        if n >= limit:
+            break
+        if r.get('status') != 'draft' or r.get('hook') != '【要起草】':
+            continue
+        item = {'title': r.get('title', ''), 'url': r.get('url', ''),
+                'source': r.get('source', ''), 'score': r.get('score', 0)}
+        got = llm_draft(item, r.get('genre_jp', ''), hooks, fetch_excerpt(item['url']))
+        if got:
+            r.update(got)
+            n += 1
+            print(f'  [refill] {item["title"][:60]}')
+            print(f'      hook: {r["hook"]}')
+    if n and not dry:
+        QUEUE.write_text(''.join(json.dumps(x, ensure_ascii=False) + '\n' for x in rows))
+        print(f'refilled: {n} rows -> {QUEUE}')
+    return n
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument('--dry', action='store_true', help='キューに書き込まない')
     ap.add_argument('--no-llm', action='store_true', help='LLM起草をスキップ')
+    ap.add_argument('--refill-limit', type=int, default=3,
+                    help='未起草draftの再起草上限/回 (0=無効・既定3)')
     args = ap.parse_args()
 
     load_env_file()
@@ -287,6 +336,7 @@ def main() -> int:
     print(f'candidates={len(cands)} calendar-matched={len(cal)} picked={len(picked)}')
     if not picked:
         print('no candidates today (all seen or empty sources)')
+        refill_placeholders(dry=args.dry, limit=args.refill_limit)
         return 0
 
     STATE_DIR.mkdir(parents=True, exist_ok=True)
@@ -327,6 +377,9 @@ def main() -> int:
                 f.write(json.dumps(d, ensure_ascii=False) + '\n')
         STATE.write_text(json.dumps({'seen': sorted(seen)}, ensure_ascii=False))
         print(f'queue appended: {len(drafts)} -> {QUEUE}')
+
+    # 未起草プレースホルダの回収 (LLM間欠失敗の滞留対策・2026-09-03)
+    refill_placeholders(dry=args.dry, limit=args.refill_limit)
     return 0
 
 
