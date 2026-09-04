@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
-"""CB発見者 承認flow — queue内draftの確認・承認 (jinno 30秒/日)
+"""CB発見者 steering — queue内draftの確認・却下 (任意・jinno)
 
-collect.py が毎朝溜めた draft (status=draft) を新しい方から表示し、
-approve したものだけが post.py の投稿対象になる。
+2026-09-04 レビュー・投稿判断の自動化(jinno決定)により承認flowは撤廃。
+post.py は未承認draftも自動投稿する。本toolは任意のsteering:
+reject した draft だけが投稿対象外になる。approve は明示指定(任意)。
+
+collect.py が毎朝溜めた draft (status=draft) を新しい方から表示する。
 
   python3 review.py                # 未承認draftを表示 (推奨=★本日 最高score)
   python3 review.py approve 12     # 番号12を承認

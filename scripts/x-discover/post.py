@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
-"""CB発見者 poster — 承認済みdraftを1日1投稿 (site_meiro-a x-fleet-post.py pattern・stdlibのみ)
+"""CB発見者 poster — draftを1日1投稿 (site_meiro-a x-fleet-post.py pattern・stdlibのみ)
 
 collect.py が溜めた queue (~/.local/share/cb-fleet/discover-queue.jsonl) のうち
-jinno が review.py で承認 (status=approved) した draft から、48h寿命内の最良1件を
-投稿する。污垢 (status=not_created) の間は何もしない = cronに入れても安全。
+48h寿命内の最良1件を投稿する。2026-09-04 レビュー・投稿判断の自動化(jinno決定)により
+承認flowを撤廃: 未承認draft(status=draft)も自動投稿する。review.py は任意の
+steering(却下・品質確認)であり、reject した draft は投稿対象外のまま。
+污垢 (status=not_created) の間は何もしない = cronに入れても安全。
 
   python3 post.py --dry-run
   python3 post.py
 
-流れ: collect (09:17 cron) → review承認 (jinno 30秒/日) → post (21:07 cron)
+流れ: collect (09:17 cron) → post (21:07 cron・自動判定)。review.py は任意 steering。
 秘密は ~/.local/share/cb-fleet/.env のみ (repo外・git管理外)。
 consumer鍵(X_API_KEY/SECRET)はapp共通・access鍵のみ垢別({PREFIX}_ACCESS_*)。
 """
@@ -24,6 +26,8 @@ import sys
 import urllib.error
 import urllib.parse
 import urllib.request
+
+from x_discover_rules import ask_is_interrogative, uniformity_warning  # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
@@ -170,18 +174,35 @@ def save_queue(entries: list[dict]) -> None:
             f.write(json.dumps(d, ensure_ascii=False) + '\n')
 
 
+PLACEHOLDER_MARK = '【'  # collect失敗時の要記入マーカー(LLM未生成=投稿不可)
+
+
 def pick_draft(entries: list[dict], today: dt.date) -> dict | None:
-    """承認済み・未投稿・48h寿命内 (当日収集+前日残り) から当日優先・score降順1件。"""
+    """未投稿・48h寿命内 (当日収集+前日残り) から当日優先・score降順1件。
+
+    2026-09-04 承認flow撤廃: draft(未承認)も対象。reject/blocked は除外。
+    品質skip(fail-closed): 要記入プレースホルダー/問い形でないask/単調warn付き。
+    """
+    elig = [d for d in entries
+            if d.get('status') in ('draft', 'approved') and not d.get('posted_at')]
+    hooks = [d.get('hook', '') for d in elig]
     cands = []
-    for d in entries:
-        if d.get('status') != 'approved' or d.get('posted_at'):
-            continue
+    for d in elig:
         try:
             age = (today - dt.date.fromisoformat(d['date'])).days
         except (KeyError, ValueError):
             continue
-        if 0 <= age <= 1:
-            cands.append((age, -(d.get('score') or 0), d))
+        if not 0 <= age <= 1:
+            continue
+        fields = (d.get('hook', ''), d.get('take', ''), d.get('ask', ''))
+        if any(PLACEHOLDER_MARK in f for f in fields):
+            continue  # LLM起草失敗(要記入)は人間執筆待ち=自動投稿しない
+        if not ask_is_interrogative(d.get('ask', '')):
+            continue
+        others = [h for h, e in zip(hooks, elig) if e is not d]
+        if uniformity_warning(d.get('hook', ''), others):
+            continue
+        cands.append((age, -(d.get('score') or 0), d))
     return min(cands)[2] if cands else None
 
 
@@ -221,7 +242,7 @@ def main() -> int:
                 continue
         d = pick_draft(entries, today)
         if d is None:
-            log({'event': 'skip', 'account': alias, 'reason': 'no approved draft within 48h'})
+            log({'event': 'skip', 'account': alias, 'reason': 'no eligible draft within 48h'})
             continue
         text = build_text(d)
         # §11機械検査 (fail-closed): 承認済みでも誇張語を含めば投稿拒否し
@@ -277,6 +298,9 @@ def main() -> int:
             continue
 
         tweet_id = resp.get('data', {}).get('id')
+        if d.get('status') == 'draft':
+            d['status'] = 'approved'  # 2026-09-04 自動化: engine承認の記録
+            d['approved_by'] = 'engine(2026-09-04承認flow撤廃)'
         a['last_post'] = today.isoformat()
         a['post_count'] += 1
         a['consecutive_auth_fail'] = 0

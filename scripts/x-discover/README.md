@@ -10,8 +10,12 @@ business_notes `横断/2026-08-28-x_account_fleet_strategy.md` (正本) へ。
 
 ```
 09:17  collect.py   (cron) HN/GitHubから当日ジャンルの候補収集 + LLM起草 → queue (draft)
-随時    review.py   (jinno 30秒/日) draft確認 → approve/reject
-21:07  post.py     (cron) 承認済み48h以内の最良1件を投稿 (垢未作成ならskip)
+21:07  post.py     (cron) 48h以内の最良1件を自動投稿 (承認flow撤廃・2026-09-04)
+随時    review.py   (任意steering) rejectしたdraftのみ投稿対象外
+
+【2026-09-04 訂正】レビュー・投稿判断の自動化(jinno決定)により承認flow(jinno 30秒/日)は撤廃。
+post.py は未承認draftも自動投稿する(要記入プレースホルダー・問い形でないask・
+単調warn付き・禁止語17語はfail-closedでskip/拒否)。
 ```
 
 - queue/state/log = `~/.local/share/cb-fleet/` (repo外・git管理外)
@@ -25,9 +29,9 @@ business_notes `横断/2026-08-28-x_account_fleet_strategy.md` (正本) へ。
 
 ```bash
 python3 collect.py --dry          # 収集プレビュー (キュー書込なし)
-python3 review.py                 # 未承認draft一覧 (推奨=★)
-python3 review.py approve 12      # 承認 (番号=行位置・翌日も有効)
 python3 post.py --dry-run         # 投稿プレビュー (表示のみ)
+python3 review.py                 # draft一覧 (任意steering・推奨=★)
+python3 review.py reject 12       # 却下 (番号=行位置・翌日も有効)
 python3 review.py --all           # 全queue簡易履歴
 ```
 
@@ -39,7 +43,7 @@ python3 review.py --all           # 全queue簡易履歴
 3. `python3 authorize.py --account cb_discoverer`
    → 表示URLをブラウザで開き「新垢」でログイン → app承認 → 7桁PINを入力
    → access鍵が .env へ追記され config が `warming` に自動反映
-4. 翌日から 21:07 cron が承認済みdraftを投稿開始 (config `status` を `active` に
+4. 翌日から 21:07 cron がdraftを自動投稿 (config `status` を `active` に
    すればそのまま毎日。banned判定は401/403×3連続で自動)
 
 ## 恒久運用の境界
