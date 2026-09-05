@@ -308,6 +308,7 @@ ARTICLE_TMPL = """<!DOCTYPE html>
 <link rel="canonical" href="https://lab.connectivebyte.com/content/18-blog/{slug}/">
 <link rel="stylesheet" href="../article.css">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<script type="module" src="../../app.js"></script>
 </head>
 <body>
 <a class="skip-link" href="#article">本文へ移動</a>
