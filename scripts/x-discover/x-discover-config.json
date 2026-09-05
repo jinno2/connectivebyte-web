@@ -8,6 +8,21 @@
       "tier": "url"
     }
   ],
+  "_profiles_note": "profiles = プロフ値の実行正本 (avatar path は repo root 基準)。accounts 外の key (cb_x_connectivebyte) は x-discover pipeline 非参加・値置き場のみ (適用は setup script / ad-hoc v1.1)。横断索引=~/business_notes/横断/profile-assets.json",
+  "profiles": {
+    "cb_discoverer": {
+      "name": "AIラボ便",
+      "bio": "AIの発見を毎日1件速報。LLM・エージェント・ツール・セキュリティ。運営: lab.connectivebyte.com",
+      "url": "https://lab.connectivebyte.com",
+      "avatar": "scripts/x-discover/avatar-cb_discoverer.png"
+    },
+    "cb_x_connectivebyte": {
+      "name": "ConnectiveByte",
+      "bio": "lab/ConnectiveByteの公式記録。測定の記録・公開・訂正を機関として報告する(月次+臨時)",
+      "url": "https://lab.connectivebyte.com",
+      "avatar": "scripts/x-discover/avatar-cb_connectivebyte.png"
+    }
+  },
   "warmup": {
     "post_every_n_days": 1
   },
