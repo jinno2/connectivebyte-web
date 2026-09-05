@@ -20,6 +20,9 @@ post.py は未承認draftも自動投稿する(要記入プレースホルダー
 
 - queue/state/log = `~/.local/share/cb-fleet/` (repo外・git管理外)
 - 秘密 = `~/.local/share/cb-fleet/.env` のみ (LITELLM_API_KEY・X access鍵)
+- LLM起草backend = `LLM_BACKEND` env (`llm_backend.py`で切替) — `codex`=Codex CLI非対話モード
+  (2026-09-05〜・ChatGPTサブスク・公式自動化IF) / `litellm`(既定)=localhost:14000 proxy・
+  `LITELLM_MODEL` env (2026-09-05の上流全滅時はqwen3.8-max-preview-direct退避)
 - 投稿形 = hook / take / URL / ask の4行 — copy link 20.0 最重量actionへの最適化
 - 選定 = score=(points+2×comments)÷経過時間 (HN議論速度) + 曜日ジャンルカレンダー。
   起草は**本文抜粋を取得して根拠付け** (2026-08-30〜・fetch失敗は題名のみ)。

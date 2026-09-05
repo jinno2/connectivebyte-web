@@ -22,6 +22,7 @@ import pathlib
 import sys
 import urllib.request
 
+from llm_backend import llm_text
 from x_discover_rules import BANNED_WORDS, ask_is_interrogative, banned_hits
 
 STATE_DIR = pathlib.Path.home() / '.local/share/cb-fleet'
@@ -211,36 +212,25 @@ def llm_prompt(item: dict, genre_jp: str, recent_hooks: list[str], excerpt: str 
 
 def llm_draft(item: dict, genre_jp: str, recent_hooks: list[str],
               excerpt: str = '') -> dict | None:
-    """litellm proxy経由で一句+自説+問いを起草。keyは環境変数のみ。
+    """LLMで一句+自説+問いを起草 (backend=LLM_BACKEND env)。
 
-    modelはLITELLM_MODEL envで指定可(規定='default')。
-    2026-09-05〜上流zai glm-5.2が401(key無効)・minimaxが402(quota枯渇)のため
-    LITELLM_MODEL=qwen3.8-max-preview-direct で運用(.env)。
+    litellm: proxy localhost:14000経由・modelはLITELLM_MODEL env。
+      2026-09-05〜上流zai glm-5.2が401(key無効)・minimaxが402(quota枯渇)のため
+      qwen3.8-max-preview-direct退避運用 → 同日さらにcodex backendを追加。
+    codex:   Codex CLI非対話モード (codex exec・ChatGPTサブスク・公式自動化IF)。
+      2026-09-05〜LLM_BACKEND=codex で運用(.env)・1呼出〜15秒。
     起草結果が§11機械検査 (禁止語/問い形) に落ちたら1回だけ再試行する。
     """
-    key = os.environ.get('LITELLM_API_KEY')
-    if not key:
+    if os.environ.get('LLM_BACKEND') != 'codex' and not os.environ.get('LITELLM_API_KEY'):
         return None
     prompt = llm_prompt(item, genre_jp, recent_hooks, excerpt)
     def call(p: str) -> dict | None:
-        body = json.dumps({'model': os.environ.get('LITELLM_MODEL', 'default'),
-                           'max_tokens': 2500,
-                           'messages': [{'role': 'user', 'content': p}]}).encode()
-        req = urllib.request.Request(
-            'http://localhost:14000/v1/chat/completions', data=body,
-            headers={'Content-Type': 'application/json', 'Authorization': f'Bearer {key}'})
-        try:
-            with urllib.request.urlopen(req, timeout=120) as r:
-                data = json.loads(r.read().decode())
-        except Exception as e:  # 安定稼働: 失敗理由をlogに残す (握り潰さない)
-            print(f'      [llm] request fail: {type(e).__name__}: {str(e)[:120]}')
+        text = llm_text(p)
+        if not text:
             return None
-        msg = data['choices'][0]['message']
-        # proxy経由でcontent空+reasoning_contentのみの応答が間欠発生 → 両方見る
-        text = (msg.get('content') or msg.get('reasoning_content') or '').strip()
         lines = [l.strip() for l in text.splitlines() if l.strip()]
         if len(lines) < 3:
-            print(f'      [llm] short/empty reply (content_len={len(msg.get("content") or "")})')
+            print(f'      [llm] short/empty reply (len={len(text)})')
             return None
         return {'hook': lines[0], 'take': lines[1], 'ask': lines[2]}
 

@@ -32,6 +32,7 @@ X_DISCOVER = os.path.join(os.path.dirname(HERE), 'x-discover')
 sys.path.insert(0, X_DISCOVER)
 sys.path.insert(0, HERE)
 
+from llm_backend import llm_text  # noqa: E402
 from post import load_env, oauth_header, resolve_env  # noqa: E402
 from x_discover_rules import banned_hits  # noqa: E402
 
@@ -62,7 +63,7 @@ DOSSIER = {
     },
 }
 
-LLM_URL = 'http://localhost:14000/v1/chat/completions'
+LLM_URL = 'http://localhost:14000/v1/chat/completions'  # 参考: litellm backendのendpoint (llm_backend.py)
 
 
 def now_iso() -> str:
@@ -146,18 +147,8 @@ def cmd_engagement(args) -> int:
 # ---------------------------------------------------------------- 起草 (LLM)
 
 def llm(prompt: str, max_tokens: int = 8000) -> str | None:
-    key = os.environ.get('LITELLM_API_KEY')
-    if not key:
-        return None
-    body = json.dumps({'model': os.environ.get('LITELLM_MODEL', 'default'),
-                       'max_tokens': max_tokens,
-                       'messages': [{'role': 'user', 'content': prompt}]}).encode()
-    req = urllib.request.Request(LLM_URL, data=body,
-                                 headers={'Content-Type': 'application/json',
-                                          'Authorization': f'Bearer {key}'})
-    with urllib.request.urlopen(req, timeout=120) as r:
-        data = json.loads(r.read().decode())
-    return data['choices'][0]['message']['content'].strip()
+    """LLM起草 (backend=LLM_BACKEND env・litellm proxy / codex exec。2026-09-05〜)。"""
+    return llm_text(prompt, max_tokens=max_tokens)
 
 
 def metrics_digest(target: str) -> str:
