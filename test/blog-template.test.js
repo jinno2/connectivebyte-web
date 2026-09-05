@@ -38,7 +38,7 @@ print(page)
 
   // 相対リンク (プロジェクトPagesのベースパスに依存しない) + 絶対pathリンクの混入禁止
   assert.doesNotMatch(page, /href="\/(?!favicon\.svg)/);
-  assert.match(page, /href="\/\/#diagnostic|href="\.\.\/\.\.\/#diagnostic"/);
+  assert.match(page, /href="\/\/#diagnostic|href="(\.\.\/){3}#diagnostic"/);
 
   // テンプレ変数の取り残しがないこと
   assert.doesNotMatch(page, /\{(title|slug|description|updated|body)\}/);

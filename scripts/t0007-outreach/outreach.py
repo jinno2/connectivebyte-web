@@ -308,16 +308,16 @@ ARTICLE_TMPL = """<!DOCTYPE html>
 <link rel="canonical" href="https://lab.connectivebyte.com/content/18-blog/{slug}/">
 <link rel="stylesheet" href="../article.css">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
-<script type="module" src="../../app.js"></script>
+<script type="module" src="../../../app.js"></script>
 </head>
 <body>
 <a class="skip-link" href="#article">本文へ移動</a>
 <header class="site-header">
-  <a class="brand" href="../../" aria-label="ConnectiveByte ホーム">Connective<span>Byte</span></a>
+  <a class="brand" href="../../../" aria-label="ConnectiveByte ホーム">Connective<span>Byte</span></a>
   <nav aria-label="メインナビゲーション">
-    <a href="../../#purpose">Purpose</a>
-    <a href="../../#vision">Vision</a>
-    <a class="nav-cta" href="../../#diagnostic">5択を始める</a>
+    <a href="../../../#purpose">Purpose</a>
+    <a href="../../../#vision">Vision</a>
+    <a class="nav-cta" href="../../../#diagnostic">5択を始める</a>
   </nav>
 </header>
 
@@ -327,14 +327,14 @@ ARTICLE_TMPL = """<!DOCTYPE html>
   <p class="article-meta"><span class="stamp">最終確認: {updated}</span></p>
 {body}
   <h2 id="next">次の一歩</h2>
-  <p>自分の関心から次に触れる対象を選びたい場合は、<a href="../../#diagnostic">ConnectiveByteの5択診断</a>でいま最も近い関心をひとつ選べる。</p>
+  <p>自分の関心から次に触れる対象を選びたい場合は、<a href="../../../#diagnostic">ConnectiveByteの5択診断</a>でいま最も近い関心をひとつ選べる。</p>
   <div class="next-actions">
-    <a class="button button-primary" href="../../#diagnostic">関心から次を選ぶ (5択・所要30秒) <span aria-hidden="true">→</span></a>
+    <a class="button button-primary" href="../../../#diagnostic">関心から次を選ぶ (5択・所要30秒) <span aria-hidden="true">→</span></a>
   </div>
 </main>
 
 <footer>
-  <a class="brand" href="../../">Connective<span>Byte</span></a>
+  <a class="brand" href="../../../">Connective<span>Byte</span></a>
   <p>ConnectiveByte — 海外AIサービスの日本語圏紹介。</p>
   <p>© 2026 ConnectiveByte</p>
 </footer>

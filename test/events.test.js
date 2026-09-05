@@ -134,6 +134,6 @@ test("article pages measure article_viewed (slug=asset_id, consent-gated, LP una
     "sys.stdout.write(m.ARTICLE_TMPL.format(title='T', slug='s', description='D', updated='2026-01-01', body='B'))"
   ].join("\n")], { encoding: "utf8" });
   for (const [label, page] of [["quetab article", article], ["ARTICLE_TMPL", template]]) {
-    assert.match(page, /<script type="module" src="\.\.\/\.\.\/app\.js"><\/script>/, label);
+    assert.match(page, /<script type="module" src="(\.\.\/){3}app\.js"><\/script>/, label);
   }
 });

@@ -11,6 +11,16 @@ import path from "node:path";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
+test("deploy workflow は favicon.svg と sitemap.xml を配信木に含める", async () => {
+  // 19a0caf で設置した2資産がpublish tree外でlive 404になった実測への回帰防止。
+  const yml = await readFile(path.join(repoRoot, ".github/workflows/deploy_pages.yml"), "utf8");
+  const cpLine = yml.split("\n").find((l) => l.includes("cp index.html"));
+  assert.ok(cpLine, "publish treeのcp行が見つからない");
+  for (const file of ["favicon.svg", "sitemap.xml", "app.js", "logic.js", "share.js"]) {
+    assert.ok(cpLine.includes(file), `配信木に ${file} が無い: ${cpLine.trim()}`);
+  }
+});
+
 test("favicon.svg は本店brand色 (ink背景・lime/cyan円環) で存在する", async () => {
   const svg = await readFile(path.join(repoRoot, "favicon.svg"), "utf8");
   assert.match(svg, /#101c2c/); // --ink
