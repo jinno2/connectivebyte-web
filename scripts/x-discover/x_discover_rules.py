@@ -38,6 +38,15 @@ def hook_suffix(hook: str) -> str:
     return (hook or '')[-OPENER_SUFFIX_LEN:]
 
 
+def preview_key(url: str) -> str:
+    """プレビュー素材のdir名 (capture-preview.py収集・post.py添付で共有)。
+    host (www除外) + path。URL無し・簡易URLでも衝突しない短い一意key。"""
+    import urllib.parse
+    u = urllib.parse.urlsplit(url or '')
+    k = (u.netloc.replace('www.', '') + u.path.rstrip('/')).strip('/')
+    return k.replace('/', '_')[:80] or u.netloc or 'nohost'
+
+
 def uniformity_warning(hook: str, recent_hooks: list[str]) -> str | None:
     """直近hookと末尾語が同一なら警告文を返す。"""
     sfx = hook_suffix(hook)

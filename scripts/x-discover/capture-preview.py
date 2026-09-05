@@ -16,9 +16,10 @@ import pathlib
 import subprocess
 import sys
 import tempfile
-import urllib.parse
 
 from playwright.sync_api import sync_playwright
+
+from x_discover_rules import preview_key
 
 STATE_DIR = pathlib.Path('~/.local/share/cb-fleet/previews').expanduser()
 VIEWPORT = {'width': 1280, 'height': 800}
@@ -29,14 +30,8 @@ UA_OVERRIDE = ('Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 '
                '(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36')
 
 
-def key_for(url: str) -> str:
-    u = urllib.parse.urlsplit(url)
-    k = (u.netloc.replace('www.', '') + u.path.rstrip('/')).strip('/')
-    return k.replace('/', '_')[:80] or u.netloc
-
-
 def capture(url: str) -> dict:
-    out = STATE_DIR / key_for(url)
+    out = STATE_DIR / preview_key(url)
     if (out / 'preview.gif').exists():
         return {'url': url, 'status': 'cached', 'dir': str(out)}
     out.mkdir(parents=True, exist_ok=True)

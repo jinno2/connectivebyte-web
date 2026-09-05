@@ -19,6 +19,7 @@ import datetime as dt
 import json
 import os
 import pathlib
+import subprocess
 import sys
 import urllib.request
 
@@ -373,6 +374,17 @@ def main() -> int:
                 f.write(json.dumps(d, ensure_ascii=False) + '\n')
         STATE.write_text(json.dumps({'seen': sorted(seen)}, ensure_ascii=False))
         print(f'queue appended: {len(drafts)} -> {QUEUE}')
+        # 製品プレビュー収集 (GIF添付素材・2026-09-05)。best-effort —
+        # 失敗/未収集でもcollectは成功 (投稿はtext-onlyで続く)。
+        try:
+            subprocess.run(
+                [sys.executable,
+                 os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                              'capture-preview.py'),
+                 *[i['url'] for i in picked]],
+                timeout=600, check=False)
+        except Exception as e:  # noqa: BLE001 — 収集失敗は投稿に影響させない
+            print(f'  [capture] skipped: {e}', file=sys.stderr)
 
     # 未起草プレースホルダの回収 (LLM間欠失敗の滞留対策・2026-09-03)
     refill_placeholders(dry=args.dry, limit=args.refill_limit)

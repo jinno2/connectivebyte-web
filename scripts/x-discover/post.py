@@ -27,7 +27,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-from x_discover_rules import ask_is_interrogative, uniformity_warning  # noqa: E402
+from x_discover_rules import ask_is_interrogative, preview_key, uniformity_warning  # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
@@ -38,9 +38,11 @@ ENV_FILE = os.path.join(STATE_DIR, '.env')
 QUEUE_FILE = os.path.join(STATE_DIR, 'discover-queue.jsonl')
 STATE_FILE = os.path.join(STATE_DIR, 'x-post-state.json')
 LOG_FILE = os.path.join(STATE_DIR, 'post-log.jsonl')
+PREVIEW_DIR = os.path.join(STATE_DIR, 'previews')
 CONFIG_FILE = os.path.join(HERE, 'x-discover-config.json')
 
 PRICE = {'url': 0.200, 'nourl': 0.015}  # 実測単価 (URL付き/抜き・credits換算)
+MEDIA_LIMIT = 5 * 1024 * 1024  # v1.1 simple upload上限 (GIF/PNGとも)
 
 
 def load_env() -> dict:
@@ -148,9 +150,46 @@ def oauth_header(method: str, url: str, params: dict, env: dict) -> str:
     return 'OAuth ' + ', '.join(f'{enc(k)}="{enc(v)}"' for k, v in sorted(oauth.items()))
 
 
-def x_post_tweet(text: str, env: dict) -> dict:
+def x_upload_media(path: str, category: str, env: dict) -> str | None:
+    """v1.1 simple upload (GIF=tweet_gif / PNG=tweet_image・ともに5MB迄)。
+    multipart bodyは署名対象外 (signature baseはoauth_*のみ)。None=失敗。"""
+    with open(path, 'rb') as f:
+        data = f.read()
+    if len(data) > MEDIA_LIMIT:
+        return None
+    bnd = '----cbd' + hashlib.md5(data).hexdigest()[:16]
+    head = (f'--{bnd}\r\nContent-Disposition: form-data; name="media_category"\r\n'
+            f'\r\n{category}\r\n'
+            f'--{bnd}\r\nContent-Disposition: form-data; name="media"; '
+            f'filename="{os.path.basename(path)}"\r\n'
+            'Content-Type: application/octet-stream\r\n'
+            'Content-Transfer-Encoding: binary\r\n\r\n').encode()
+    body = head + data + f'\r\n--{bnd}--\r\n'.encode()
+    url = 'https://upload.twitter.com/1.1/media/upload.json'
+    req = urllib.request.Request(url, data=body, method='POST', headers={
+        'Authorization': oauth_header('POST', url, {}, env),
+        'Content-Type': f'multipart/form-data; boundary={bnd}'})
+    with urllib.request.urlopen(req, timeout=120) as r:
+        return str(json.load(r)['media_id_string'])
+
+
+def find_media(d: dict) -> tuple[str | None, str]:
+    """draft URLのプレビュー素材 (GIF優先・5MB超/欠落ならPNG)。無ければ(None,'none')。"""
+    pdir = os.path.join(PREVIEW_DIR, preview_key(d.get('url', '')))
+    gif = os.path.join(pdir, 'preview.gif')
+    png = os.path.join(pdir, 'capture.png')
+    if os.path.exists(gif) and os.path.getsize(gif) <= MEDIA_LIMIT:
+        return gif, 'gif'
+    if os.path.exists(png):
+        return png, 'png'  # GIF未収集 or 5MB超のfallback
+    return None, 'none'
+
+
+def x_post_tweet(text: str, env: dict, media_id: str | None = None) -> dict:
     url = 'https://api.twitter.com/2/tweets'
     payload = {'text': text}
+    if media_id:
+        payload['media'] = {'media_ids': [media_id]}
     hdr = oauth_header('POST', url, {}, env)
     req = urllib.request.Request(url, data=json.dumps(payload).encode(), method='POST',
                                  headers={'Authorization': hdr, 'Content-Type': 'application/json'})
@@ -271,8 +310,12 @@ def main() -> int:
 
         print(f'=== {alias} ({status}/{tier}) ===')
         print(text)
+        media_path, media_kind = (None, 'off')
+        if config.get('warmup', {}).get('media_policy', 'gif') != 'off':
+            media_path, media_kind = find_media(d)
+        print(f'media: {media_kind}')
         if args.dry_run:
-            log({'event': 'dry_run', 'account': alias, 'tier': tier})
+            log({'event': 'dry_run', 'account': alias, 'tier': tier, 'media': media_kind})
             continue
         aenv = resolve_env(env, acct.get('env_prefix', 'CBD'))
         if aenv is None:
@@ -286,8 +329,20 @@ def main() -> int:
                  'spend_usd': state['spend_usd'], 'cap_usd': cap})
             continue
 
+        media_id = None
+        if media_path:
+            try:  # 添付失敗はtext-onlyで続行 (投稿機会を損なわない)
+                media_id = x_upload_media(
+                    media_path, 'tweet_gif' if media_kind == 'gif' else 'tweet_image', aenv)
+            except Exception as e:  # noqa: BLE001
+                log({'event': 'media_upload_fail', 'account': alias,
+                     'media': media_kind, 'detail': str(e)[:120]})
+            if media_id is None:
+                log({'event': 'skip_media', 'account': alias,
+                     'reason': 'upload failed or over 5MB', 'media': media_kind})
+
         try:
-            resp = x_post_tweet(text, aenv)
+            resp = x_post_tweet(text, aenv, media_id)
         except urllib.error.HTTPError as e:
             kind, detail = classify_http_error(e)
             log({'event': 'fail', 'account': alias, 'kind': kind, 'detail': detail})
@@ -316,7 +371,8 @@ def main() -> int:
         d['tweet_id'] = tweet_id
         save_queue(entries)
         log({'event': 'posted', 'account': alias, 'tier': tier, 'tweet_id': tweet_id,
-             'price_usd': price, 'spend_usd': state['spend_usd'], 'url': d['url']})
+             'price_usd': price, 'spend_usd': state['spend_usd'], 'url': d['url'],
+             'media': media_kind if media_id else 'none'})
 
     save_state(state)
     return rc

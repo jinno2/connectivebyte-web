@@ -25,7 +25,8 @@
   },
   "warmup": {
     "post_every_n_days": 1,
-    "link_policy": "none"
+    "link_policy": "none",
+    "media_policy": "gif"
   },
   "budget": {
     "monthly_cap_usd": 10.0
