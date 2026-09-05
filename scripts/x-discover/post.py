@@ -206,8 +206,12 @@ def pick_draft(entries: list[dict], today: dt.date) -> dict | None:
     return min(cands)[2] if cands else None
 
 
-def build_text(d: dict) -> str:
-    return f"{d['hook']}\n{d['take']}\n\n{d['url']}\n\n{d['ask']}"
+def build_text(d: dict, include_url: bool = True) -> str:
+    # 2026-09-05 jinno決定: URL行はimpressions回復まで外す (warmup.link_policy="none")。
+    # 導線はプロフURL (lab.connectivebyte.com) で担保。復活はlink_policy="url"で即時。
+    if include_url:
+        return f"{d['hook']}\n{d['take']}\n\n{d['url']}\n\n{d['ask']}"
+    return f"{d['hook']}\n{d['take']}\n\n{d['ask']}"
 
 
 def main() -> int:
@@ -225,8 +229,10 @@ def main() -> int:
 
     entries = load_queue()
     rc = 0
+    include_url = config.get('warmup', {}).get('link_policy', 'url') == 'url'
     for acct in config['accounts']:
-        alias, status, tier = acct['alias'], acct['status'], acct.get('tier', 'url')
+        alias, status = acct['alias'], acct['status']
+        tier = acct.get('tier', 'url') if include_url else 'nourl'
         if status in ('not_created', 'banned'):
             log({'event': 'skip', 'account': alias, 'reason': status})
             continue
@@ -244,7 +250,7 @@ def main() -> int:
         if d is None:
             log({'event': 'skip', 'account': alias, 'reason': 'no eligible draft within 48h'})
             continue
-        text = build_text(d)
+        text = build_text(d, include_url)
         # §11機械検査 (fail-closed): 承認済みでも誇張語を含めば投稿拒否し
         # status=blocked で再選択対象外にする (毎晩の無駄retryを防ぐ)。
         hits = banned_hits(d.get('hook', ''), d.get('take', ''), d.get('ask', ''))
@@ -256,9 +262,10 @@ def main() -> int:
             save_queue(entries)
             rc = 1
             continue
-        if len(text) - len(d['url']) + 23 > 280:  # URLはX上23字扱い
+        if len(text) - (len(d['url']) if include_url else 0) + (23 if include_url else 0) > 280:
             log({'event': 'fail', 'account': alias, 'kind': 'too_long',
-                 'length': len(text) - len(d['url']) + 23})
+                 'length': len(text) - (len(d['url']) if include_url else 0)
+                           + (23 if include_url else 0)})
             rc = 1
             continue
 

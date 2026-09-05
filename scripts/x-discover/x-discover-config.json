@@ -5,7 +5,7 @@
       "role": "discoverer",
       "status": "warming",
       "env_prefix": "CBD",
-      "tier": "url"
+      "tier": "nourl"
     }
   ],
   "_profiles_note": "profiles = プロフ値の実行正本 (avatar path は repo root 基準)。accounts 外の key (cb_x_connectivebyte) は x-discover pipeline 非参加・値置き場のみ (適用は setup script / ad-hoc v1.1)。横断索引=~/business_notes/横断/profile-assets.json",
@@ -24,7 +24,8 @@
     }
   },
   "warmup": {
-    "post_every_n_days": 1
+    "post_every_n_days": 1,
+    "link_policy": "none"
   },
   "budget": {
     "monthly_cap_usd": 10.0
