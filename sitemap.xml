@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- ConnectiveByte (lab.connectivebyte.com) の公開ページ一覧。
+     静的手動更新: インデックス許可 (index,follow) のページを追加・削除したときにこのfileも直す。
+     noindex の承認資産配信ページ (content/01-17系) は対象外。 -->
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url><loc>https://lab.connectivebyte.com/</loc><changefreq>monthly</changefreq><priority>1.0</priority></url>
+  <url><loc>https://lab.connectivebyte.com/content/18-blog/quetab-ai-game-builder/</loc><changefreq>monthly</changefreq><priority>0.8</priority></url>
+</urlset>
+

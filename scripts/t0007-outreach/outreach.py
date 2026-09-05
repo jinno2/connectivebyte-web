@@ -308,16 +308,44 @@ ARTICLE_TMPL = """<!DOCTYPE html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{title}</title>
+<meta name="description" content="{description}">
+<meta property="og:title" content="{title}">
+<meta property="og:description" content="{description}">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://lab.connectivebyte.com/content/18-blog/{slug}/">
 <meta name="robots" content="index,follow">
-<style>
-body{{font-family:sans-serif;max-width:720px;margin:2rem auto;padding:0 1rem;line-height:1.8;color:#1a1a2e}}
-h1{{font-size:1.5rem}} h2{{font-size:1.2rem;margin-top:2rem}}
-footer{{margin-top:3rem;font-size:.85rem;opacity:.7}}
-</style>
+<link rel="canonical" href="https://lab.connectivebyte.com/content/18-blog/{slug}/">
+<link rel="stylesheet" href="../article.css">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
 </head>
 <body>
+<a class="skip-link" href="#article">本文へ移動</a>
+<header class="site-header">
+  <a class="brand" href="../../" aria-label="ConnectiveByte ホーム">Connective<span>Byte</span></a>
+  <nav aria-label="メインナビゲーション">
+    <a href="../../#purpose">Purpose</a>
+    <a href="../../#vision">Vision</a>
+    <a class="nav-cta" href="../../#diagnostic">5択を始める</a>
+  </nav>
+</header>
+
+<main id="article" class="article">
+  <p class="kicker">FRONTIER NOTE / 検証報告</p>
+  <h1>{title}</h1>
+  <p class="article-meta"><span class="stamp">最終確認: {updated}</span></p>
 {body}
-<footer>ConnectiveByte — 海外AIサービスの日本語圏紹介 (<a href="/">トップ</a>)</footer>
+  <h2 id="next">次の一歩</h2>
+  <p>自分の関心から次に触れる対象を選びたい場合は、<a href="../../#diagnostic">ConnectiveByteの5択診断</a>でいま最も近い関心をひとつ選べる。</p>
+  <div class="next-actions">
+    <a class="button button-primary" href="../../#diagnostic">関心から次を選ぶ (5択・所要30秒) <span aria-hidden="true">→</span></a>
+  </div>
+</main>
+
+<footer>
+  <a class="brand" href="../../">Connective<span>Byte</span></a>
+  <p>ConnectiveByte — 海外AIサービスの日本語圏紹介。</p>
+  <p>© 2026 ConnectiveByte</p>
+</footer>
 </body>
 </html>
 """
@@ -373,7 +401,14 @@ def cmd_publish(args) -> int:
                          if l.startswith('# ')), spec['slug'])
         out_dir = os.path.join(REPO, 'content', '18-blog', spec['slug'])
         os.makedirs(out_dir, exist_ok=True)
-        page = ARTICLE_TMPL.format(title=first_h1, body=md_to_html(r['body']))
+        # 記事説明: 本文最初の80字 (HTML化前のplain textから。meta/OG用・未記載ならslugにフォールバック)
+        plain = [l.strip() for l in r['body'].splitlines()
+                 if l.strip() and not l.strip().startswith(('#', '-', '*', '<!--', '```'))]
+        description = next(iter(plain), spec['slug'])[:80]
+        updated = now_iso()[:10]
+        page = ARTICLE_TMPL.format(title=first_h1, slug=spec['slug'],
+                                   description=description, updated=updated,
+                                   body=md_to_html(r['body']))
         out = os.path.join(out_dir, 'index.html')
         with open(out, 'w') as f:
             f.write(page)
