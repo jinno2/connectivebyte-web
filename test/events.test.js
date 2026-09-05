@@ -104,18 +104,26 @@ test("consent grant re-emits shared_result_viewed dropped before consent", () =>
   );
 });
 
-test("article pages measure article_viewed (slug=asset_id, consent-gated, LP unaffected)", () => {
+test("article pages measure article_viewed (slug=asset_id, consentless minimal, LP consent unchanged)", () => {
   const source = readFileSync(fileURLToPath(new URL("../app.js", import.meta.url)), "utf8");
-  // 18-blog パスからslugを取り asset_id へ。LPは従来どおり landing_viewed。
+  // 18-blog パスからslugを取り asset_id へ。LPは従来どおり同意ゲート内の landing_viewed。
   assert.match(
     source,
     /const articleSlug = location\.pathname\.match\(\/content.{1,4}18-blog.{1,4}\(\[\^\/\]\+\).{1,4}\$\/\)/,
     "18-blog slug extraction missing"
   );
-  assert.match(
-    source,
-    /if \(consent\.analytics\) track\(campaign\.articlePage \? "article_viewed" : "landing_viewed"\);/
-  );
+  // article_viewedのみ同意ゲート外 (jinno決定2026-09-05)。LPは従来どおり。
+  assert.match(source, /if \(campaign\.articlePage\) trackArticleViewed\(\);\s*\n\s*else if \(consent\.analytics\) track\("landing_viewed"\);/);
+  // 最小data原則: anonymous_id (端末ID) を持たない・端末に保存せず即送信・referrer無し
+  const trackFn = /function trackArticleViewed\(\) \{([\s\S]*?)\n\}/.exec(source)?.[1] ?? "";
+  assert.ok(trackFn, "trackArticleViewed missing");
+  assert.doesNotMatch(trackFn, /anonymous_id/);
+  assert.doesNotMatch(trackFn, /localStorage|readJson|writeJson/);
+  assert.doesNotMatch(trackFn, /referrer/);
+  assert.match(trackFn, /send_events\(\[\{/);
+  // LP側の同意ゲートと匿名ID (端末内保存) は無変更
+  assert.match(source, /if \(!EVENT_NAMES\.has\(name\) \|\| !getConsent\(\)\.analytics\) return;/);
+  assert.match(source, /anonymous_id: anonymousId\(\)/);
   // 同意UI (#consent-panel/#analytics-consent) はLPにしか無いため null 安全であること
   assert.match(source, /if \(consentCheckbox\) consentCheckbox\.checked = consent\.analytics;/);
   assert.match(source, /if \(consentPanel\) consentPanel\.hidden = consent\.decided;/);
@@ -124,7 +132,8 @@ test("article pages measure article_viewed (slug=asset_id, consent-gated, LP una
   assert.match(source, /if \(document\.querySelector\("#share-free-text"\)\) \{/);
   assert.match(source, /const frontier = document\.querySelector\("#frontier"\);\s*\n\s*if \(frontier\) observer\.observe\(frontier\);/);
 
-  // 公開記事 (現行テンプレ両方) が app.js を読み込むこと (計測の入口)
+  // 公開記事 (現行テンプレ両方) が app.js を読み込むこと (計測の入口) +
+  // 同意なし計測の1行表記 (LPの同意文面と矛盾しない開示)
   const article = readFileSync(fileURLToPath(new URL("../content/18-blog/quetab-ai-game-builder/index.html", import.meta.url)), "utf8");
   const outreachPy = fileURLToPath(new URL("../scripts/t0007-outreach/outreach.py", import.meta.url));
   const template = execFileSync("python3", ["-c", [
@@ -135,5 +144,6 @@ test("article pages measure article_viewed (slug=asset_id, consent-gated, LP una
   ].join("\n")], { encoding: "utf8" });
   for (const [label, page] of [["quetab article", article], ["ARTICLE_TMPL", template]]) {
     assert.match(page, /<script type="module" src="(\.\.\/){3}app\.js"><\/script>/, label);
+    assert.match(page, /このページはCookieや端末への保存を使わないアクセス集計のみを行います。/, label);
   }
 });

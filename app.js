@@ -124,6 +124,32 @@ function track(name, details = {}) {
   scheduleFlush();
 }
 
+// article_viewedのみ同意ゲート外 (jinno決定2026-09-05・最小data原則):
+// 記事への流入数を数えるだけで、client識別子 (cookie/localStorage/anonymous_id) を
+// 持たず・referrerも送らない。Worker契約の必須field最小分のみで構成し、端末にも
+// 保存せず即送信 (events配列に入れるとlocalStorageに残るため)。LPの既存イベント
+// (landing_viewed等) は従来どおり同意ゲート内。
+function trackArticleViewed() {
+  if (!EVENT_NAMES.has("article_viewed")) return;
+  send_events([{
+    name: "article_viewed",
+    source_id: campaign.source_id,
+    campaign_id: campaign.campaign_id,
+    asset_id: campaign.asset_id,
+    segment: "unselected",
+    channel: campaign.channel,
+    cta_id: "none",
+    utm_source: "",
+    utm_medium: "",
+    utm_campaign: "",
+    utm_term: "",
+    utm_content: "",
+    occurred_at: new Date().toISOString()
+  }]).catch(() => {
+    // 送信失敗の再送はしない。端末への保存 (再送の材料) 自体が最小data原則に反する
+  });
+}
+
 // 本番 (lab.connectivebyte.com, GH Pages) は静的のため /api/events が無い →
 // 計測backend Worker (api.connectivebyte.com/events・saas-infra terraform管理) へ。
 // それ以外 (localhost・server.js) は従来どおり同一originの相対PATH。
@@ -628,13 +654,14 @@ function saveConsent(analytics) {
 
 function initializeConsent() {
   const consent = getConsent();
-  // 記事ページには consent-panel が無い (同意UIはLPのみ)。同意済みなら計測継続、
-  // 未同意のときは panel 表示をスキップするだけ (LPで同意した訪問者の同意が効く)。
+  // 記事ページには consent-panel が無い (同意UIはLPのみ)。記事の article_viewed は
+  // 同意ゲート外の最小計測 (trackArticleViewed)。LPの landing_viewed は同意ゲート内のまま。
   const consentCheckbox = document.querySelector("#analytics-consent");
   const consentPanel = document.querySelector("#consent-panel");
   if (consentCheckbox) consentCheckbox.checked = consent.analytics;
   if (consentPanel) consentPanel.hidden = consent.decided;
-  if (consent.analytics) track(campaign.articlePage ? "article_viewed" : "landing_viewed");
+  if (campaign.articlePage) trackArticleViewed();
+  else if (consent.analytics) track("landing_viewed");
 }
 
 function initializeReadingEvents() {

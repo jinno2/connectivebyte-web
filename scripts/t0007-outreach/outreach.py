@@ -336,7 +336,8 @@ ARTICLE_TMPL = """<!DOCTYPE html>
 <footer>
   <a class="brand" href="../../../">Connective<span>Byte</span></a>
   <p>ConnectiveByte — 海外AIサービスの日本語圏紹介。</p>
-  <p>© 2026 ConnectiveByte</p>
+  <p>このページはCookieや端末への保存を使わないアクセス集計のみを行います。</p>
+  <p class="privacy-note">© 2026 ConnectiveByte</p>
 </footer>
 </body>
 </html>
