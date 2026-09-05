@@ -40,6 +40,7 @@ h2 { margin: 56px 0 14px; padding-top: 20px; border-top: 1px solid var(--line); 
 h3 { margin: 26px 0 8px; font-size: 1.02rem; font-weight: 800; }
 p { margin-bottom: 14px; }
 em { color: #318f89; font-style: normal; }
+code { padding: 1px 5px; background: rgba(16, 28, 44, .06); font-size: .9em; }
 .lead { color: var(--muted); font-size: 1.04rem; }
 
 .article-meta { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; margin: 0 0 6px; font-size: .8rem; color: var(--muted); }
