@@ -3,24 +3,57 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="承認済み資産02-entry-read（campaign floor-ceiling-001・framework v2.0.1）の配信ページ。本文は承認済みcontent.mdとbytes一致。">
+  <meta name="description" content="AIは使っている。でも、どれを使っても同じに見える。">
+  <meta property="og:title" content="上がってくる床は、乗れば足場になる">
+  <meta property="og:description" content="AIは使っている。でも、どれを使っても同じに見える。">
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://lab.connectivebyte.com/content/02-entry-read/">
   <meta name="robots" content="noindex">
   <title>上がってくる床は、乗れば足場になる | ConnectiveByte</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <style>
-    body { margin: 0; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; color: #1c2733; background: #fafaf7; line-height: 1.7; }
-    header { padding: 14px max(20px, calc((100vw - 860px) / 2)); border-bottom: 1px solid #e3e0d6; background: #fff; }
-    header a { color: #101c2c; font-weight: 800; text-decoration: none; }
-    main { max-width: 860px; margin: 0 auto; padding: 28px 20px 64px; }
-    .meta { color: #6b7280; font-size: .85rem; margin: 0 0 20px; }
-    pre { white-space: pre-wrap; overflow-wrap: anywhere; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: .92rem; background: #fff; border: 1px solid #e3e0d6; padding: 24px; }
+    :root { --ink: #101c2c; --muted: #566273; --paper: #f4f1e9; --white: #fffefa; --lime: #c8ff52; --cyan: #43d9d0; --line: rgba(16, 28, 44, .16); --max: 1180px; }
+    * { box-sizing: border-box; }
+    body { margin: 0; color: var(--ink); background: var(--paper); font-family: Inter, "Noto Sans JP", system-ui, sans-serif; line-height: 1.65; }
+    a { color: inherit; -webkit-tap-highlight-color: transparent; }
+    .skip-link { position: fixed; top: -80px; left: 1rem; z-index: 100; padding: .7rem 1rem; background: var(--white); }
+    .skip-link:focus { top: 1rem; }
+    .site-header { height: 76px; display: flex; align-items: center; justify-content: space-between; max-width: var(--max); margin: auto; padding: 0 28px; }
+    .brand { font-weight: 850; font-size: 1.18rem; letter-spacing: -.04em; text-decoration: none; }
+    .brand span { color: #438b88; }
+    nav { display: flex; gap: 28px; align-items: center; font-size: .82rem; font-weight: 700; }
+    nav a { text-decoration: none; }
+    .nav-cta { border: 1px solid var(--ink); padding: 9px 15px; border-radius: 99px; }
+    main { max-width: 860px; margin: 0 auto; padding: 40px 28px 72px; }
+    .meta { color: var(--muted); font-size: .8rem; margin: 0 0 14px; }
+    .stamp { display: inline-block; padding: 4px 10px; border: 1px solid var(--line); background: var(--white); color: var(--ink); font-weight: 750; }
+    .box-label { margin: 0 0 10px; font-size: .7rem; letter-spacing: .19em; font-weight: 800; text-transform: uppercase; color: #408f89; }
+    .summary-box { margin: 0 0 18px; padding: 24px 26px 12px; background: var(--white); border-left: 7px solid #4ba49e; }
+    .summary-box ul { margin: 0 0 12px; padding-left: 1.15em; }
+    .summary-box li { margin-bottom: 8px; }
+    pre { white-space: pre-wrap; overflow-wrap: anywhere; margin: 0; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: .92rem; line-height: 1.75; background: var(--white); border: 1px solid var(--line); padding: 24px; }
     .cta { margin: 28px 0 0; }
-    .cta a { display: inline-block; background: #101c2c; color: #fffefa; font-weight: 700; text-decoration: none; padding: 12px 18px; border-radius: 2px; }
+    .cta a { display: inline-flex; align-items: center; background: var(--ink); color: var(--white); font-weight: 750; text-decoration: none; padding: 14px 20px; border-radius: 2px; }
+    .cta a:hover, .cta a:focus-visible { background: #284158; }
+    footer { padding: 44px max(28px, calc((100vw - var(--max)) / 2)); display: flex; flex-wrap: wrap; align-items: center; gap: 12px 25px; font-size: .78rem; border-top: 1px solid var(--line); }
+    footer p { margin: 0; }
+    footer p:last-child { margin-left: auto; }
+    @media (max-width: 600px) { .site-header { padding: 0 20px; } nav > a:not(.nav-cta) { display: none; } main { padding: 30px 20px 56px; } .summary-box { padding: 18px 16px 10px; } pre { padding: 18px 16px; } footer { align-items: flex-start; flex-direction: column; } footer p:last-child { margin-left: 0; } }
   </style>
 </head>
 <body>
-  <header><a href="../../">ConnectiveByte LPへ戻る</a></header>
+  <a class="skip-link" href="#asset-body">本文へ移動</a>
+  <header class="site-header">
+    <a class="brand" href="../../">Connective<span>Byte</span></a>
+    <nav aria-label="メインナビゲーション">
+      <a href="../../#purpose">Purpose</a>
+      <a href="../../#vision">Vision</a>
+      <a class="nav-cta" href="../../#diagnostic">5択を始める</a>
+    </nav>
+  </header>
   <main>
     <p class="meta">asset_id: 02-entry-read / campaign: floor-ceiling-001 / framework v2.0.1 / content_hash: 3817f135a86038c07da0a8f9cf5696a2776ade059de473cfcbd3f14cf6480ed0</p>
+    <p class="box-label">本文（承認済み原文 / Markdown）</p>
     <pre id="asset-body">
 # 上がってくる床は、乗れば足場になる
 
@@ -83,5 +116,10 @@ GPT-5.6 Sol のような最高性能モデルが差を出すのは、難しい�
 </pre>
     <p class="cta"><a href="../../?utm_source=content_page&amp;utm_medium=web&amp;utm_campaign=floor-ceiling-001#diagnostic">30秒で現在地を知る・5択診断を試す</a></p>
   </main>
+  <footer>
+    <a class="brand" href="../../">Connective<span>Byte</span></a>
+    <p>ConnectiveByte — 海外AIサービスの日本語圏紹介。</p>
+    <p>© 2026 ConnectiveByte</p>
+  </footer>
 </body>
 </html>
