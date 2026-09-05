@@ -1,0 +1,90 @@
+/* article.css — 18-blog(outreach系)検証報告の共通样式。
+   本店 LP (styles.css) の design token と header/footer の言語をそのまま使う。
+   token 値は styles.css :root と同一。同期は手動のため、styles.css 変更時はここも直す。 */
+
+:root {
+  --ink: #101c2c;
+  --muted: #566273;
+  --paper: #f4f1e9;
+  --white: #fffefa;
+  --lime: #c8ff52;
+  --cyan: #43d9d0;
+  --line: rgba(16, 28, 44, 0.16);
+  --max: 1180px;
+}
+
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body { margin: 0; color: var(--ink); background: var(--paper); font-family: Inter, "Noto Sans JP", system-ui, sans-serif; line-height: 1.65; }
+a { color: inherit; }
+a { -webkit-tap-highlight-color: transparent; }
+
+.skip-link { position: fixed; top: -80px; left: 1rem; z-index: 100; padding: .7rem 1rem; background: var(--white); }
+.skip-link:focus { top: 1rem; }
+
+.site-header { height: 76px; display: flex; align-items: center; justify-content: space-between; max-width: var(--max); margin: auto; padding: 0 28px; }
+.brand { font-weight: 850; font-size: 1.18rem; letter-spacing: -.04em; text-decoration: none; }
+.brand span { color: #438b88; }
+nav { display: flex; gap: 28px; align-items: center; font-size: .82rem; font-weight: 700; }
+nav a { text-decoration: none; }
+.nav-cta { border: 1px solid var(--ink); padding: 9px 15px; border-radius: 99px; }
+
+.article { max-width: 860px; margin: 0 auto; padding: 40px 28px 72px; }
+.kicker, .box-label { font-size: .7rem; letter-spacing: .19em; font-weight: 800; text-transform: uppercase; }
+.kicker { margin: 0 0 10px; color: #32857f; }
+.box-label { color: #408f89; margin: 0 0 10px; }
+
+h1, h2, h3, p, ul, ol { margin-top: 0; }
+h1 { margin-bottom: 18px; font-size: clamp(1.9rem, 4.4vw, 2.9rem); line-height: 1.12; letter-spacing: -.05em; font-weight: 800; }
+h2 { margin: 56px 0 14px; padding-top: 20px; border-top: 1px solid var(--line); font-size: clamp(1.3rem, 2.6vw, 1.8rem); line-height: 1.2; letter-spacing: -.04em; font-weight: 800; }
+h3 { margin: 26px 0 8px; font-size: 1.02rem; font-weight: 800; }
+p { margin-bottom: 14px; }
+em { color: #318f89; font-style: normal; }
+.lead { color: var(--muted); font-size: 1.04rem; }
+
+.article-meta { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; margin: 0 0 6px; font-size: .8rem; color: var(--muted); }
+.stamp { display: inline-block; padding: 4px 10px; border: 1px solid var(--line); background: var(--white); color: var(--ink); font-weight: 750; }
+
+.summary-box { margin: 24px 0 0; padding: 24px 26px 12px; background: var(--white); border-left: 7px solid #4ba49e; }
+.summary-box ul { margin: 0 0 12px; padding-left: 1.15em; }
+.summary-box li { margin-bottom: 8px; }
+
+.toc { margin: 16px 0 0; padding: 22px 26px; background: var(--white); border: 1px solid var(--line); }
+.toc ol { margin: 0; padding-left: 1.3em; }
+.toc li { margin-bottom: 4px; }
+.toc a { font-weight: 600; text-decoration: none; }
+.toc a:hover, .toc a:focus-visible { text-decoration: underline; }
+
+.table-wrap { overflow-x: auto; margin: 18px 0 6px; }
+table { width: 100%; border-collapse: collapse; background: var(--white); font-size: .92rem; }
+caption { caption-side: top; padding: 0 0 8px; text-align: left; color: var(--muted); font-size: .8rem; }
+th, td { border: 1px solid var(--line); padding: 11px 13px; text-align: left; vertical-align: top; }
+thead th { background: var(--ink); color: var(--white); font-size: .8rem; letter-spacing: .04em; }
+tbody th { width: 9.5em; font-weight: 800; }
+tbody tr:nth-child(even) td, tbody tr:nth-child(even) th { background: rgba(16, 28, 44, .03); }
+.table-note { margin: 0 0 8px; font-size: .78rem; color: var(--muted); }
+
+.note-box { margin: 18px 0 0; padding: 22px 26px 12px; background: var(--white); border: 1px solid var(--line); border-left: 7px solid var(--lime); }
+.note-box ul { margin: 0 0 12px; padding-left: 1.15em; }
+.note-box li { margin-bottom: 8px; }
+.note-box .box-label { color: #6f7a15; }
+
+.button { display: inline-flex; align-items: center; gap: .6rem; border: 0; border-radius: 2px; padding: 14px 20px; font-weight: 750; text-decoration: none; cursor: pointer; }
+.button-primary { background: var(--ink); color: var(--white); }
+.button-primary:hover, .button-primary:focus-visible { background: #284158; }
+.next-actions { display: flex; flex-wrap: wrap; gap: 12px; margin: 18px 0 0; }
+
+footer { padding: 44px max(28px, calc((100vw - var(--max)) / 2)); display: flex; flex-wrap: wrap; align-items: center; gap: 12px 25px; font-size: .78rem; border-top: 1px solid var(--line); }
+footer p { margin-bottom: 0; }
+footer p:last-child { margin-left: auto; }
+
+@media (max-width: 600px) {
+  nav > a:not(.nav-cta) { display: none; }
+  .site-header { padding: 0 20px; }
+  .article { padding: 30px 20px 56px; }
+  .summary-box, .toc, .note-box { padding: 18px 16px 10px; }
+  footer { align-items: flex-start; flex-direction: column; }
+  footer p:last-child { margin-left: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }

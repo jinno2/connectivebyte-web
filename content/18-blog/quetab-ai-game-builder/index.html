@@ -3,54 +3,134 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>quetab.com/games 検証レポート ─ ブラウザ向けAIゲーム生成サービスの実測挙動</title>
+<title>quetab.com/games 検証レポート ─ AIゲーム生成をmakeplay.aiと実測比較 (2026-08-30)</title>
+<meta name="description" content="AIでブラウザゲームを生成するquetab.com/gamesを、無料のmakeplay.aiと同一プロンプトで実測比較した検証レポート。生成時間48秒・採点19/20・クレジット15全消費・反復不可の計測値と、両者の経済モデルの構造差を2026-08-30時点で報告する。">
+<meta property="og:title" content="quetab.com/games 検証レポート ─ AIゲーム生成をmakeplay.aiと実測比較">
+<meta property="og:description" content="同一プロンプトでの実測比較。生成時間・採点・費用・反復可否・経済モデルの5軸で、2026-08-30の単発検証値をそのまま報告する。">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://lab.connectivebyte.com/content/18-blog/quetab-ai-game-builder/">
 <meta name="robots" content="index,follow">
-<style>
-body{font-family:sans-serif;max-width:720px;margin:2rem auto;padding:0 1rem;line-height:1.8;color:#1a1a2e}
-h1{font-size:1.5rem} h2{font-size:1.2rem;margin-top:2rem}
-footer{margin-top:3rem;font-size:.85rem;opacity:.7}
-</style>
+<link rel="canonical" href="https://lab.connectivebyte.com/content/18-blog/quetab-ai-game-builder/">
+<link rel="stylesheet" href="../article.css">
 </head>
 <body>
-<h1>quetab.com/games 検証レポート ─ ブラウザ向けAIゲーム生成サービスの実測挙動</h1>
-<h2>概要</h2>
-<p>quetab.com/gamesは、ブラウザで動作するゲームを自然言語プロンプトから生成するWebサービスである。母体はAI Video Studioを運営するquetabで、gamesはその拡張機能として位置付けられる。</p>
-<h2>発見経緯</h2>
-<p>2026年8月29日、海外の技術系掲示板Hacker Newsに「Build your web-based game with AI」と題するスレッドが投稿された。確認時点でポイント3・コメント1と小規模な話題だが、コメント欄で「コンタクトフォームにHackerNews50と記載すれば50クレジットを進呈」との案内が出されており、ユーザー獲得初期段階であることがうかがえる。</p>
-<p>なお、本稿の確認範囲では日本語圏における紹介記事や言及は確認されていない。</p>
-<h2>検証条件</h2>
-<p>2026年8月30日にブラウザ環境で実測検証を実施した。</p>
-<p>• quetab: 通常signupで15クレジットが付与されるアカウントを利用</p>
-<p>• 比較対象: makeplay.ai (無料・メールsignup必要・クレジット制度なし)</p>
-<p>• 同一プロンプト (ブロック崩し系) を両サービスに投入</p>
-<p>• 確認項目は生成挙動の再現性、クレジット消費量、生成時間</p>
-<h2>実測結果</h2>
-<h3>quetab</h3>
-<p>• 生成所要時間: サーバー処理48秒 (wall time 約73秒)</p>
-<p>• 生成エンジン表示: Claude Opus 5</p>
-<p>• 独自採点 (10項目×2点): 19/20 (減点項目は効果音の無音)</p>
-<p>• クレジット消費: 1回の生成で15クレジット全消費</p>
-<p>• 反復挙動: 追指示による修正は1回5クレジットを要する設計。付与済み15クレジットでは修正を試みた時点で402エラーが返り追加の反復は不可 (アカウント自体の試用期限は2026年9月13日)</p>
-<h3>makeplay.ai (参考比較)</h3>
-<p>• 生成所要時間: 約11.6分 (エージェント型生成・自己プレイテストを伴う)</p>
-<p>• 独自採点 (10項目×2点): 20/20</p>
-<p>• 費用: 無料 (クレジット制度なし・2026年8月30日時点)</p>
-<p>• 反復挙動: 追指示「破壊数に応じて速度を上昇させ、残り8個以下でパドルを1.5倍に」を与えたところ、約4分15秒で実装完了。速度は破壊数1件につき+2.5、残り8個時点でパドル長120→180への変化を実測で確認</p>
-<h2>観察される構造差</h2>
-<p>両者の経済モデルは設計段階で異なる。quetabはクレジット制で、生成1回あたりの消費が大きく、無料付与分 (HackerNews経由コードで50クレジット) の消費速度が速い構造となっている。makeplay.aiはクレジット制を採用せず、メールsignupのみで初期クレジットの制限なく生成できる。</p>
-<p>本稿で提示した数値はいずれも2026年8月30日の単発検証に基づく。再現性の保証は意図的に行わない。</p>
-<h2>未検証項目</h2>
-<p>• 日本語プロンプトへの対応精度</p>
-<p>• 生成物の権利関係および商用利用条件</p>
-<p>• 有料プラン移行後の単価および反復コスト</p>
-<p>• サーバー側の長期安定性 (1セッションのみの観測)</p>
-<h2>サービス基本情報</h2>
-<p>• 名称: quetab.com/games</p>
-<p>• URL: https://quetab.com/games</p>
-<p>• 母体: quetab.com (AI Video Studio)</p>
-<p>• 用途: ブラウザで動作するゲームの自然言語プロンプトによる生成</p>
-<p>• 料金: 通常signup時に15クレジット付与。Hacker News経由のコンタクトフォーム申込で50クレジット進呈 (いずれも2026年8月30日確認)</p>
-<p>• 反復コスト: 追指示1回あたり5クレジット</p>
-<footer>ConnectiveByte — 海外AIサービスの日本語圏紹介 (<a href="/">トップ</a>)</footer>
+<a class="skip-link" href="#article">本文へ移動</a>
+<header class="site-header">
+  <a class="brand" href="../../" aria-label="ConnectiveByte ホーム">Connective<span>Byte</span></a>
+  <nav aria-label="メインナビゲーション">
+    <a href="../../#purpose">Purpose</a>
+    <a href="../../#vision">Vision</a>
+    <a class="nav-cta" href="../../#diagnostic">5択を始める</a>
+  </nav>
+</header>
+
+<main id="article" class="article">
+  <p class="kicker">FRONTIER NOTE / 検証報告</p>
+  <h1>quetab.com/games 検証レポート ─ ブラウザ向けAIゲーム生成サービスの実測挙動</h1>
+  <p class="article-meta">
+    <span class="stamp">最終確認: 2026-08-30</span>
+    <span>対象: quetab.com/games (母体: quetab.com AI Video Studio)</span>
+    <span>比較対象: makeplay.ai</span>
+  </p>
+  <p class="lead">自然言語プロンプトからブラウザで動作するゲームを生成するWebサービスの挙動を、2026年8月30日にブラウザ環境で実測した。同一プロンプトをquetabとmakeplay.aiの双方へ投入し、生成時間・採点・費用・反復可否を同一条件で記録した。</p>
+
+  <section class="summary-box" aria-labelledby="summary-title">
+    <p class="box-label" id="summary-title">TL;DR</p>
+    <ul>
+      <li><strong>生成はquetabが速い (48秒)、完成度と反復はmakeplayが上</strong> (採点20/20・追指示への再実装約4分15秒)。</li>
+      <li><strong>quetabはクレジット制で反復が事実上不可</strong> (生成1回で15クレジット全消費・追指示1回5クレジット・付与分では402エラー)。<strong>makeplayは無料・クレジット制なし</strong> (2026-08-30時点)。</li>
+      <li><strong>誰向きか:</strong> 動くものを最短で確認したいならquetab。追指示で仕上げを繰り返すならmakeplay。数値は単発検証の実測値。</li>
+    </ul>
+  </section>
+
+  <nav class="toc" aria-label="目次">
+    <p class="box-label">目次</p>
+    <ol>
+      <li><a href="#background">発見経緯</a></li>
+      <li><a href="#conditions">検証条件</a></li>
+      <li><a href="#results">実測結果 (比較表)</a></li>
+      <li><a href="#analysis">観察される構造差</a></li>
+      <li><a href="#limits">未検証項目と有効期限</a></li>
+      <li><a href="#service">サービス基本情報</a></li>
+      <li><a href="#next">次の一歩</a></li>
+    </ol>
+  </nav>
+
+  <h2 id="background">発見経緯</h2>
+  <p>2026年8月29日、海外の技術系掲示板Hacker Newsに「Build your web-based game with AI」と題するスレッドが投稿された。確認時点でポイント3・コメント1と小規模な話題だが、コメント欄で「コンタクトフォームにHackerNews50と記載すれば50クレジットを進呈」との案内が出されており、ユーザー獲得初期段階であることがうかがえる。</p>
+  <p>なお、本稿の確認範囲では日本語圏における紹介記事や言及は確認されていない。</p>
+
+  <h2 id="conditions">検証条件</h2>
+  <p>2026年8月30日にブラウザ環境で実測検証を実施した。</p>
+  <ul>
+    <li>quetab: 通常signupで15クレジットが付与されるアカウントを利用</li>
+    <li>比較対象: makeplay.ai (無料・メールsignup必要・クレジット制度なし)</li>
+    <li>同一プロンプト (ブロック崩し系) を両サービスに投入</li>
+    <li>確認項目は生成挙動の再現性、クレジット消費量、生成時間</li>
+  </ul>
+
+  <h2 id="results">実測結果 (比較表)</h2>
+  <p>単発検証のため、各数値は1回の観測値である。単位と計測条件は表のとおり。</p>
+  <div class="table-wrap">
+    <table>
+      <caption>quetab と makeplay.ai の実測比較 (2026-08-30・ブラウザ環境・同一プロンプト)</caption>
+      <thead>
+        <tr><th scope="col">観測項目</th><th scope="col">quetab</th><th scope="col">makeplay.ai</th></tr>
+      </thead>
+      <tbody>
+        <tr><th scope="row">生成所要時間</th><td>サーバー処理48秒 (wall time 約73秒)</td><td>約11.6分 (エージェント型生成・自己プレイテストを伴う)</td></tr>
+        <tr><th scope="row">独自採点 (10項目×2点)</th><td>19/20 (減点項目は効果音の無音)</td><td>20/20</td></tr>
+        <tr><th scope="row">生成エンジン表示</th><td>Claude Opus 5</td><td>─ (本稿では未記録)</td></tr>
+        <tr><th scope="row">費用</th><td>1回の生成で15クレジット全消費</td><td>無料 (クレジット制度なし・2026年8月30日時点)</td></tr>
+        <tr><th scope="row">反復可否</th><td>追指示1回5クレジット。付与済み15クレジットでは修正を試みた時点で402エラーが返り追加の反復は不可</td><td>追指示「破壊数に応じて速度を上昇させ、残り8個以下でパドルを1.5倍に」を与えたところ、約4分15秒で実装完了。速度は破壊数1件につき+2.5、残り8個時点でパドル長120→180への変化を実測で確認</td></tr>
+        <tr><th scope="row">経済モデル</th><td>クレジット制。生成1回あたりの消費が大きく、無料付与分 (HackerNews経由コードで50クレジット) の消費速度が速い構造</td><td>クレジット制を採用せず、メールsignupのみで初期クレジットの制限なく生成できる</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2 id="analysis">観察される構造差</h2>
+  <p>両者の経済モデルは設計段階で異なる。quetabはクレジット制で、生成1回あたりの消費が大きく、無料付与分の消費速度が速い構造となっている。makeplay.aiはクレジット制を採用せず、メールsignupのみで初期クレジットの制限なく生成できる。</p>
+
+  <section class="note-box" aria-labelledby="limits-title">
+    <p class="box-label" id="limits-title">未検証項目と有効期限</p>
+    <ul>
+      <li>日本語プロンプトへの対応精度</li>
+      <li>生成物の権利関係および商用利用条件</li>
+      <li>有料プラン移行後の単価および反復コスト</li>
+      <li>サーバー側の長期安定性 (1セッションのみの観測)</li>
+      <li><strong>有効期限:</strong> 検証に用いたquetabアカウントの試用期限は2026年9月13日。以降は本稿条件での追試が不可能になる。本稿で提示した数値はいずれも2026年8月30日の単発検証に基づく。再現性の保証は意図的に行わない。</li>
+    </ul>
+  </section>
+
+  <h2 id="service">サービス基本情報</h2>
+  <div class="table-wrap">
+    <table>
+      <caption>quetab.com/games の基本情報 (いずれも2026年8月30日確認)</caption>
+      <thead>
+        <tr><th scope="col">項目</th><th scope="col">内容</th></tr>
+      </thead>
+      <tbody>
+        <tr><th scope="row">名称</th><td>quetab.com/games</td></tr>
+        <tr><th scope="row">URL</th><td><a href="https://quetab.com/games" target="_blank" rel="noopener noreferrer">https://quetab.com/games</a></td></tr>
+        <tr><th scope="row">母体</th><td>quetab.com (AI Video Studio)</td></tr>
+        <tr><th scope="row">用途</th><td>ブラウザで動作するゲームの自然言語プロンプトによる生成</td></tr>
+        <tr><th scope="row">料金</th><td>通常signup時に15クレジット付与。Hacker News経由のコンタクトフォーム申込で50クレジット進呈 (いずれも2026年8月30日確認)</td></tr>
+        <tr><th scope="row">反復コスト</th><td>追指示1回あたり5クレジット</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2 id="next">次の一歩</h2>
+  <p>この記事は、気になるサービスを実際に動かして比べた記録である。候補同士を比べる前の整理には、<a href="../../02-entry-read/index.html">同じ形式で候補を並べる入口の記事</a>が使える。自分の関心から次に触れる対象を選びたい場合は、<a href="../../#diagnostic">ConnectiveByteの5択診断</a>でいま最も近い関心をひとつ選べる。</p>
+  <div class="next-actions">
+    <a class="button button-primary" href="../../#diagnostic">関心から次を選ぶ (5択・所要30秒) <span aria-hidden="true">→</span></a>
+  </div>
+</main>
+
+<footer>
+  <a class="brand" href="../../">Connective<span>Byte</span></a>
+  <p>ConnectiveByte — 海外AIサービスの日本語圏紹介。</p>
+  <p>© 2026 ConnectiveByte</p>
+</footer>
 </body>
 </html>
