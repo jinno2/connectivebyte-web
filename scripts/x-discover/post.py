@@ -23,6 +23,7 @@ import hmac
 import json
 import os
 import sys
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -43,6 +44,8 @@ CONFIG_FILE = os.path.join(HERE, 'x-discover-config.json')
 
 PRICE = {'url': 0.200, 'nourl': 0.015}  # 実測単価 (URL付き/抜き・credits換算)
 MEDIA_LIMIT = 5 * 1024 * 1024  # v1.1 simple upload上限 (GIF/PNGとも)
+CHUNK_BYTES = 4 * 1024 * 1024  # v2 append segment (docs: ≤5MB推奨・server max 8MB)
+VIDEO_LIMIT = 15 * 1024 * 1024  # 投稿MP4の運用上限 (API上の上限はもっと大きい)
 
 
 def load_env() -> dict:
@@ -173,15 +176,79 @@ def x_upload_media(path: str, category: str, env: dict) -> str | None:
         return str(json.load(r)['media_id_string'])
 
 
-def find_media(d: dict) -> tuple[str | None, str]:
-    """draft URLのプレビュー素材 (GIF優先・5MB超/欠落ならPNG)。無ければ(None,'none')。"""
+def x_upload_video(path: str, env: dict) -> str:
+    """MP4はv2 chunked uploadが必須 (2026-09-06追加・jinno決定「GIFはMP4変換
+    される→遷移を見せたい頁は動画で」)。 initialize→append→finalize→STATUS成功待ち。
+    v2はOAuth 1.0a user context可・JSON/multipart bodyは署名対象外 (oauth_*のみ)。
+    返すmedia_idはv2 tweetsのmedia_idsでGIF/PNGと同様に使える。失敗は例外→fail-open。"""
+    with open(path, 'rb') as f:
+        data = f.read()
+    base = 'https://api.x.com/2/media/upload'
+
+    def post_json(url: str, payload: dict) -> dict:
+        req = urllib.request.Request(
+            url, data=json.dumps(payload).encode(), method='POST',
+            headers={'Authorization': oauth_header('POST', url, {}, env),
+                     'Content-Type': 'application/json'})
+        with urllib.request.urlopen(req, timeout=120) as r:
+            return json.load(r)
+
+    mid = post_json(f'{base}/initialize',
+                    {'media_category': 'tweet_video', 'media_type': 'video/mp4',
+                     'total_bytes': len(data)})['data']['id']
+    n_seg = (len(data) + CHUNK_BYTES - 1) // CHUNK_BYTES
+    for i in range(n_seg):
+        chunk = data[i * CHUNK_BYTES:(i + 1) * CHUNK_BYTES]
+        bnd = '----cbd' + hashlib.md5(chunk).hexdigest()[:16]
+        head = (f'--{bnd}\r\nContent-Disposition: form-data; name="segment_index"\r\n'
+                f'\r\n{i}\r\n'
+                f'--{bnd}\r\nContent-Disposition: form-data; name="media"; '
+                f'filename="m{i}.bin"\r\n'
+                'Content-Type: application/octet-stream\r\n'
+                'Content-Transfer-Encoding: binary\r\n\r\n').encode()
+        aurl = f'{base}/{mid}/append'
+        req = urllib.request.Request(
+            aurl, data=head + chunk + f'\r\n--{bnd}--\r\n'.encode(), method='POST',
+            headers={'Authorization': oauth_header('POST', aurl, {}, env),
+                     'Content-Type': f'multipart/form-data; boundary={bnd}'})
+        with urllib.request.urlopen(req, timeout=120):
+            pass
+    info = post_json(f'{base}/{mid}/finalize', {}).get('data', {}).get('processing_info')
+    while info and info.get('state') not in ('succeeded', 'failed'):
+        time.sleep(info.get('check_after_secs') or 3)
+        # STATUSのみcommand形式のqueryで残っている (path形式は404・2026-09-06実測)
+        surl = f'{base}?command=STATUS&media_id={mid}'
+        req = urllib.request.Request(
+            surl, method='GET',
+            headers={'Authorization': oauth_header('GET', surl.split('?')[0],
+                                                   {'command': 'STATUS', 'media_id': mid}, env)})
+        with urllib.request.urlopen(req, timeout=60) as r:
+            info = json.load(r).get('data', {}).get('processing_info')
+    if info and info.get('state') == 'failed':
+        raise RuntimeError('video processing failed: ' + str(info.get('error', ''))[:80])
+    return mid
+
+
+def find_media(d: dict, allow_video: bool = True) -> tuple[str | None, str]:
+    """draft URLのプレビュー素材。capture-preview.pyの meta.recommended
+    (mp4/gif/png) に従う。欠落/size超過/旧meta (推奨なし) はgif→pngでfallback。"""
     pdir = os.path.join(PREVIEW_DIR, preview_key(d.get('url', '')))
     gif = os.path.join(pdir, 'preview.gif')
     png = os.path.join(pdir, 'capture.png')
+    mp4 = os.path.join(pdir, 'preview.mp4')
+    rec = ''
+    try:
+        rec = json.load(open(os.path.join(pdir, 'meta.json'),
+                             encoding='utf-8')).get('recommended', '')
+    except (OSError, ValueError):
+        pass
+    if (allow_video and rec == 'mp4' and os.path.exists(mp4)
+            and os.path.getsize(mp4) <= VIDEO_LIMIT):
+        return mp4, 'mp4'
     if os.path.exists(gif) and os.path.getsize(gif) <= MEDIA_LIMIT:
         return gif, 'gif'
     if os.path.exists(png):
-        return png, 'png'  # GIF未収集 or 5MB超のfallback
+        return png, 'png'
     return None, 'none'
 
 
@@ -311,8 +378,10 @@ def main() -> int:
         print(f'=== {alias} ({status}/{tier}) ===')
         print(text)
         media_path, media_kind = (None, 'off')
-        if config.get('warmup', {}).get('media_policy', 'gif') != 'off':
-            media_path, media_kind = find_media(d)
+        # media_policy: auto=meta推奨 (mp4/gif)・gif=GIF/PNGのみ・off=添付なし
+        policy = config.get('warmup', {}).get('media_policy', 'auto')
+        if policy != 'off':
+            media_path, media_kind = find_media(d, allow_video=(policy != 'gif'))
         print(f'media: {media_kind}')
         if args.dry_run:
             log({'event': 'dry_run', 'account': alias, 'tier': tier, 'media': media_kind})
@@ -332,14 +401,18 @@ def main() -> int:
         media_id = None
         if media_path:
             try:  # 添付失敗はtext-onlyで続行 (投稿機会を損なわない)
-                media_id = x_upload_media(
-                    media_path, 'tweet_gif' if media_kind == 'gif' else 'tweet_image', aenv)
+                if media_kind == 'mp4':
+                    media_id = x_upload_video(media_path, aenv)
+                else:
+                    media_id = x_upload_media(
+                        media_path,
+                        'tweet_gif' if media_kind == 'gif' else 'tweet_image', aenv)
             except Exception as e:  # noqa: BLE001
                 log({'event': 'media_upload_fail', 'account': alias,
                      'media': media_kind, 'detail': str(e)[:120]})
             if media_id is None:
                 log({'event': 'skip_media', 'account': alias,
-                     'reason': 'upload failed or over 5MB', 'media': media_kind})
+                     'reason': 'upload failed or over size limit', 'media': media_kind})
 
         try:
             resp = x_post_tweet(text, aenv, media_id)
