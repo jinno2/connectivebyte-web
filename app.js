@@ -738,6 +738,8 @@ document.addEventListener("click", (event) => {
 });
 
 const comparisonWorkflow = document.querySelector("#comparison-workflow");
+// 比較テンプレworkflowもLP専用。記事ページでは import 時の例外を避ける。
+if (comparisonWorkflow) {
 comparisonWorkflow.querySelectorAll("input").forEach((input) => {
   input.addEventListener("input", () => {
     if (!comparisonWorkflow.dataset.started) {
@@ -746,6 +748,7 @@ comparisonWorkflow.querySelectorAll("input").forEach((input) => {
     }
   });
 });
+}
 
 // 以下の登録form・共有draft系はLPにのみ存在する要素。記事ページでは省略されるため
 // 要素が無いときはここで早期returnし、import時の例外を防ぐ (計測だけが目的の読込)。
