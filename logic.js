@@ -227,6 +227,7 @@ export function buildEventBatch(events) {
 
 const EVENT_TYPES = Object.freeze(new Set([
   "landing_viewed",
+  "article_viewed",
   "interest_selected",
   "diagnostic_started",
   "diagnostic_completed",

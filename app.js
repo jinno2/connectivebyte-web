@@ -24,6 +24,7 @@ const STORAGE_KEYS = Object.freeze([
 
 const EVENT_NAMES = new Set([
   "landing_viewed",
+  "article_viewed",
   "interest_selected",
   "diagnostic_started",
   "diagnostic_completed",
@@ -48,16 +49,21 @@ const EVENT_NAMES = new Set([
 
 const campaign = (() => {
   const params = new URLSearchParams(window.location.search);
+  // 記事ページ (content/18-blog/) からの計測では asset_id に記事slugを使う。
+  // LP単体のときは従来どおり landing_page (URL不問の既存挙動を変えない)。
+  const articleSlug = location.pathname.match(/content\/18-blog\/([^/]+)\/$/)?.[1];
+  const articlePage = Boolean(articleSlug);
   return Object.freeze({
-    source_id: params.get("source_id") ?? "direct",
+    source_id: params.get("source_id") ?? (articleSlug ? "lab_article" : "direct"),
     campaign_id: params.get("campaign_id") ?? "organic",
-    asset_id: params.get("asset_id") ?? "landing_page",
+    asset_id: params.get("asset_id") ?? articleSlug ?? "landing_page",
     channel: params.get("channel") ?? "web",
     utm_source: params.get("utm_source") ?? "",
     utm_medium: params.get("utm_medium") ?? "",
     utm_campaign: params.get("utm_campaign") ?? "",
     utm_term: params.get("utm_term") ?? "",
-    utm_content: params.get("utm_content") ?? ""
+    utm_content: params.get("utm_content") ?? "",
+    articlePage
   });
 })();
 
@@ -622,9 +628,13 @@ function saveConsent(analytics) {
 
 function initializeConsent() {
   const consent = getConsent();
-  document.querySelector("#analytics-consent").checked = consent.analytics;
-  document.querySelector("#consent-panel").hidden = consent.decided;
-  if (consent.analytics) track("landing_viewed");
+  // 記事ページには consent-panel が無い (同意UIはLPのみ)。同意済みなら計測継続、
+  // 未同意のときは panel 表示をスキップするだけ (LPで同意した訪問者の同意が効く)。
+  const consentCheckbox = document.querySelector("#analytics-consent");
+  const consentPanel = document.querySelector("#consent-panel");
+  if (consentCheckbox) consentCheckbox.checked = consent.analytics;
+  if (consentPanel) consentPanel.hidden = consent.decided;
+  if (consent.analytics) track(campaign.articlePage ? "article_viewed" : "landing_viewed");
 }
 
 function initializeReadingEvents() {
@@ -639,7 +649,8 @@ function initializeReadingEvents() {
       }
     });
   }, { threshold: [0.75] });
-  observer.observe(document.querySelector("#frontier"));
+  const frontier = document.querySelector("#frontier");
+  if (frontier) observer.observe(frontier);
 }
 
 document.addEventListener("click", (event) => {
@@ -736,6 +747,9 @@ comparisonWorkflow.querySelectorAll("input").forEach((input) => {
   });
 });
 
+// 以下の登録form・共有draft系はLPにのみ存在する要素。記事ページでは省略されるため
+// 要素が無いときはここで早期returnし、import時の例外を防ぐ (計測だけが目的の読込)。
+if (document.querySelector("#newsletter-form")) {
 document.querySelector("#newsletter-form").addEventListener("submit", (event) => {
   event.preventDefault();
   const emailInput = document.querySelector("#email");
@@ -768,19 +782,22 @@ document.querySelector("#newsletter-form").addEventListener("submit", (event) =>
     status.textContent = "登録できませんでした。通信状況を確認して、もう一度お試しください。";
   });
 });
+}
 
 const restoredInterest = readJson("declared_interest", null);
 if (getInterestRoute(restoredInterest)) renderRoute(restoredInterest, false);
-document.querySelectorAll("input[name=share-template]").forEach((radio) => {
-  radio.addEventListener("change", () => {
-    document.querySelector("#share-free-text").hidden = currentShareTemplate() !== "free";
-    if (radio.checked) {
-      track("share_template_selected", { asset_id: "share_block", cta_id: `template_${radio.value}` });
-      regenerateShareDraft({ announce: true });
-    }
+if (document.querySelector("#share-free-text")) {
+  document.querySelectorAll("input[name=share-template]").forEach((radio) => {
+    radio.addEventListener("change", () => {
+      document.querySelector("#share-free-text").hidden = currentShareTemplate() !== "free";
+      if (radio.checked) {
+        track("share_template_selected", { asset_id: "share_block", cta_id: `template_${radio.value}` });
+        regenerateShareDraft({ announce: true });
+      }
+    });
   });
-});
-document.querySelector("#share-free-text").addEventListener("input", () => regenerateShareDraft());
+  document.querySelector("#share-free-text").addEventListener("input", () => regenerateShareDraft());
+}
 initializeSharedResult();
 initializeConsent();
 initializeReadingEvents();

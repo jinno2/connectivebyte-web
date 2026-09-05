@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { EVENT_TYPES } from "../logic.js";
 
@@ -101,4 +102,38 @@ test("consent grant re-emits shared_result_viewed dropped before consent", () =>
     source,
     /if \(sharedResultPhaseThisView !== null && !document\.querySelector\("#shared-result"\)\?\.hidden\) \{\s*\n\s*track\("shared_result_viewed", \{ asset_id: "shared_result", cta_id: `r_P\$\{sharedResultPhaseThisView\}` \}\);/
   );
+});
+
+test("article pages measure article_viewed (slug=asset_id, consent-gated, LP unaffected)", () => {
+  const source = readFileSync(fileURLToPath(new URL("../app.js", import.meta.url)), "utf8");
+  // 18-blog パスからslugを取り asset_id へ。LPは従来どおり landing_viewed。
+  assert.match(
+    source,
+    /const articleSlug = location\.pathname\.match\(\/content.{1,4}18-blog.{1,4}\(\[\^\/\]\+\).{1,4}\$\/\)/,
+    "18-blog slug extraction missing"
+  );
+  assert.match(
+    source,
+    /if \(consent\.analytics\) track\(campaign\.articlePage \? "article_viewed" : "landing_viewed"\);/
+  );
+  // 同意UI (#consent-panel/#analytics-consent) はLPにしか無いため null 安全であること
+  assert.match(source, /if \(consentCheckbox\) consentCheckbox\.checked = consent\.analytics;/);
+  assert.match(source, /if \(consentPanel\) consentPanel\.hidden = consent\.decided;/);
+  // 記事ページに無いLP専用要素は import 時に例外を出さない
+  assert.match(source, /if \(document\.querySelector\("#newsletter-form"\)\) \{/);
+  assert.match(source, /if \(document\.querySelector\("#share-free-text"\)\) \{/);
+  assert.match(source, /const frontier = document\.querySelector\("#frontier"\);\s*\n\s*if \(frontier\) observer\.observe\(frontier\);/);
+
+  // 公開記事 (現行テンプレ両方) が app.js を読み込むこと (計測の入口)
+  const article = readFileSync(fileURLToPath(new URL("../content/18-blog/quetab-ai-game-builder/index.html", import.meta.url)), "utf8");
+  const outreachPy = fileURLToPath(new URL("../scripts/t0007-outreach/outreach.py", import.meta.url));
+  const template = execFileSync("python3", ["-c", [
+    "import importlib.util, sys",
+    `spec = importlib.util.spec_from_file_location("outreach", ${JSON.stringify(outreachPy)})`,
+    "m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m)",
+    "sys.stdout.write(m.ARTICLE_TMPL.format(title='T', slug='s', description='D', updated='2026-01-01', body='B'))"
+  ].join("\n")], { encoding: "utf8" });
+  for (const [label, page] of [["quetab article", article], ["ARTICLE_TMPL", template]]) {
+    assert.match(page, /<script type="module" src="\.\.\/\.\.\/app\.js"><\/script>/, label);
+  }
 });
