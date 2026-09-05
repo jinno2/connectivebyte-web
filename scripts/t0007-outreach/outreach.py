@@ -149,7 +149,8 @@ def llm(prompt: str, max_tokens: int = 8000) -> str | None:
     key = os.environ.get('LITELLM_API_KEY')
     if not key:
         return None
-    body = json.dumps({'model': 'default', 'max_tokens': max_tokens,
+    body = json.dumps({'model': os.environ.get('LITELLM_MODEL', 'default'),
+                       'max_tokens': max_tokens,
                        'messages': [{'role': 'user', 'content': prompt}]}).encode()
     req = urllib.request.Request(LLM_URL, data=body,
                                  headers={'Content-Type': 'application/json',

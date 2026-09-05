@@ -213,6 +213,9 @@ def llm_draft(item: dict, genre_jp: str, recent_hooks: list[str],
               excerpt: str = '') -> dict | None:
     """litellm proxy経由で一句+自説+問いを起草。keyは環境変数のみ。
 
+    modelはLITELLM_MODEL envで指定可(規定='default')。
+    2026-09-05〜上流zai glm-5.2が401(key無効)・minimaxが402(quota枯渇)のため
+    LITELLM_MODEL=qwen3.8-max-preview-direct で運用(.env)。
     起草結果が§11機械検査 (禁止語/問い形) に落ちたら1回だけ再試行する。
     """
     key = os.environ.get('LITELLM_API_KEY')
@@ -220,7 +223,8 @@ def llm_draft(item: dict, genre_jp: str, recent_hooks: list[str],
         return None
     prompt = llm_prompt(item, genre_jp, recent_hooks, excerpt)
     def call(p: str) -> dict | None:
-        body = json.dumps({'model': 'default', 'max_tokens': 2500,
+        body = json.dumps({'model': os.environ.get('LITELLM_MODEL', 'default'),
+                           'max_tokens': 2500,
                            'messages': [{'role': 'user', 'content': p}]}).encode()
         req = urllib.request.Request(
             'http://localhost:14000/v1/chat/completions', data=body,
