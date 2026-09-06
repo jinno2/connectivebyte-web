@@ -28,7 +28,8 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-from x_discover_rules import ask_is_interrogative, preview_key, uniformity_warning  # noqa: E402
+from x_discover_rules import (ask_is_interrogative, media_ok, preview_key,  # noqa: E402
+                              uniformity_warning)
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
@@ -378,9 +379,11 @@ def main() -> int:
         print(f'=== {alias} ({status}/{tier}) ===')
         print(text)
         media_path, media_kind = (None, 'off')
-        # media_policy: auto=meta推奨 (mp4/gif)・gif=GIF/PNGのみ・off=添付なし
+        # media_policy: auto=meta推奨 (mp4/gif)・gif=GIF/PNGのみ・off=添付なし。
+        # media_ok: 製品頁 (github/Show HN) のみ実スクショ可・記事頁はtext-only
+        # (2026-09-06 jinno方針: ニュース頁のスクショはリークに見える)
         policy = config.get('warmup', {}).get('media_policy', 'auto')
-        if policy != 'off':
+        if policy != 'off' and media_ok(d):
             media_path, media_kind = find_media(d, allow_video=(policy != 'gif'))
         print(f'media: {media_kind}')
         if args.dry_run:

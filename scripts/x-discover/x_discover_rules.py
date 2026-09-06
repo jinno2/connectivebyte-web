@@ -47,6 +47,19 @@ def preview_key(url: str) -> str:
     return k.replace('/', '_')[:80] or u.netloc or 'nohost'
 
 
+def media_ok(d: dict) -> bool:
+    """添付素材 (対象頁の実スクショ) を付けてよい対象か (2026-09-06 jinno方針)。
+
+    ニュース記事頁のスクショは紹介素材として喜ばれるより無断転載/リークに
+    見える → 製品そのものの頁 (github repo / Show HN の製品頁) のみ添付可。
+    記事ネタ (techpolicy/economist等) はtext-only。collect (収集) と
+    post (添付) の両方から参照 = 二重のguard。
+    """
+    if d.get('source') == 'github':
+        return True
+    return d.get('source') == 'hn' and bool(d.get('title', '').lower().startswith('show hn'))
+
+
 def uniformity_warning(hook: str, recent_hooks: list[str]) -> str | None:
     """直近hookと末尾語が同一なら警告文を返す。"""
     sfx = hook_suffix(hook)

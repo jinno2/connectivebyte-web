@@ -15,6 +15,11 @@ GIF 3枚×1.25秒の根拠: X公式に枚数の好み規定は無い (15MB/350�
 定番は2-6秒loop (Tenor sweet spot 2-4s)。3枚なら数百KBで常にsimple upload内。
 
 playwright chromium (実UA) で top/中/下 をscreenshot・同一sessionで録画 → ffmpeg。
+bot遮断頁 (DataDome等: economist実測「Access is temporarily restricted」) は本文text量と
+定型句で検出 → 実Chrome (channel=chrome) をxvfb上でheadful起動して再取得。
+headless検出はTLS/JS指紋が主因なのでUA偽装では防げない (2026-09-06実測:
+bundled chromium headless=block / 実Chrome headful+xvfb=記事本文取得成功)。
+
 出力: ~/.local/share/cb-fleet/previews/<preview_key>/
       {capture.png, preview.gif, preview.mp4, meta.json}
 
@@ -24,6 +29,7 @@ from __future__ import annotations
 
 import datetime as dt
 import json
+import os
 import pathlib
 import shutil
 import subprocess
@@ -56,6 +62,25 @@ def write_meta(out: pathlib.Path, meta: dict) -> dict:
     return meta
 
 
+BLOCK_PHRASES = ('access is temporarily restricted', 'unusual traffic',
+                 'are you a human', 'verify you are a human',
+                 'pardon our interruption', 'checking your browser',
+                 'just a moment', 'request blocked')
+
+
+def looks_blocked(page) -> bool:
+    """bot遮断/CHECK頁判定。本文が異常に短いか定型句を含むか。
+    DataDome等のTLS/JS指紋検出はUA偽装では防げない (economist 2026-09-06実測)。"""
+    try:
+        body = (page.inner_text('body') or '').strip()
+    except Exception:  # noqa: BLE001
+        return True
+    if len(body) < 400:
+        return True
+    low = body.lower()
+    return any(m in low for m in BLOCK_PHRASES)
+
+
 def motion_score(a: pathlib.Path, b: pathlib.Path) -> float:
     """同一位置の2shotの平均pixel差 (0-255)。大きい=その位置で動いている。"""
     ia = Image.open(a).convert('L').resize((320, 200))
@@ -79,7 +104,7 @@ def smooth_scroll(page) -> None:
         page.wait_for_timeout(90)
 
 
-def capture(url: str) -> dict:
+def capture(url: str, headful: bool = False) -> dict:
     out = STATE_DIR / preview_key(url)
     meta_p = out / 'meta.json'
     if meta_p.exists():
@@ -92,7 +117,12 @@ def capture(url: str) -> dict:
     with tempfile.TemporaryDirectory() as td:
         tmp = pathlib.Path(td)
         with sync_playwright() as p:
-            browser = p.chromium.launch()
+            kw = {'headless': not headful}
+            if headful:
+                # bot遮断された頁向け: 実Chromeをxvfb上でheadful (指紋が本物)
+                kw['channel'] = 'chrome'
+                kw['args'] = ['--no-sandbox', '--disable-dev-shm-usage']
+            browser = p.chromium.launch(**kw)
             # 録画はpage単位 → panel取得と同一sessionでMP4も取る (再訪問が要らない)
             ctx = browser.new_context(
                 viewport=VIEWPORT, user_agent=UA_OVERRIDE,
@@ -109,6 +139,12 @@ def capture(url: str) -> dict:
                 except Exception:
                     pass
                 page.wait_for_timeout(4000)
+                if looks_blocked(page):
+                    ctx.close()
+                    browser.close()
+                    return write_meta(out, {'url': url, 'status': 'blocked',
+                                            'engine': 'chrome-headful' if headful
+                                            else 'chromium-headless'})
                 motions.append(shot_pair(page, tmp, 0))  # panel 0 = above-fold
                 # panel 1/2: scroll位置が底で動かなくなったら打ち切り (短い頁)
                 last_y = 0
@@ -192,11 +228,24 @@ def capture(url: str) -> dict:
 
 
 def main() -> int:
-    if len(sys.argv) < 2:
+    headful = '--headful' in sys.argv
+    urls = [a for a in sys.argv[1:] if not a.startswith('--')]
+    if not urls:
         print(__doc__)
         return 2
-    for url in sys.argv[1:]:
-        m = capture(url)
+    for url in urls:
+        m = capture(url, headful=headful)
+        if m.get('status') == 'blocked' and not headful and shutil.which('xvfb-run'):
+            # 遮断された頁は実Chrome headful (xvfb) で再取得 (economist DataDome実測)
+            r = subprocess.run(
+                ['xvfb-run', '-a', '-s', '-screen 0 1280x900x24',
+                 sys.executable, os.path.abspath(__file__), '--headful', url],
+                capture_output=True, text=True, timeout=300)
+            lines = (r.stdout or '').strip().splitlines()
+            try:
+                m = json.loads(lines[-1])
+            except (IndexError, ValueError):
+                m = {'url': url, 'status': 'fail', 'error': 'headful retry empty'}
         print(json.dumps(m, ensure_ascii=False))
     return 0
 

@@ -376,13 +376,18 @@ def main() -> int:
         print(f'queue appended: {len(drafts)} -> {QUEUE}')
         # 製品プレビュー収集 (GIF添付素材・2026-09-05)。best-effort —
         # 失敗/未収集でもcollectは成功 (投稿はtext-onlyで続く)。
+        # 2026-09-06: 実スクショは製品頁 (github/Show HN) のみ。記事頁は
+        # 無断転載/リークに見えるため収集しない (x_discover_rules.media_ok)。
         try:
-            subprocess.run(
-                [sys.executable,
-                 os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                              'capture-preview.py'),
-                 *[i['url'] for i in picked]],
-                timeout=600, check=False)
+            from x_discover_rules import media_ok
+            targets = [i['url'] for i in picked if media_ok(i)]
+            if targets:
+                subprocess.run(
+                    [sys.executable,
+                     os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                  'capture-preview.py'),
+                     *targets],
+                    timeout=600, check=False)
         except Exception as e:  # noqa: BLE001 — 収集失敗は投稿に影響させない
             print(f'  [capture] skipped: {e}', file=sys.stderr)
 
