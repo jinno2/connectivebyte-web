@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="承認済み資産01-tracker-page（campaign floor-ceiling-tracker・CIL v2.0.1）の配信ページ。本文は承認済みcontent.mdとbytes一致。">
+  <meta name="robots" content="noindex">
+  <title>床と天井の月次トラッカー | ConnectiveByte</title>
+  <style>
+    body { margin: 0; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; color: #1c2733; background: #fafaf7; line-height: 1.7; }
+    header { padding: 14px max(20px, calc((100vw - 860px) / 2)); border-bottom: 1px solid #e3e0d6; background: #fff; }
+    header a { color: #101c2c; font-weight: 800; text-decoration: none; }
+    main { max-width: 860px; margin: 0 auto; padding: 28px 20px 64px; }
+    .meta { color: #6b7280; font-size: .85rem; margin: 0 0 20px; }
+    pre { white-space: pre-wrap; overflow-wrap: anywhere; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: .92rem; background: #fff; border: 1px solid #e3e0d6; padding: 24px; }
+    .cta { margin: 28px 0 0; }
+    .cta a { display: inline-block; background: #101c2c; color: #fffefa; font-weight: 700; text-decoration: none; padding: 12px 18px; border-radius: 2px; }
+  </style>
+</head>
+<body>
+  <header><a href="../../">ConnectiveByte LPへ戻る</a></header>
+  <main>
+    <p class="meta">asset_id: 01-tracker-page / campaign: floor-ceiling-tracker / CIL v2.0.1 / content_hash: 3395bd0d590d0bac80bd599dc6ee3df0b30e82ff0cc14b87ffc9b0908871e861</p>
+    <pre id="asset-body">
+# 床と天井の月次トラッカー
+
+## このページについて
+
+床（最安帯のモデル）と天井（旗艦モデル）の価格と、代表タスクの性能を毎月記録する。
+単発の記事ではなく、月次の系列。前回からの変化が本体である。
+基準値は 2026-08（採取日 2026-08-22・floor-ceiling-001 と同一の検証済みデータ）。
+
+## 2026-08 基準値
+
+| 項目 | 値 |
+|---|---|
+| 床・API単価（GPT-5.6 Luna・短文脈） | input $0.20/1M・output $1.20/1M |
+| 天井・API単価（GPT-5.6 Sol・短文脈） | input $4.00/1M・output $20.00/1M |
+| 日常タスク（input 2,000 + output 500）を Luna で | ≈0.15円/回 |
+| 重いタスク（input 50,000 + output 3,000）を Luna で | ≈2.04円/回 |
+| 中規模タスク（input 10,000 + output 1,000）を Sol で | ≈9円/回 |
+| 重いタスク（input 50,000 + output 3,000）を Sol で | ≈39円/回 |
+
+為替は150円/$。計算式と出典は根拠資料（evidence）に検証済みで残している。
+
+## 前月からの変化
+
+初回のため基準値の確定のみ。直近の変化イベントとして、GPT-5.6 Luna は
+2026-07-30 に前世代比80%の値下げを行った。より長い系列では、低コスト帯の
+コストは2022-11から2026-05にかけてピーク時比で約1000分の1に低下している
+（GPT-3.5 Turbo $0.0025/task・2023-03 → Gemini 1.5 Flash $0.000225/task・2024-05）。
+この系列の延長線を毎月観測する。
+
+## 代表タスクの性能（初回採取: 2026-09-06予定）
+
+性能は固定の代表タスクで測る。入力は凍結した巡回報告書1通（構造化・要約・改善提案・
+リマインド文の複合タスク）で、床と天井の両方に同じ入力・同じ制約を与え、
+品質・要件充足・修正量・所要時間を1〜5で採点する。手順は公開している比較手順と
+同一（最低2回・記録は対になるテンプレートを使用）。入力と尺度を変えないことが
+月次比較の条件のため、両方を凍結資産として管理している。
+
+## 観測プロトコル
+
+1. 毎月第1日曜に公式の価格ページを確認し、単価と代表タスク金額を根拠付きで記録する
+2. 固定代表タスクを床・天井で各1回以上実行し採点する（判定者は当面 当人）
+3. 変化イベント（値下げ・新モデル・床の入れ替わり）は発生月に記録する。床が入れ替わる
+   場合は移行月に旧床と新床を併記する
+4. このページは月次で差し替える（過去月の系列は根拠資料に全て残る）
+
+次回採取: 2026-09-06。
+
+## なぜ縦断か
+
+価格の低下そのものは誰の上にも等しく降る。差が生じるのは、下がった床を足場に
+組み込む側と、天井に触れ続ける側で、その判別には時系列の実測が要る。
+
+## Campaign locked propositions
+
+- 床は自動で上がる
+- 天井は触れた分しか上がらない
+- 床は脅威にも足場にもなる
+- 同じ30円が、ある人を代替し、別の人を拡張する
+- 定着した仕組みは床の上昇で陳腐化（腐敗）する。評価と改善ループで検知し、構成を作り直して登り直す
+
+## 自己開示
+
+日常はLuna。それは最高性能に触れた後の配分である
+
+## 成長の4段階（一般論）
+
+| 段階 | 何をしているか |
+|------|----------------|
+| 1. AIを知る・比べる | 気になる仕事で複数のAIに同じ指示を出し、出力を比べる |
+| 2. AIで試す・扱う | 難しく重要なタスクを選び、AIにどこまでできるか試す |
+| 3. AIを仕組みにする | 繰り返す手順をまとめ、同じ結果を出しやすい形にする |
+| 4. AIを広げて事業にする | 同じ仕組みを他の業務・顧客に広げ、成果を共通の物差しで比べる |
+
+段階の詳細な定義は非公開（研究開発中）。いまの位置を測る場合は診断を参照。
+## CTA
+
+<a href="../../">正本</a>
+</pre>
+    <p class="cta"><a href="../../?utm_source=content_page&amp;utm_medium=web&amp;utm_campaign=floor-ceiling-tracker#diagnostic">30秒で現在地を知る・5択診断を試す</a></p>
+  </main>
+</body>
+</html>
