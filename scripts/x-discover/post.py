@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
+import glob
 import hashlib
 import hmac
 import json
@@ -43,6 +44,8 @@ QUEUE_FILE = os.environ.get(
 STATE_FILE = os.path.join(STATE_DIR, 'x-post-state.json')
 LOG_FILE = os.path.join(STATE_DIR, 'post-log.jsonl')
 PREVIEW_DIR = os.path.join(STATE_DIR, 'previews')
+TRIALS_DIR = os.environ.get(
+    'TRIAL_STATE_DIR', os.path.join(STATE_DIR, 'trials'))  # 検証用上書き可
 CONFIG_FILE = os.path.join(HERE, 'x-discover-config.json')
 
 PRICE = {'url': 0.200, 'nourl': 0.015}  # 実測単価 (URL付き/抜き・credits換算)
@@ -233,8 +236,21 @@ def x_upload_video(path: str, env: dict) -> str:
 
 
 def find_media(d: dict, allow_video: bool = True) -> tuple[str | None, str]:
-    """draft URLのプレビュー素材。capture-preview.pyの meta.recommended
-    (mp4/gif/png) に従う。欠落/size超過/旧meta (推奨なし) はgif→pngでfallback。"""
+    """draft URLの添付素材。試用成功行 (trial_status=done) は実操作の証拠
+    (trial.mp4 / shots) を優先 — takeが実測事実由来なら素材も実測に揃える。
+    通常行はcapture-preview.pyの meta.recommended (mp4/gif/png) に従い、
+    欠落/size超過/旧meta (推奨なし) はgif→pngでfallback。"""
+    if d.get('trial_status') == 'done':
+        tdir = os.path.join(TRIALS_DIR, preview_key(d.get('url', '')))
+        mp4 = os.path.join(tdir, 'trial.mp4')
+        if (allow_video and os.path.exists(mp4)
+                and os.path.getsize(mp4) <= VIDEO_LIMIT):
+            return mp4, 'mp4'
+        shots = sorted(glob.glob(os.path.join(tdir, 'shots', 'step-*.png')))
+        # step-01=初期page・02以降=操作後の状態 → 02を優先 (1枚しか無ければそれ)
+        picks = [s for s in shots if os.path.getsize(s) <= MEDIA_LIMIT]
+        if picks:
+            return (picks[1] if len(picks) > 1 else picks[0]), 'png'
     pdir = os.path.join(PREVIEW_DIR, preview_key(d.get('url', '')))
     gif = os.path.join(pdir, 'preview.gif')
     png = os.path.join(pdir, 'capture.png')
