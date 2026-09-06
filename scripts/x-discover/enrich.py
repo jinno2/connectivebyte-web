@@ -28,7 +28,9 @@ from x_discover_rules import (BANNED_WORDS, ask_is_interrogative, banned_hits,
                               media_ok, preview_key)
 
 STATE_DIR = pathlib.Path.home() / '.local/share/cb-fleet'
-QUEUE = STATE_DIR / 'discover-queue.jsonl'
+# DISCOVER_QUEUE_PATH上書きは検証用 (本番は既定path・trial runnerと同一名のenv)
+QUEUE = pathlib.Path(os.environ.get(
+    'DISCOVER_QUEUE_PATH', str(STATE_DIR / 'discover-queue.jsonl')))
 TRIALS_DIR = pathlib.Path(os.environ.get(
     'TRIAL_STATE_DIR', str(STATE_DIR / 'trials')))
 
