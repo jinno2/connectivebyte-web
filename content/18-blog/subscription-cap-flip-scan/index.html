@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>サブスクAIの利用枠は%表示から測れる ─ 当ラボの実測 (週枠は月3桁ドル相当)</title>
+<meta name="description" content="月額サブスクのAIコーディングエージェントの週次利用枠を、整数パーセント表示だけから金額で確定する測定法の検証報告。月20ドル級プランの週枠は月3桁ドル相当 (2026-09-06実測・帯表示)。原理・効能・限界と、手順全文を載せたQiita記事への導線。">
+<meta property="og:title" content="サブスクAIの利用枠は%表示から測れる ─ 当ラボの実測">
+<meta property="og:description" content="整数パーセントのゲージだけから週次上限を金額確定する測定法。週枠は月3桁ドル相当・測定コスト1ドル未満 (2026-09-06実測)。">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://lab.connectivebyte.com/content/18-blog/subscription-cap-flip-scan/">
+<meta name="robots" content="index,follow">
+<link rel="canonical" href="https://lab.connectivebyte.com/content/18-blog/subscription-cap-flip-scan/">
+<link rel="stylesheet" href="../article.css">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<script type="module" src="../../../app.js"></script>
+</head>
+<body>
+<a class="skip-link" href="#article">本文へ移動</a>
+<header class="site-header">
+  <a class="brand" href="../../../" aria-label="ConnectiveByte ホーム">Connective<span>Byte</span></a>
+  <nav aria-label="メインナビゲーション">
+    <a href="../../../#purpose">Purpose</a>
+    <a href="../../../#vision">Vision</a>
+    <a class="nav-cta" href="../../../#diagnostic">5択を始める</a>
+  </nav>
+</header>
+
+<main id="article" class="article">
+  <p class="kicker">FRONTIER NOTE / 検証報告</p>
+  <h1>サブスクAIの利用枠は%表示から測れる ─ 当ラボの実測 (週枠は月3桁ドル相当)</h1>
+  <p class="article-meta">
+    <span class="stamp">最終確認: 2026-09-06</span>
+    <span>対象: Devin Pro (月20ドルの個人プラン・CLI v3000.6.14)</span>
+  </p>
+  <p class="lead">月額サブスクのAIコーディングエージェントを使い始めると、利用枠は丸められた整数のパーセント1つでしか表示されないことが多い。当ラボは2026年9月、この表示だけを頼りに週次上限の金額を確定する測定法を検証し、実務に使える精度を確認した。</p>
+
+  <section class="summary-box" aria-labelledby="summary-title">
+    <p class="box-label" id="summary-title">TL;DR</p>
+    <ul>
+      <li><strong>月20ドル級プランの週次枠は、月3桁ドル相当</strong> (2026-09-06実測・帯表示)。月額の数倍分の仕事が週で回る計算になる。</li>
+      <li><strong>原理は1つ: 表示の整数が繰り上がる間隔が上限の100分の1に等しい。</strong> チームの外部消費が混ざっても間隔は崩れない。</li>
+      <li><strong>測定コストは1ドル未満・所要1時間弱。</strong> 手順全文 (原理・手順5段階・落とし穴3つ) はQiitaの技術記事として公開している。</li>
+    </ul>
+  </section>
+
+  <h2 id="why">なぜ測ったか</h2>
+  <p>AIコストの試算作業の副産物として生まれた質問がある。パーセント表示のままでは、実務で必要な3つの問い — いくら分の仕事ができるか、失効までにあと何件進められるか、枠は正しく消費されているか — のどれにも答えられない。特に週次リセットで余りが消えるタイプの枠では、使い切る計画を数字で立てられないのは実務上の損になる。</p>
+
+  <h2 id="core">測り方の核心</h2>
+  <p>整数のパーセントゲージは、累計消費の丸めに過ぎない。表示の整数が繰り上がる瞬間 (以下 flip) は消費が境界を跨いだことを意味し、この境界は金額の空間上で等間隔に並ぶ — 間隔は上限の100分の1ちょうどである。</p>
+  <p>したがって自分の消費を小刻みに進めて flip を2回以上観測し、隣接する flip 間の自分の消費差に100を掛ければ週次上限が出る。チームの別メンバーの消費などの外部消費は境界の位置をずらすだけで間隔を壊さないため、共有しているアカウントでも測定は成立する。flip が3つ観測できれば区間差が2組取れ、互いに一致することで測定の自己検証まで同時に取れる。</p>
+
+  <h2 id="use">実務への効き</h2>
+  <p>上限が金額で分かると、週の頭に何を回すかの使い切り計画と、枠が想定より速く減るときの異常検知が、初めて数字で立つ。サブスクの費用対効果を議論する土台も、測定の上にしか建てられない。</p>
+
+  <h2 id="limits">数値の位置づけと限界</h2>
+  <p>本稿で数値を帯 (月3桁ドル相当) に留めるのは、上限が提供側の表示単価換算であり、プランやモデル単価の改定で変わるからだ。どこかに書かれた値を信じるより、自分の使う時点で自分の環境の値を取る方が確からしい。当ラボの検証はDevin Pro (2026-09-06時点) で行ったが、構造は累計消費を整数パーセントで表示するサブスクAI全般に適用できる。自分の呼び出しの消費が呼出単位で記録でき、ゲージが分単位で更新されるサービスが条件になる。</p>
+
+  <h2 id="howto">手順全文</h2>
+  <p>原理の説明、手順5段階 (機械側の消費記録を開く → 最安帯のモデルで小刻みに歩く → 繰り上がりを区間として記録する → 隣接区間の中点差から上限を算出する → 内部整合を確認する)、実測で踏んだ落とし穴3つ (集計の遅延・丸め方式の確認・開始時点の汚染) まで、再現に必要な情報をQiitaの技術記事にまとめた。<a href="https://qiita.com/jinno_ai/items/8110c5e1b94010b5bc84" target="_blank" rel="noopener noreferrer">サブスクAIの週次利用枠は整数%表示から確定できる — 外部消費が混ざっても崩れない連続flip法</a></p>
+
+  <h2 id="next">次の一歩</h2>
+  <p>自分の関心から次に触れる対象を選びたい場合は、<a href="../../../#diagnostic">ConnectiveByteの5択診断</a>でいま最も近い関心をひとつ選べる。</p>
+  <div class="next-actions">
+    <a class="button button-primary" href="../../../#diagnostic">関心から次を選ぶ (5択・所要30秒) <span aria-hidden="true">→</span></a>
+  </div>
+</main>
+
+<footer>
+  <a class="brand" href="../../../">Connective<span>Byte</span></a>
+  <p>ConnectiveByte — 海外AIサービスの日本語圏紹介。</p>
+  <p>このページはCookieや端末への保存を使わないアクセス集計のみを行います。</p>
+  <p class="privacy-note">© 2026 ConnectiveByte</p>
+</footer>
+</body>
+</html>
