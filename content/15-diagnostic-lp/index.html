@@ -32,13 +32,32 @@
     .summary-box ul { margin: 0 0 12px; padding-left: 1.15em; }
     .summary-box li { margin-bottom: 8px; }
     pre { white-space: pre-wrap; overflow-wrap: anywhere; margin: 0; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: .92rem; line-height: 1.75; background: var(--white); border: 1px solid var(--line); padding: 24px; }
+    .asset-rendered { background: var(--white); border: 1px solid var(--line); padding: 26px 30px; }
+    .asset-rendered > :first-child { margin-top: 0; }
+    .asset-rendered > :last-child { margin-bottom: 0; }
+    .asset-rendered h1 { font-size: 1.5rem; line-height: 1.3; margin: 1.5em 0 .55em; letter-spacing: -.01em; }
+    .asset-rendered h2 { font-size: 1.22rem; margin: 1.6em 0 .5em; letter-spacing: -.01em; }
+    .asset-rendered h3, .asset-rendered h4, .asset-rendered h5, .asset-rendered h6 { font-size: 1.04rem; margin: 1.4em 0 .45em; }
+    .asset-rendered p { margin: .7em 0; }
+    .asset-rendered ul, .asset-rendered ol { margin: .7em 0; padding-left: 1.4em; }
+    .asset-rendered li { margin: .28em 0; }
+    .asset-rendered a { color: #2a7d76; text-decoration: underline; text-underline-offset: 2px; }
+    .asset-rendered .table-wrap { overflow-x: auto; }
+    .asset-rendered table { width: 100%; border-collapse: collapse; margin: 1em 0; font-size: .88rem; }
+    .asset-rendered th, .asset-rendered td { border: 1px solid var(--line); padding: 7px 10px; text-align: left; vertical-align: top; }
+    .asset-rendered th { background: rgba(67, 217, 208, .12); }
+    .asset-rendered code { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: .85em; background: rgba(16, 28, 44, .06); padding: 1px 5px; border-radius: 3px; }
+    .asset-rendered pre.md-code { background: #f0ede3; padding: 14px 16px; }
+    .asset-rendered pre.md-code code { background: none; padding: 0; }
+    .asset-rendered blockquote { margin: 1em 0; padding: 2px 0 2px 14px; border-left: 4px solid #4ba49e; color: var(--muted); }
+    .asset-rendered hr { border: 0; border-top: 1px solid var(--line); margin: 1.5em 0; }
     .cta { margin: 28px 0 0; }
     .cta a { display: inline-flex; align-items: center; background: var(--ink); color: var(--white); font-weight: 750; text-decoration: none; padding: 14px 20px; border-radius: 2px; }
     .cta a:hover, .cta a:focus-visible { background: #284158; }
     footer { padding: 44px max(28px, calc((100vw - var(--max)) / 2)); display: flex; flex-wrap: wrap; align-items: center; gap: 12px 25px; font-size: .78rem; border-top: 1px solid var(--line); }
     footer p { margin: 0; }
     footer p:last-child { margin-left: auto; }
-    @media (max-width: 600px) { .site-header { padding: 0 20px; } nav > a:not(.nav-cta) { display: none; } main { padding: 30px 20px 56px; } .summary-box { padding: 18px 16px 10px; } pre { padding: 18px 16px; } footer { align-items: flex-start; flex-direction: column; } footer p:last-child { margin-left: 0; } }
+    @media (max-width: 600px) { .site-header { padding: 0 20px; } nav > a:not(.nav-cta) { display: none; } main { padding: 30px 20px 56px; } .summary-box { padding: 18px 16px 10px; } pre { padding: 18px 16px; } .asset-rendered { padding: 18px 16px; } footer { align-items: flex-start; flex-direction: column; } footer p:last-child { margin-left: 0; } }
   </style>
 </head>
 <body>
@@ -53,7 +72,7 @@
   </header>
   <main>
     <p class="meta">asset_id: 15-diagnostic-lp / campaign: floor-ceiling-001 / framework v2.0.1 / content_hash: c571a801a0693ac77699000c3c9d6940e89357c4ced101bb562575c004bc4420</p>
-    <p class="box-label">本文（承認済み原文 / Markdown）</p>
+    <p class="box-label">本文（承認済み原文を整形表示・ソースは原文まま）</p>
     <pre id="asset-body">
 # 今知りたいのはどれですか
 
@@ -114,5 +133,118 @@ AIの話を聞くたびに、やることが増えるだけで前に進まない
     <p>ConnectiveByte — 海外AIサービスの日本語圏紹介。</p>
     <p>© 2026 ConnectiveByte</p>
   </footer>
+  <script>
+  (function () {
+    "use strict";
+    var pre = document.getElementById("asset-body");
+    if (!pre || !pre.textContent) { return; }
+    function esc(s) {
+      return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+    }
+    function inline(s) {
+      s = esc(s);
+      s = s.replace(/`([^`]+)`/g, "<code>$1</code>");
+      s = s.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+      s = s.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, function (all, text, href) {
+        return /^(https?:\/\/|\/|#|\.\.\/)/.test(href)
+          ? '<a href="' + href + '">' + text + "</a>"
+          : text;
+      });
+      // 角括弧 autolink（&lt;https://...&gt;）。esc 済みのため &amp; 許容の字面で受ける。
+      s = s.replace(/&lt;(https?:\/\/(?:[^&\s]|&amp;)+)&gt;/g, function (all, href) {
+        return '<a href="' + href + '">' + href + "</a>";
+      });
+      // 本文に markdown リンク表記ではなく生 <a> を書いた行（従来の live-tag 挙動と
+      // 同等に見せる）。esc 済み文字列を対象に取り、href は scheme whitelist を通る
+      // 場合のみ組立直す（それ以外はそのまま文字として表示）。
+      s = s.replace(/&lt;a href=&quot;(.*?)&quot;&gt;(.*?)&lt;\/a&gt;/g, function (all, href, text) {
+        return /^(https?:\/\/|\/|#|\.\.\/)/.test(href)
+          ? '<a href="' + href + '">' + text + "</a>"
+          : all;
+      });
+      return s;
+    }
+    function cells(row) {
+      return row.replace(/^\|/, "").replace(/\|\s*$/, "").split("|").map(function (c) { return c.trim(); });
+    }
+    var lines = pre.textContent.split("\n");
+    var out = [];
+    var i = 0;
+    while (i < lines.length) {
+      var t = lines[i].trim();
+      if (!t) { i += 1; continue; }
+      var h = t.match(/^(#{1,6})\s+(.*)$/);
+      if (h) {
+        var lv = h[1].length;
+        out.push("<h" + lv + ">" + inline(h[2].replace(/\s*#+\s*$/, "")) + "</h" + lv + ">");
+        i += 1; continue;
+      }
+      if (/^(-{3,}|\*{3,})$/.test(t)) { out.push("<hr>"); i += 1; continue; }
+      if (t.indexOf("```") === 0) {
+        var buf = [];
+        i += 1;
+        while (i < lines.length && lines[i].trim().indexOf("```") !== 0) { buf.push(lines[i]); i += 1; }
+        i += 1;
+        // pre 終了タグの字列を script 内に置かない — 抽出側 (web README.md) と検証は
+        // ページ末尾の rsplit を終了タグ文字列で行う前提のため、本物の終了タグだけが
+        // 文書中に一度だけ現れる形を守る。
+        out.push('<pre class="md-code">' + esc(buf.join("\n")) + "</" + "pre>");
+        continue;
+      }
+      if (t.charAt(0) === "|") {
+        var rows = [];
+        while (i < lines.length && lines[i].trim().charAt(0) === "|") { rows.push(lines[i].trim()); i += 1; }
+        var hasSep = rows.length > 1 && cells(rows[1]).every(function (c) { return /^:?-{3,}:?$/.test(c); });
+        var tableBody = rows.map(function (row, idx) {
+          if (hasSep && idx === 1) { return ""; }
+          var tag = hasSep && idx === 0 ? "th" : "td";
+          return "<tr>" + cells(row).map(function (c) {
+            return "<" + tag + ">" + inline(c) + "</" + tag + ">";
+          }).join("") + "</tr>";
+        }).join("");
+        out.push('<div class="table-wrap"><table>' + tableBody + "</table></div>");
+        continue;
+      }
+      if (/^[-*]\s+/.test(t)) {
+        var items = [];
+        while (i < lines.length && /^[-*]\s+/.test(lines[i].trim())) {
+          items.push("<li>" + inline(lines[i].trim().replace(/^[-*]\s+/, "")) + "</li>"); i += 1;
+        }
+        out.push("<ul>" + items.join("") + "</ul>");
+        continue;
+      }
+      if (/^\d+\.\s+/.test(t)) {
+        var ordered = [];
+        while (i < lines.length && /^\d+\.\s+/.test(lines[i].trim())) {
+          ordered.push("<li>" + inline(lines[i].trim().replace(/^\d+\.\s+/, "")) + "</li>"); i += 1;
+        }
+        out.push("<ol>" + ordered.join("") + "</ol>");
+        continue;
+      }
+      if (t.charAt(0) === ">") {
+        var quote = [];
+        while (i < lines.length && lines[i].trim().charAt(0) === ">") {
+          quote.push(lines[i].trim().replace(/^>\s?/, "")); i += 1;
+        }
+        out.push("<blockquote>" + inline(quote.join(" ")) + "</blockquote>");
+        continue;
+      }
+      var para = [];
+      while (i < lines.length && lines[i].trim() &&
+             !/^(#{1,6}\s|[-*]\s|\d+\.\s|>|`{3}|-{3,}|\*)/.test(lines[i].trim() + "")) {
+        para.push(lines[i].trim()); i += 1;
+      }
+      if (para.length) { out.push("<p>" + inline(para.join(" ")) + "</p>"); }
+      else { out.push("<p>" + inline(t) + "</p>"); i += 1; }
+    }
+    var view = document.createElement("div");
+    view.className = "asset-rendered";
+    view.innerHTML = out.join("\n");
+    pre.parentNode.insertBefore(view, pre);
+    pre.removeAttribute("id");
+    view.id = "asset-body";
+    pre.hidden = true;
+  })();
+  </script>
 </body>
 </html>
