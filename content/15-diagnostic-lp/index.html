@@ -166,6 +166,13 @@ AIの話を聞くたびに、やることが増えるだけで前に進まない
     function cells(row) {
       return row.replace(/^\|/, "").replace(/\|\s*$/, "").split("|").map(function (c) { return c.trim(); });
     }
+    // 折返し行の連結: 日本語どうしの間に空白を入れず、ラテン文字どうしのみ半角空白。
+    // 読者視点で「文の途中に不自然な空白」「段落の分断」に見せないため。
+    function joinLine(prev, next) {
+      return prev && next && /[A-Za-z0-9]$/.test(prev) && /^[A-Za-z0-9]/.test(next)
+        ? prev + " " + next
+        : prev + next;
+    }
     var lines = pre.textContent.split("\n");
     var out = [];
     var i = 0;
@@ -206,18 +213,29 @@ AIの話を聞くたびに、やることが増えるだけで前に進まない
       }
       if (/^[-*]\s+/.test(t)) {
         var items = [];
-        while (i < lines.length && /^[-*]\s+/.test(lines[i].trim())) {
-          items.push("<li>" + inline(lines[i].trim().replace(/^[-*]\s+/, "")) + "</li>"); i += 1;
+        while (i < lines.length) {
+          var cur = lines[i].trim();
+          if (/^[-*]\s+/.test(cur)) {
+            items.push(cur.replace(/^[-*]\s+/, "")); i += 1;
+          } else if (cur && items.length && !/^(#{1,6}\s|[-*]\s|\d+\.\s|>|`{3})/.test(cur)) {
+            // 直前の箇条書き項目の続きの行（折返し）— 分断して読者に見せない
+            items[items.length - 1] = joinLine(items[items.length - 1], cur); i += 1;
+          } else { break; }
         }
-        out.push("<ul>" + items.join("") + "</ul>");
+        out.push("<ul>" + items.map(function (x) { return "<li>" + inline(x) + "</li>"; }).join("") + "</ul>");
         continue;
       }
       if (/^\d+\.\s+/.test(t)) {
         var ordered = [];
-        while (i < lines.length && /^\d+\.\s+/.test(lines[i].trim())) {
-          ordered.push("<li>" + inline(lines[i].trim().replace(/^\d+\.\s+/, "")) + "</li>"); i += 1;
+        while (i < lines.length) {
+          var cur2 = lines[i].trim();
+          if (/^\d+\.\s+/.test(cur2)) {
+            ordered.push(cur2.replace(/^\d+\.\s+/, "")); i += 1;
+          } else if (cur2 && ordered.length && !/^(#{1,6}\s|[-*]\s|\d+\.\s|>|`{3})/.test(cur2)) {
+            ordered[ordered.length - 1] = joinLine(ordered[ordered.length - 1], cur2); i += 1;
+          } else { break; }
         }
-        out.push("<ol>" + ordered.join("") + "</ol>");
+        out.push("<ol>" + ordered.map(function (x) { return "<li>" + inline(x) + "</li>"; }).join("") + "</ol>");
         continue;
       }
       if (t.charAt(0) === ">") {
@@ -230,10 +248,12 @@ AIの話を聞くたびに、やることが増えるだけで前に進まない
       }
       var para = [];
       while (i < lines.length && lines[i].trim() &&
-             !/^(#{1,6}\s|[-*]\s|\d+\.\s|>|`{3}|-{3,}|\*)/.test(lines[i].trim() + "")) {
+             !/^(#{1,6}\s|[-*]\s|\d+\.\s|>|`{3}|-{3,}|\*|\|)/.test(lines[i].trim() + "")) {
         para.push(lines[i].trim()); i += 1;
       }
-      if (para.length) { out.push("<p>" + inline(para.join(" ")) + "</p>"); }
+      if (para.length) {
+        out.push("<p>" + inline(para.reduce(joinLine)) + "</p>");
+      }
       else { out.push("<p>" + inline(t) + "</p>"); i += 1; }
     }
     var view = document.createElement("div");
