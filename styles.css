@@ -85,6 +85,7 @@ em { color: #318f89; font-style: normal; }
 .form-status { min-height: 1.5em; margin: 10px 0 0; font-size: .8rem; }
 .newsletter { color: var(--white); background: var(--ink); display: grid; grid-template-columns: 1fr 1fr; gap: 9vw; align-items: center; }
 .newsletter .section-label { margin-bottom: 25px; }
+.newsletter-note { margin: 22px 0 0; max-width: 34em; font-size: .92rem; line-height: 1.9; color: #c8d2dd; }
 #newsletter-form { max-width: 540px; }
 .email-row { display: flex; border-bottom: 1px solid #82909f; }
 .email-row input { min-width: 0; flex: 1; padding: 15px 0; color: var(--white); background: transparent; border: 0; outline: none; }
