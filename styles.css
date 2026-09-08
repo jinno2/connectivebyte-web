@@ -29,6 +29,7 @@ nav a { text-decoration: none; }
 h1, h2, h3, p { margin-top: 0; }
 h1 { margin-bottom: 28px; font-size: clamp(3rem, 6.6vw, 6.2rem); line-height: .98; letter-spacing: -.075em; font-weight: 800; }
 em { color: #318f89; font-style: normal; }
+.hero-audience { max-width: 650px; margin: 0 0 6px; font-size: .95rem; font-weight: 700; color: var(--ink); }
 .lead { max-width: 650px; color: var(--muted); font-size: 1.08rem; }
 .button { display: inline-flex; align-items: center; justify-content: center; gap: 2rem; border: 0; border-radius: 2px; padding: 14px 20px; font-weight: 750; text-decoration: none; cursor: pointer; }
 .button-primary { background: var(--ink); color: var(--white); }
