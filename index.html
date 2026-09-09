@@ -165,7 +165,24 @@
           <p>目的、現在の断絶、最初の実験をチームで共有するための印刷用ガイド。</p>
           <button class="text-link light" type="button" data-action="download-org">PDFをダウンロード <span>↓</span></button>
           <a class="text-link light" href="content/17-org-pdf/index.html" target="_blank" rel="noopener noreferrer" data-track="outbound_cta_clicked" data-cta-id="org_article_open">原稿ページを開く <span>↗</span></a>
+          <a class="text-link light" href="#apply">実施支援の申込へ <span>↓</span></a>
         </article>
+      </div>
+    </section>
+
+    <section class="apply" id="apply">
+      <div><div class="section-label">NEXT STEP</div><h2>導入の話を、<br>始めたい方へ。</h2></div>
+      <div>
+      <p class="apply-note">ガイドや診断をもとに実際の導入を考えたい組織の担当者向けに、まず話を聞く受け付けを用意しています。返信は人が書きます。料金や契約形態はこの時点で確定しておらず、対話の中で整理します — 見積もりを前提としたご相談でも構いません。</p>
+      <form id="apply-form">
+        <label for="apply-email">メールアドレス</label>
+        <div class="email-row"><input id="apply-email" name="email" type="email" autocomplete="email" required maxlength="254" placeholder="you@example.com"><button type="submit">申込を送る</button></div>
+        <label for="apply-note">伝えたいこと（任意・1000字まで）</label>
+        <textarea id="apply-note" name="note" maxlength="1000" rows="3" placeholder="部署や、確かめたいこと（任意）"></textarea>
+        <p class="apply-context" id="apply-context" hidden>診断で選んだ関心は <strong id="apply-interest"></strong> です — 申込と一緒に送ります（未回答でも申込できます）。</p>
+        <label class="check"><input id="apply-consent" type="checkbox" required> 申込へのご連絡のためのメール利用に同意します。メールアドレスは申込対応にのみ使用します。匿名の行動記録とは、この明示的な申込時にのみ関連付けます。</label>
+        <p class="form-status" id="apply-status" role="status">申込いただくと、このアドレス宛に返信します。ニュースレターには自動登録しません。</p>
+      </form>
       </div>
     </section>
 

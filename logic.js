@@ -247,7 +247,8 @@ const EVENT_TYPES = Object.freeze(new Set([
   "share_draft_generated",
   "x_intent_opened",
   "result_card_created",
-  "feedback_submitted"
+  "feedback_submitted",
+  "apply_submitted"
 ]));
 
 // GET /stats (匿名aggregate: {total, counts:{E..A}}) をresult view用の表示部品へ

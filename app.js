@@ -45,7 +45,8 @@ const EVENT_NAMES = new Set([
   "share_draft_generated",
   "x_intent_opened",
   "result_card_created",
-  "feedback_submitted"
+  "feedback_submitted",
+  "apply_submitted"
 ]);
 
 const campaign = (() => {
@@ -170,6 +171,12 @@ const SUBSCRIBE_ENDPOINT = typeof location !== "undefined" && location.hostname 
 const STATS_ENDPOINT = typeof location !== "undefined" && location.hostname === "lab.connectivebyte.com"
   ? "https://api.connectivebyte.com/stats"
   : "/api/stats";
+
+// 実施支援の申込 (導線×計測設計 残課題#1・F5根本)。/subscribe と同じbackend Worker
+// の別endpoint (applications表へ保存。匿名events・購読subscribersとは分離)。
+const APPLY_ENDPOINT = typeof location !== "undefined" && location.hostname === "lab.connectivebyte.com"
+  ? "https://api.connectivebyte.com/apply"
+  : "/api/apply";
 let interestStatsPromise = null;
 function loadInterestStats() {
   interestStatsPromise ??= fetch(STATS_ENDPOINT).then((response) => response.json());
@@ -642,6 +649,7 @@ function selectInterest(interest) {
   const previous = readJson("declared_interest", null);
   const promoted = promoteBySelfSelection(previous, interest);
   writeJson("declared_interest", promoted);
+  updateApplyContext();
   const segments = readJson("eligible_segments", []);
   const selectedSegment = getEligibleSegments([interest])[0];
   const eligibleSegments = Array.isArray(segments) ? segments.filter((value) => typeof value === "string") : [];
@@ -856,6 +864,54 @@ document.querySelector("#newsletter-form").addEventListener("submit", (event) =>
     status.textContent = "登録できませんでした。通信状況を確認して、もう一度お試しください。";
   });
 });
+}
+
+// 実施支援 申込form。email (PII) は /apply (applications表) へ。declared_interestは
+// 端末に既にある値だけを付ける — 申込form自体は5択を要求しない。記事ページなど
+// formが無い面では何もしない (selectInterestからの呼び出しはnull safe)。
+function updateApplyContext() {
+  const applyContext = document.querySelector("#apply-context");
+  if (!applyContext) return;
+  const declared = readJson("declared_interest", null);
+  const route = getInterestRoute(declared);
+  if (!route) return;
+  document.querySelector("#apply-interest").textContent = `${declared}（${route.eyebrow}）`;
+  applyContext.hidden = false;
+}
+
+if (document.querySelector("#apply-form")) {
+  updateApplyContext();
+  document.querySelector("#apply-form").addEventListener("submit", (event) => {
+    event.preventDefault();
+    const emailInput = document.querySelector("#apply-email");
+    const noteInput = document.querySelector("#apply-note");
+    const status = document.querySelector("#apply-status");
+    if (!emailInput.checkValidity() || !document.querySelector("#apply-consent").checked) {
+      status.textContent = "有効なメールアドレスと同意の確認が必要です。";
+      return;
+    }
+    const payload = { email: emailInput.value.trim(), consent: true };
+    const note = noteInput.value.trim();
+    if (note) payload.note = note;
+    const declared = readJson("declared_interest", null);
+    if (getInterestRoute(declared)) payload.interest = declared;
+    if (getConsent().analytics) payload.anonymous_id = anonymousId();
+    status.textContent = "申込を送信しています…";
+    fetch(APPLY_ENDPOINT, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    }).then((response) => {
+      if (response.status !== 202) throw new Error(`apply_rejected_${response.status}`);
+      track("apply_submitted", { asset_id: "apply_form", cta_id: "apply_submit" });
+      emailInput.value = "";
+      noteInput.value = "";
+      document.querySelector("#apply-consent").checked = false;
+      status.textContent = "申込を受け付けました。このアドレス宛に返信します — 数日お待ちください。";
+    }).catch(() => {
+      status.textContent = "申込を送れませんでした。通信状況を確認して、もう一度お試しください。";
+    });
+  });
 }
 
 const restoredInterest = readJson("declared_interest", null);

@@ -78,3 +78,24 @@ test("tracker page は live-stats で GET /stats を読む (少数非表示・lo
   assert.match(page, /total < 5/);
   assert.match(page, /hidden/);
 });
+
+test("LP #apply 申込formは /apply endpoint・同意checkbox・PII分離文言を備える", async () => {
+  // 2026-09-10 導線×計測設計 残課題#1 (F5根本): 申込受付の窓口。form検証は
+  // server.test.js /api/apply が担う — ここは静的資産の必須部品を機械検査する。
+  const lp = await readFile(path.join(repoRoot, "index.html"), "utf8");
+  assert.match(lp, /<section class="apply" id="apply">/);
+  assert.match(lp, /id="apply-form"/);
+  assert.match(lp, /id="apply-email" name="email" type="email"[^>]*required/);
+  assert.match(lp, /id="apply-note" name="note" maxlength="1000"/);
+  assert.match(lp, /id="apply-consent" type="checkbox" required/);
+  // 組織カードから申込への導線
+  assert.match(lp, /href="#apply">実施支援の申込へ/);
+  const app = await readFile(path.join(repoRoot, "app.js"), "utf8");
+  assert.match(app, /https:\/\/api\.connectivebyte\.com\/apply/);
+  assert.match(app, /"\/api\/apply"/);
+  assert.match(app, /"apply_submitted"/);
+  const logic = await readFile(path.join(repoRoot, "logic.js"), "utf8");
+  assert.match(logic, /"apply_submitted"/);
+  // 法人名 (事業化層) はLPに出さない
+  assert.equal(lp.includes("東京AIソリューションズ"), false);
+});

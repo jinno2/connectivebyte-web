@@ -37,7 +37,8 @@ const EVENT_TYPES = Object.freeze(new Set([
   "share_draft_generated",
   "x_intent_opened",
   "result_card_created",
-  "feedback_submitted"
+  "feedback_submitted",
+  "apply_submitted"
 ]));
 
 const REQUIRED_FIELDS = Object.freeze([
@@ -102,6 +103,25 @@ function validateSubscription(payload) {
   if ("anonymous_id" in payload
     && !(typeof payload.anonymous_id === "string" && ANONYMOUS_ID_PATTERN.test(payload.anonymous_id))) {
     return "invalid_anonymous_id";
+  }
+  return null;
+}
+
+// 実施支援 申込 (/api/apply) — 本番Worker POST /apply と同じ検証の写し。
+// dev serverは保存しない (202を返すだけ。/subscribeと同じ規律)。
+const APPLY_INTERESTS = new Set(["E", "D", "C", "B", "A"]);
+
+function validateApplication(payload) {
+  const error = validateSubscription(payload);
+  if (error === "invalid payload shape" || error === "invalid_email"
+    || error === "consent_required" || error === "invalid_anonymous_id") {
+    return error;
+  }
+  if (payload.interest !== undefined && payload.interest !== null && payload.interest !== "") {
+    if (typeof payload.interest !== "string" || !APPLY_INTERESTS.has(payload.interest)) return "invalid_interest";
+  }
+  if (payload.note !== undefined && payload.note !== null && payload.note !== "") {
+    if (typeof payload.note !== "string" || payload.note.length > 1000) return "invalid_note";
   }
   return null;
 }
@@ -295,6 +315,29 @@ export function createRequestHandler(options = {}) {
         return;
       }
       const error = validateSubscription(payload);
+      if (error) {
+        sendJson(response, 400, { error });
+        return;
+      }
+      sendJson(response, 202, { accepted: true });
+      return;
+    }
+
+    // POST /api/apply — 実施支援 申込 (local dev用の検証のみ写し。保存はしない)。
+    if (pathname === "/api/apply" && request.method === "POST") {
+      const raw = await readBody(request);
+      if (raw === null) {
+        sendJson(response, 413, { error: "body_too_large" });
+        return;
+      }
+      let payload;
+      try {
+        payload = JSON.parse(raw);
+      } catch {
+        sendJson(response, 400, { error: "invalid_json" });
+        return;
+      }
+      const error = validateApplication(payload);
       if (error) {
         sendJson(response, 400, { error });
         return;

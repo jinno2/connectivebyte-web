@@ -206,6 +206,41 @@ test("events.jsonl は静的配信から保護され403になる", async () => {
   }
 });
 
+test("POST /api/apply は有効な申込に202・不正入力に400を返す (保存はしない)", async () => {
+  const ctx = await startServer();
+  try {
+    const postApply = (body) => fetch(`${ctx.base}/api/apply`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: typeof body === "string" ? body : JSON.stringify(body)
+    });
+    const ok = await postApply({ email: "org@example.com", consent: true });
+    assert.equal(ok.status, 202);
+    assert.equal((await ok.json()).accepted, true);
+    const full = await postApply({
+      email: "org2@example.com", consent: true, interest: "C",
+      note: "カスタマーサポート部門。まず話を聞きたい", anonymous_id: "anon-9"
+    });
+    assert.equal(full.status, 202);
+    for (const bad of [
+      { email: "nope", consent: true },
+      { email: "org@example.com" },
+      { email: "org@example.com", consent: false },
+      { email: "org@example.com", consent: true, interest: "X" },
+      { email: "org@example.com", consent: true, note: "x".repeat(1001) },
+      "not-json"
+    ]) {
+      const res = await postApply(bad);
+      assert.equal(res.status, 400, JSON.stringify(bad));
+    }
+    // dev serverはPIIを書き込まない — events.jsonlに申込が残らない
+    const eventsRaw = await readFile(join(ctx.dataDir, "events.jsonl"), "utf8").catch(() => "");
+    assert.equal(eventsRaw.includes("org@example.com"), false);
+  } finally {
+    await ctx.cleanup();
+  }
+});
+
 test("POST /api/subscribe は有効な登録に202・不正入力に400を返す", async () => {
   const ctx = await startServer();
   try {
