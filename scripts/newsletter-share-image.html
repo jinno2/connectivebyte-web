@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>ConnectiveByte研究メール — share image (1200x630)</title>
+<style>
+  /* Buttondown share image. Render with Playwright screenshot at 1200x630.
+     Brand: navy #101c2c / lime #c8ff52 / cyan #43d9d0 (favicon.svg + styles.css vars). */
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 1200px; height: 630px; overflow: hidden; }
+  body {
+    position: relative;
+    background: #101c2c;
+    background-image: radial-gradient(900px 620px at 8% -10%, rgba(200,255,82,0.07), transparent 60%);
+    font-family: "Noto Sans CJK JP", "Noto Sans JP", sans-serif;
+  }
+  /* oversized brand ring bleeding off the right edge (favicon motif) */
+  .ring {
+    position: absolute; right: -170px; top: 50%; transform: translateY(-50%);
+    width: 560px; height: 560px; border-radius: 50%;
+    border: 30px solid rgba(200,255,82,0.13);
+  }
+  .satellite {
+    position: absolute; right: 118px; top: 128px;
+    width: 34px; height: 34px; border-radius: 50%;
+    background: #c8ff52; opacity: 0.85;
+  }
+  .wrap {
+    position: relative; width: 100%; height: 100%;
+    display: flex; align-items: center; padding-left: 128px; gap: 64px;
+  }
+  .mark { width: 168px; height: 168px; border-radius: 36px; flex: none; }
+  .text { display: flex; flex-direction: column; gap: 18px; }
+  .wordmark {
+    color: #f4f7f5; font-weight: 900; font-size: 92px; letter-spacing: -2px; line-height: 1;
+  }
+  .subtitle-row { display: flex; align-items: center; gap: 22px; }
+  .subtitle {
+    color: #c8ff52; font-weight: 500; font-size: 44px; letter-spacing: 10px; line-height: 1;
+  }
+  .accent { width: 14px; height: 14px; border-radius: 50%; background: #43d9d0; flex: none; }
+</style>
+</head>
+<body>
+  <div class="ring"></div>
+  <div class="satellite"></div>
+  <div class="wrap">
+    <svg class="mark" viewBox="0 0 32 32" aria-hidden="true">
+      <rect width="32" height="32" rx="6" fill="#101c2c" stroke="#2a3a4f" stroke-width="0.6"/>
+      <circle cx="16" cy="16" r="9.5" fill="none" stroke="#c8ff52" stroke-width="2.2"/>
+      <circle cx="16" cy="16" r="4" fill="#43d9d0"/>
+      <circle cx="25.2" cy="9.5" r="2.4" fill="#c8ff52"/>
+    </svg>
+    <div class="text">
+      <div class="wordmark">ConnectiveByte</div>
+      <div class="subtitle-row">
+        <span class="accent"></span>
+        <span class="subtitle">研究メール</span>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
