@@ -3,6 +3,7 @@ import {
   buildEventBatch,
   DETAILED_QUESTIONS,
   DIAGNOSTIC_QUESTIONS,
+  formatInterestStats,
   getEligibleSegments,
   getInterestRoute,
   promoteBySelfSelection,
@@ -162,6 +163,48 @@ const EVENTS_ENDPOINT = typeof location !== "undefined" && location.hostname ===
 const SUBSCRIBE_ENDPOINT = typeof location !== "undefined" && location.hostname === "lab.connectivebyte.com"
   ? "https://api.connectivebyte.com/subscribe"
   : "/api/subscribe";
+
+// GET /stats (匿名aggregate: 5択回答のE/D/C/B/A別件数) の読み出し先 — 計測を
+// コンテンツにする面 (2026-09-09導線設計)。自分の5択が全体のどこに位置するかを
+// result viewに実数で示す。読み出しのみで識別子を送らないため同意ゲート外。
+const STATS_ENDPOINT = typeof location !== "undefined" && location.hostname === "lab.connectivebyte.com"
+  ? "https://api.connectivebyte.com/stats"
+  : "/api/stats";
+let interestStatsPromise = null;
+function loadInterestStats() {
+  interestStatsPromise ??= fetch(STATS_ENDPOINT).then((response) => response.json());
+  return interestStatsPromise;
+}
+
+// fetch失敗・total < MIN_STATS_TOTAL (少数で%が出ない) は要素ごと隠す — 捏造しない。
+async function renderInterestStats(interest) {
+  const box = document.querySelector("#result-stats");
+  if (!box) return;
+  let formatted = null;
+  try {
+    formatted = formatInterestStats(await loadInterestStats());
+  } catch {
+    formatted = null;
+  }
+  if (!formatted) {
+    box.hidden = true;
+    return;
+  }
+  const heading = document.createElement("p");
+  heading.textContent = `これまでの回答 ${formatted.total}件（匿名集計）`;
+  const distribution = document.createElement("p");
+  for (const part of formatted.parts) {
+    if (distribution.childNodes.length > 0) distribution.append("・");
+    const span = document.createElement("span");
+    span.textContent = `${part.interest} ${part.percent}%`;
+    if (part.interest === interest) span.className = "result-stats-own";
+    distribution.append(span);
+  }
+  const own = formatted.parts.find((part) => part.interest === interest);
+  distribution.append(` —「${interest}」は${own ? own.percent : 0}%`);
+  box.replaceChildren(heading, distribution);
+  box.hidden = false;
+}
 let flushInFlight = false;
 let flushScheduled = false;
 
@@ -240,6 +283,7 @@ function renderRoute(interest, focus = true) {
   link.dataset.track = "outbound_cta_clicked";
   if (focus) result.focus({ preventScroll: true });
   showDiagnosticStep(interest);
+  renderInterestStats(interest);
 }
 
 // 詳細版 (12問) はメルアド登録者のみ。登録成否で切り替わるため、renders毎に

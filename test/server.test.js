@@ -265,3 +265,35 @@ test("manual_collaboration_candidate型を受け付ける", async () => {
     await ctx.cleanup();
   }
 });
+
+test("GET /api/stats は interest_selected をE/D/C/B/A別の閉じた形で集計する", async () => {
+  const ctx = await startServer();
+  try {
+    const events = [
+      validEvent({ name: "interest_selected", cta_id: "interest_e" }),
+      validEvent({ name: "interest_selected", cta_id: "interest_e" }),
+      validEvent({ name: "interest_selected", cta_id: "interest_b" }),
+      // 集計対象外: 別イベント名・不正cta_id
+      validEvent({ name: "diagnostic_completed", cta_id: "interest_e" }),
+      validEvent({ name: "interest_selected", cta_id: "none" })
+    ];
+    const accepted = await post(ctx.base, events);
+    assert.equal(accepted.status, 202);
+    const res = await fetch(`${ctx.base}/api/stats`);
+    assert.equal(res.status, 200);
+    assert.deepEqual(await res.json(), { total: 3, counts: { E: 2, D: 0, C: 0, B: 1, A: 0 } });
+  } finally {
+    await ctx.cleanup();
+  }
+});
+
+test("GET /api/stats は events.jsonl が無いときも全ゼロで応答する", async () => {
+  const ctx = await startServer();
+  try {
+    const res = await fetch(`${ctx.base}/api/stats`);
+    assert.equal(res.status, 200);
+    assert.deepEqual(await res.json(), { total: 0, counts: { E: 0, D: 0, C: 0, B: 0, A: 0 } });
+  } finally {
+    await ctx.cleanup();
+  }
+});

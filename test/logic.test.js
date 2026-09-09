@@ -8,6 +8,8 @@ import {
   DIAGNOSTIC_QUESTIONS,
   filterForbiddenAttributes,
   FORBIDDEN_ATTRIBUTES,
+  formatInterestStats,
+  MIN_STATS_TOTAL,
   getEligibleSegments,
   getInterestRoute,
   PHASES,
@@ -279,4 +281,34 @@ test("イベント送信バッチは禁止属性を除去し不正型を除外�
   }
   assert.deepEqual(buildEventBatch(null), []);
   assert.deepEqual(buildEventBatch([]), []);
+});
+
+test("関心stats整形は total>=5 で E/D/C/B/A 順の%付き部品を返す", () => {
+  const formatted = formatInterestStats({ total: 10, counts: { E: 5, D: 2, B: 3 } });
+  assert.deepEqual(formatted, {
+    total: 10,
+    parts: [
+      { interest: "E", count: 5, percent: 50 },
+      { interest: "D", count: 2, percent: 20 },
+      { interest: "C", count: 0, percent: 0 },
+      { interest: "B", count: 3, percent: 30 },
+      { interest: "A", count: 0, percent: 0 }
+    ]
+  });
+  // 四捨五入 (切り捨てない): 4/6=66.6→67, 2/6=33.3→33
+  assert.deepEqual(
+    formatInterestStats({ total: 6, counts: { E: 4, D: 2 } }).parts.map((part) => part.percent),
+    [67, 33, 0, 0, 0]
+  );
+});
+
+test("関心stats整形は少数 (<MIN_STATS_TOTAL) と不正な入力で null を返す", () => {
+  assert.equal(formatInterestStats({ total: MIN_STATS_TOTAL - 1, counts: { E: 4 } }), null);
+  assert.equal(formatInterestStats({ total: 0, counts: {} }), null);
+  assert.equal(formatInterestStats(null), null);
+  assert.equal(formatInterestStats({ total: 3.5 }), null);
+  assert.equal(formatInterestStats({ total: "abc" }), null);
+  assert.equal(formatInterestStats([1, 2]), null);
+  // counts欠損・文字列totalは整数化できない限り表示しない (推定を作らない)
+  assert.equal(formatInterestStats({ total: 5 }).parts.every((part) => part.count === 0), true);
 });

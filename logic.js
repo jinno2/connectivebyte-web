@@ -250,4 +250,20 @@ const EVENT_TYPES = Object.freeze(new Set([
   "feedback_submitted"
 ]));
 
-export { INTERESTS, DIAGNOSTIC_QUESTIONS, DETAILED_QUESTIONS, EVENT_TYPES, PHASES, AFFIRMATIVE_ANSWERS };
+// GET /stats (匿名aggregate: {total, counts:{E..A}}) をresult view用の表示部品へ
+// 整形する。少数の%は読みを歪めるため total < MIN_STATS_TOTAL なら null を返し
+// 呼び出し側で要素ごと隠す (推定を作らない)。
+const MIN_STATS_TOTAL = 5;
+export function formatInterestStats(stats) {
+  if (!stats || typeof stats !== "object" || Array.isArray(stats)) return null;
+  const total = Number(stats.total);
+  if (!Number.isInteger(total) || total < MIN_STATS_TOTAL) return null;
+  const counts = stats.counts && typeof stats.counts === "object" ? stats.counts : {};
+  const parts = INTERESTS.map((interest) => {
+    const count = Number(counts[interest] ?? 0);
+    return { interest, count, percent: Math.round((count / total) * 100) };
+  });
+  return { total, parts };
+}
+
+export { INTERESTS, DIAGNOSTIC_QUESTIONS, DETAILED_QUESTIONS, EVENT_TYPES, PHASES, AFFIRMATIVE_ANSWERS, MIN_STATS_TOTAL };

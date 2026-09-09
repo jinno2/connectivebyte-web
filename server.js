@@ -1,4 +1,4 @@
-import { appendFile, mkdir, stat } from "node:fs/promises";
+import { appendFile, mkdir, readFile, stat } from "node:fs/promises";
 import { createReadStream } from "node:fs";
 import { createServer } from "node:http";
 import { extname, join, normalize } from "node:path";
@@ -300,6 +300,33 @@ export function createRequestHandler(options = {}) {
         return;
       }
       sendJson(response, 202, { accepted: true });
+      return;
+    }
+
+    // GET /api/stats — 本番Worker GET /stats (api.connectivebyte.com) と同じ閉じた形の
+    // 匿名aggregate (local dev用)。events.jsonl の interest_selected をE/D/C/B/A別に
+    // 集計し total + 5関心の件数のみ返す (識別子なし)。
+    if (pathname === "/api/stats" && request.method === "GET") {
+      let lines = "";
+      try {
+        lines = await readFile(eventsFile, "utf8");
+      } catch {
+        lines = "";
+      }
+      const counts = { E: 0, D: 0, C: 0, B: 0, A: 0 };
+      for (const line of lines.split("\n")) {
+        if (line.length === 0) continue;
+        let event;
+        try {
+          event = JSON.parse(line);
+        } catch {
+          continue;
+        }
+        if (event?.name !== "interest_selected") continue;
+        const match = /^interest_([edcba])$/.exec(typeof event.cta_id === "string" ? event.cta_id : "");
+        if (match) counts[match[1].toUpperCase()] += 1;
+      }
+      sendJson(response, 200, { total: counts.E + counts.D + counts.C + counts.B + counts.A, counts });
       return;
     }
 
