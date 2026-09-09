@@ -71,7 +71,7 @@
     </nav>
   </header>
   <main>
-    <!-- 配信層メタ（読者非表示・本文bytes検証用）: asset_id=17-org-pdf campaign=floor-ceiling-001 framework_v=2.0.1 content_hash=0eb3daa3c53a5157aa914d4c45d94aab9eb635caf137265fecc5f94640a02c72 -->
+    <!-- 配信層メタ（読者非表示・本文bytes検証用）: asset_id=17-org-pdf campaign=floor-ceiling-001 framework_v=2.0.1 content_hash=3841084a695697c140cd4244dd4f859bfd9626d9d31883d6f3da274df18312d9 -->
     <pre id="asset-body">
 # 部門別・AI活用診断
 
@@ -140,7 +140,7 @@
 
 ## CTA
 
-申込
+[申込 — 部門別診断の実施支援](../../?utm_source=content_page&utm_medium=web&utm_campaign=floor-ceiling-001&utm_content=17-org-pdf#diagnostic)
 </pre>
     <p class="cta"><a href="../../?utm_source=content_page&amp;utm_medium=web&amp;utm_campaign=floor-ceiling-001#diagnostic">30秒で現在地を知る・5択診断を試す</a></p>
   </main>
@@ -199,6 +199,9 @@
       var h = t.match(/^(#{1,6})\s+(.*)$/);
       if (h) {
         var lv = h[1].length;
+        // 機械用セクション見出し「CTA」は読者面に出さない（本文末の機能リンクと
+        // ページ自身のCTAボタンが出す・2026-09-09自己レビューF2）
+        if (h[2].trim() === "CTA") { i += 1; continue; }
         out.push("<h" + lv + ">" + inline(h[2].replace(/\s*#+\s*$/, "")) + "</h" + lv + ">");
         i += 1; continue;
       }
