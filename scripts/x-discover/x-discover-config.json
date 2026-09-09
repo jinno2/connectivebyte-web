@@ -12,7 +12,7 @@
   "profiles": {
     "cb_discoverer": {
       "name": "AIラボ便",
-      "bio": "AIの発見を毎日1件速報。LLM・エージェント・ツール・セキュリティ。運営: lab.connectivebyte.com",
+      "bio": "AIの発見を毎日1件速報。LLM・エージェント・ツール・セキュリティ。実測の研究メール: news.connectivebyte.com 運営: lab.connectivebyte.com",
       "url": "https://lab.connectivebyte.com",
       "avatar": "scripts/x-discover/avatar-cb_discoverer.png"
     },
