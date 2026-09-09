@@ -668,26 +668,6 @@ function download(name, type, content) {
   setTimeout(() => URL.revokeObjectURL(url), 0);
 }
 
-function pdfContent() {
-  const stream = "BT /F1 18 Tf 64 760 Td (ConnectiveByte Organization Dialogue Guide) Tj 0 -45 Td /F1 11 Tf (1. Purpose: What outcome matters?) Tj 0 -28 Td (2. Disconnect: What is getting in the way?) Tj 0 -28 Td (3. Experiment: What can we try first?) Tj ET";
-  const objects = [
-    "<</Type/Catalog/Pages 2 0 R>>",
-    "<</Type/Pages/Kids[3 0 R]/Count 1>>",
-    "<</Type/Page/Parent 2 0 R/MediaBox[0 0 595 842]/Contents 4 0 R/Resources<</Font<</F1 5 0 R>>>>>>",
-    `<</Length ${stream.length}>>stream\n${stream}\nendstream`,
-    "<</Type/Font/Subtype/Type1/BaseFont/Helvetica>>"
-  ];
-  let documentBody = "%PDF-1.4\n";
-  const offsets = [];
-  objects.forEach((object, index) => {
-    offsets.push(new TextEncoder().encode(documentBody).length);
-    documentBody += `${index + 1} 0 obj\n${object}\nendobj\n`;
-  });
-  const xrefOffset = new TextEncoder().encode(documentBody).length;
-  const entries = offsets.map((offset) => `${String(offset).padStart(10, "0")} 00000 n `).join("\n");
-  return `${documentBody}xref\n0 6\n0000000000 65535 f \n${entries}\ntrailer<</Size 6/Root 1 0 R>>\nstartxref\n${xrefOffset}\n%%EOF`;
-}
-
 function saveConsent(analytics) {
   const current = getConsent();
   writeJson("consent", { analytics, email: current.email, decided: true });
@@ -765,7 +745,14 @@ document.addEventListener("click", (event) => {
     document.querySelector("#comparison-status").textContent = "ダウンロードしました。入力内容は端末に保存していません。";
   }
   if (action === "download-org") {
-    download("connectivebyte-organization-guide.pdf", "application/pdf", pdfContent());
+    // 完成PDF (17-org-pdf生成・content/配信) を素のfileとして落とす。生成源は
+    // scripts/build-org-pdf.mjs — app.js内での組み立てPDFは廃止 (2026-09-10 #4)。
+    const link = document.createElement("a");
+    link.href = "content/17-org-pdf/organization-guide.pdf";
+    link.download = "connectivebyte-organization-guide.pdf";
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
     track("org_pdf_downloaded", { asset_id: "organization_brief", cta_id: "org_pdf_download" });
   }
   if (action === "save-consent") saveConsent(document.querySelector("#analytics-consent").checked);

@@ -99,3 +99,23 @@ test("LP #apply 申込formは /apply endpoint・同意checkbox・PII分離文言
   // 法人名 (事業化層) はLPに出さない
   assert.equal(lp.includes("東京AIソリューションズ"), false);
 });
+
+test("17-org-pdf 完成PDF artifactは存在しLP・原稿page両面から配線される", async () => {
+  // 2026-09-10 残課題#4 (r4 F8): 記入式様式の完成PDF不在を閉じる。生成源は
+  // scripts/build-org-pdf.mjs・commit対象は生成済みPDF。app.js内組み立てPDF
+  // (英字placeholder) は廃止済みであることも検査する。
+  const pdfPath = path.join(repoRoot, "content/17-org-pdf/organization-guide.pdf");
+  const pdf = await readFile(pdfPath);
+  assert.ok(pdf.length >= 5000, `PDFが小さすぎる (${pdf.length} bytes)`);
+  assert.equal(pdf.subarray(0, 5).toString(), "%PDF-", "PDF magic不在");
+  // LP組織カード: button → app.js → 静的PDF (組み立てpdfContent廃止)
+  const lp = await readFile(path.join(repoRoot, "index.html"), "utf8");
+  assert.match(lp, /data-action="download-org"/);
+  assert.match(lp, /部門別・AI活用診断/);
+  const app = await readFile(path.join(repoRoot, "app.js"), "utf8");
+  assert.match(app, /content\/17-org-pdf\/organization-guide\.pdf/);
+  assert.equal(app.includes("function pdfContent"), false);
+  // 原稿page自身もPDFを配る (申込CTAの上に資産download)
+  const page = await readFile(path.join(repoRoot, "content/17-org-pdf/index.html"), "utf8");
+  assert.match(page, /href="organization-guide\.pdf" download=/);
+});
