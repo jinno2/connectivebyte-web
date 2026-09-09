@@ -67,3 +67,14 @@ test("sitemap.xml はインデックス許可ページのみを掲載する (noi
     }
   }
 });
+
+test("tracker page は live-stats で GET /stats を読む (少数非表示・local dev parity)", async () => {
+  // 2026-09-09 導線×計測設計: 計測をコンテンツにする面の常時表示。LP result view
+  // と同一規律 (total<5で非表示) と lab本番/local dev のendpoint切替を機械検査する。
+  const page = await readFile(path.join(repoRoot, "content/01-tracker-page/index.html"), "utf8");
+  assert.match(page, /id="live-interest-stats"/);
+  assert.match(page, /https:\/\/api\.connectivebyte\.com\/stats/);
+  assert.match(page, /"\/api\/stats"/);
+  assert.match(page, /total < 5/);
+  assert.match(page, /hidden/);
+});

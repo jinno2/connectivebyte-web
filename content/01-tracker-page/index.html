@@ -56,6 +56,7 @@
     .cta a:hover, .cta a:focus-visible { background: #284158; }
     .cta-sub { margin: 14px 0 0; font-size: 0.9rem; }
     .cta-sub a { color: var(--ink); text-decoration: underline; text-underline-offset: 3px; }
+    .live-stats { margin: 22px 0 0; padding: 12px 16px; font-size: .78rem; color: var(--muted); border: 1px dashed var(--line); background: var(--white); }
     footer { padding: 44px max(28px, calc((100vw - var(--max)) / 2)); display: flex; flex-wrap: wrap; align-items: center; gap: 12px 25px; font-size: .78rem; border-top: 1px solid var(--line); }
     footer p { margin: 0; }
     footer p:last-child { margin-left: auto; }
@@ -155,6 +156,7 @@
 </pre>
     <p class="cta"><a href="../../?utm_source=content_page&amp;utm_medium=web&amp;utm_campaign=floor-ceiling-tracker#diagnostic">30秒で現在地を知る・5択診断を試す</a></p>
     <p class="cta-sub">このトラッカーの更新通知を受け取る — <a href="https://news.connectivebyte.com/?utm_source=content_page&amp;utm_medium=web&amp;utm_campaign=newsletter-tracker">ConnectiveByte研究メール（読み切り数分・いつでも解除可）</a></p>
+    <p class="live-stats" id="live-interest-stats" hidden></p>
   </main>
   <footer>
     <a class="brand" href="../../">Connective<span>Byte</span></a>
@@ -292,6 +294,29 @@
     pre.removeAttribute("id");
     view.id = "asset-body";
     pre.hidden = true;
+  })();
+  </script>
+  <script>
+  // 計測をコンテンツにする面 (2026-09-09導線設計): 5択診断の匿名aggregateを
+  // GET /stats から読み、月次更新とは別にこの観測を実数で常時示す。
+  // LP result viewと同一規律 — total<5・fetch失敗は表示しない (捏造しない)。
+  (function () {
+    "use strict";
+    var box = document.getElementById("live-interest-stats");
+    if (!box) { return; }
+    var endpoint = location.hostname === "lab.connectivebyte.com"
+      ? "https://api.connectivebyte.com/stats"
+      : "/api/stats";
+    fetch(endpoint).then(function (response) { return response.json(); }).then(function (stats) {
+      var total = stats ? Number(stats.total) : NaN;
+      var counts = stats && stats.counts && typeof stats.counts === "object" ? stats.counts : {};
+      if (!Number.isInteger(total) || total < 5) { return; }
+      var parts = ["E", "D", "C", "B", "A"].map(function (key) {
+        return key + " " + Math.round((Number(counts[key] || 0) / total) * 100) + "%";
+      });
+      box.textContent = "このサイトの5択診断 — これまでの回答 " + total + "件（匿名集計）: " + parts.join("・");
+      box.hidden = false;
+    }).catch(function () { /* 表示しない */ });
   })();
   </script>
 </body>
