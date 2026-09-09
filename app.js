@@ -806,7 +806,7 @@ document.querySelector("#newsletter-form").addEventListener("submit", (event) =>
     writeJson("newsletter_registered", { email_registered: true, at: new Date().toISOString() });
     emailInput.value = "";
     document.querySelector("#email-consent").checked = false;
-    status.textContent = "登録を受け付けました。診断が詳細版（12問）に切り替わります。";
+    status.textContent = "登録を受け付けました。アドレスへ確認メールを送りました — 本文内のリンクをクリックすると購読が確定します（迷惑メールフォルダもご確認ください）。診断は詳細版（12問）に切り替わります。";
     refreshDiagnosticQuestions();
   }).catch(() => {
     status.textContent = "登録できませんでした。通信状況を確認して、もう一度お試しください。";

@@ -73,6 +73,8 @@ tbody tr:nth-child(even) td, tbody tr:nth-child(even) th { background: rgba(16, 
 .button { display: inline-flex; align-items: center; gap: .6rem; border: 0; border-radius: 2px; padding: 14px 20px; font-weight: 750; text-decoration: none; cursor: pointer; }
 .button-primary { background: var(--ink); color: var(--white); }
 .button-primary:hover, .button-primary:focus-visible { background: #284158; }
+.button-secondary { background: transparent; color: var(--ink); box-shadow: inset 0 0 0 2px var(--ink); }
+.button-secondary:hover, .button-secondary:focus-visible { background: rgba(16, 28, 44, 0.06); }
 .next-actions { display: flex; flex-wrap: wrap; gap: 12px; margin: 18px 0 0; }
 
 footer { padding: 44px max(28px, calc((100vw - var(--max)) / 2)); display: flex; flex-wrap: wrap; align-items: center; gap: 12px 25px; font-size: .78rem; border-top: 1px solid var(--line); }
