@@ -9,13 +9,15 @@
 token: /home/jinno/tas_nexus_cx_starter/.env の HUBSPOT_ACCESS_TOKEN
        (値はこのスクリプトから出力しない)
 
-tokenにschema系scopeはない → カスタムpropertyは作らない。標準property
-(company/website/hs_lead_status) + Note (時系列) + Task (due) で構成する。
+tokenのscope: crm.schemas.contacts.write 付き (2026-09-13) → カスタムproperty
+(outreachグループ: outreach_status/dossier_path/target_layer) を使う。
+hs_lead_status (標準enum) も並行して持たせる (UIフィルタ用)。
 
 コマンド:
   auth-check   tokenのAPI認証確認 (HTTP codeのみ出力)
-  sync         3target contact+note+taskの冪等シード (初回のみ作成・以後はHubSpotが正本)
-  list         contact一覧 (lead status込み)
+  setup        outreachグループ+カスタムproperty 3本の冪等作成
+  sync         3target contact+note+taskの冪等シード (値は空フィールドのみ埋める)
+  list         contact一覧 (dossier/outreach_status込み)
   tasks        未完了task一覧 [--due] は36h以内+overdueのみ
   digest       cron用: due/overdueの要約。新規overdue検出時は--inboxでINBOXへ1行
 """
@@ -71,13 +73,25 @@ def api_call(method: str, path: str, body: dict | None = None) -> tuple[int, dic
             return exc.code, {"error": "non-json"}
 
 
-# ── 初回シード (以後はHubSpotが正本 — ここを編集してもsyncは上書きしない) ────
+# ── 初回シード (以後はHubSpotが正本 — syncは空フィールドのみ埋め、手編集を上書きしない) ────
+
+CUSTOM_PROPS = [
+    {"name": "outreach_status", "label": "Outreach Status",
+     "type": "string", "fieldType": "text"},
+    {"name": "dossier_path", "label": "Dossier Path",
+     "type": "string", "fieldType": "text"},
+    {"name": "target_layer", "label": "Target Layer",
+     "type": "string", "fieldType": "text"},
+]
 
 TARGETS = [
     {
         "company": "quetab",
         "website": "quetab.com",
         "lead_status": "ATTEMPTED_TO_CONTACT",
+        "dossier_path": "~/business_notes/t0007_日本展開/dossier/quetab.md",
+        "outreach_status": "送信済み2026-09-06・返信なし・follow-up id=17文面承認待ち",
+        "target_layer": "bridge_game (B2C・提携候補)",
         "note": ("[CRM移行 2026-09-13] 事実の正本=~/business_notes/t0007_日本展開/dossier/quetab.md。"
                  "初回送信2026-09-06 (quetab.com contact form) → 返信なし。"
                  "follow-up draft id=17 (120語) 承認待ち。無反応2週=2026-09-20判定。"),
@@ -99,6 +113,9 @@ TARGETS = [
         "company": "valibot",
         "website": "valibot.dev",
         "lead_status": "UNQUALIFIED",
+        "dossier_path": "~/business_notes/t0007_日本展開/dossier/valibot.md",
+        "outreach_status": "完了 (X投稿08-31・Zenn記事09-02・提携対象外)",
+        "target_layer": "dev_tool (OSS・記事素材)",
         "note": ("[CRM移行 2026-09-13] 事実の正本=~/business_notes/t0007_日本展開/dossier/valibot.md。"
                  "完了: X投稿08-31・Zenn記事09-02。提携対象外 (記事素材として完結)。open taskなし。"),
         "tasks": [],
@@ -107,6 +124,9 @@ TARGETS = [
         "company": "k2-horizon (IFM)",
         "website": "ifm.ai",
         "lead_status": "UNQUALIFIED",
+        "dossier_path": "~/business_notes/t0007_日本展開/dossier/k2-horizon.md",
+        "outreach_status": "Zenn記事09-13公開済・提携対象外",
+        "target_layer": "dev_tool (open weights・記事素材)",
         "note": ("[CRM移行 2026-09-13] 事実の正本=~/business_notes/t0007_日本展開/dossier/k2-horizon.md。"
                  "Zenn記事09-13公開 (queue-008)。提携対象外 (open weights・記事素材)。open taskなし。"),
         "tasks": [],
@@ -120,6 +140,48 @@ def cmd_auth_check() -> int:
     code, _ = api_call("GET", "/crm/v3/objects/contacts?limit=1")
     print("HTTP", code)
     return 0 if code == 200 else 1
+
+
+def cmd_setup() -> int:
+    def _exists(code: int, body: dict) -> bool:
+        # 重複は409 Conflictで返る (2026-09-13実測)
+        return code == 409 or (code == 400
+                               and "already exists" in json.dumps(body).lower())
+    code, body = api_call("POST", "/crm/v3/properties/contacts/groups",
+                          {"name": "outreach", "label": "Outreach (t0007)"})
+    if code in (200, 201):
+        print("group outreach: created")
+    elif _exists(code, body):
+        print("group outreach: exists")
+    else:
+        print("group outreach: HTTP {} {}".format(code, json.dumps(body)[:150]))
+    for prop in CUSTOM_PROPS:
+        payload = dict(prop, groupName="outreach")
+        code, body = api_call("POST", "/crm/v3/properties/contacts", payload)
+        if code in (200, 201):
+            print("prop {}: created".format(prop["name"]))
+        elif _exists(code, body):
+            print("prop {}: exists".format(prop["name"]))
+        else:
+            print("prop {}: HTTP {} {}".format(
+                prop["name"], code, json.dumps(body)[:150]))
+    return 0
+
+
+def _seed_props(target: dict, cid: str) -> None:
+    """空フィールドのみ埋める (HubSpot側の手編集を上書きしない)。"""
+    fields = {k: target[k] for k in
+              ("dossier_path", "outreach_status", "target_layer")}
+    code, body = api_call("GET",
+                          "/crm/v3/objects/contacts/{}?properties={}".format(
+                              cid, ",".join(fields)))
+    current = body.get("properties", {}) if code == 200 else {}
+    missing = {k: v for k, v in fields.items() if not current.get(k)}
+    if not missing:
+        return
+    code, _ = api_call("PATCH", "/crm/v3/objects/contacts/" + cid,
+                       {"properties": missing})
+    print("  props {}: {}".format(",".join(missing), code))
 
 
 def _find_contact(company: str) -> str | None:
@@ -173,6 +235,9 @@ def cmd_sync() -> int:
                     "company": target["company"],
                     "website": target["website"],
                     "hs_lead_status": target["lead_status"],
+                    "dossier_path": target["dossier_path"],
+                    "outreach_status": target["outreach_status"],
+                    "target_layer": target["target_layer"],
                 },
             })
             print("contact {}: created {}".format(target["company"], code))
@@ -190,6 +255,7 @@ def cmd_sync() -> int:
                          "/note_to_contact".format(nbody["id"], cid))
         else:
             print("contact {}: exists ({})".format(target["company"], cid))
+            _seed_props(target, cid)
         for task in target["tasks"]:
             if _find_task(task["subject"]) is not None:
                 print("  task exists: {}".format(task["subject"][:40]))
@@ -221,16 +287,19 @@ def cmd_sync() -> int:
 def cmd_list() -> int:
     code, body = api_call(
         "GET",
-        "/crm/v3/objects/contacts?limit=50&properties=company,website,hs_lead_status",
+        "/crm/v3/objects/contacts?limit=50&properties=company,website,"
+        "hs_lead_status,dossier_path,outreach_status",
     )
     if code != 200:
         print("HTTP", code, json.dumps(body)[:200])
         return 1
     for row in body.get("results", []):
         p = row.get("properties", {})
+        if not p.get("dossier_path"):
+            continue  # t0007管理外 (jinnoの既存contact等) は表示しない
         print("[{}] {} | {} | {}".format(
-            row["id"], p.get("company"), p.get("website"),
-            p.get("hs_lead_status")))
+            row["id"], p.get("company"), p.get("hs_lead_status"),
+            (p.get("outreach_status") or "")[:56]))
     return 0
 
 
@@ -320,6 +389,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="cmd", required=True)
     sub.add_parser("auth-check")
+    sub.add_parser("setup")
     sub.add_parser("sync")
     sub.add_parser("list")
     tasks_parser = sub.add_parser("tasks")
@@ -329,6 +399,8 @@ def main() -> int:
     args = parser.parse_args()
     if args.cmd == "auth-check":
         return cmd_auth_check()
+    if args.cmd == "setup":
+        return cmd_setup()
     if args.cmd == "sync":
         return cmd_sync()
     if args.cmd == "list":
