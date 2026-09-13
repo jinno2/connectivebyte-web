@@ -435,7 +435,7 @@ def cmd_sent(args) -> int:
     rows = load_queue()
     for i, r in enumerate(rows):
         if r['id'] == args.id:
-            if r['kind'] != 'outreach' or r['status'] != 'approved':
+            if r['kind'] not in ('outreach', 'followup') or r['status'] != 'approved':
                 print(f'id={args.id} は approved文面ではない')
                 return 1
             update_queue(i, status='sent', channel=args.channel, sent_at=now_iso())
