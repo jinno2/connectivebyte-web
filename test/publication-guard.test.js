@@ -11,7 +11,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { readFile } from "node:fs/promises";
+import { scanFile, artifactFiles } from "./pdf-publication.js";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 
@@ -73,8 +73,8 @@ const BANNED_PATTERNS = Object.freeze([
 
 // test/ 自身は禁止語を文字列として含むため対象外。それ以外のgit管理ファイル全件。
 function trackedPublicFiles() {
-  const out = execFileSync("git", ["ls-files"], { cwd: repoRoot, encoding: "utf8" });
-  return out.split("\n").filter((f) => f && !f.startsWith("test/"));
+  const out = execFileSync("git", ["ls-files", "-z"], { cwd: repoRoot, encoding: "utf8" });
+  return out.split("\0").filter((f) => f && !f.startsWith("test/"));
 }
 
 test("公開ファイルに詳細定義由来の用語が混入していない", async () => {
@@ -85,12 +85,7 @@ test("公開ファイルに詳細定義由来の用語が混入していない",
   }
   const violations = [];
   for (const file of files) {
-    let content;
-    try {
-      content = await readFile(path.join(repoRoot, file), "utf8");
-    } catch {
-      continue;
-    }
+    const content = await scanFile(path.join(repoRoot, file));
     for (const pattern of BANNED_PATTERNS) {
       if (pattern.test(content)) violations.push(`${file}: /${pattern.source}/`);
     }
@@ -114,3 +109,18 @@ test("BANNED_TERMS と BANNED_PATTERNS が同期している (片方だけ追加
     );
   }
 });
+
+if (process.env.PUBLICATION_ROOT !== undefined) {
+  test("upload直前の公開成果物を全件検査する", async () => {
+    assert.ok(process.env.PUBLICATION_ROOT.trim(), "PUBLICATION_ROOT が空");
+    const root = path.resolve(repoRoot, process.env.PUBLICATION_ROOT);
+    const files = await artifactFiles(root);
+    assert.ok(files.includes(path.join(root, "index.html")), "公開成果物に index.html がない");
+    for (const file of files) {
+      const content = await scanFile(file);
+      for (const pattern of BANNED_PATTERNS) {
+        assert.ok(!pattern.test(content), `${path.relative(root, file)}: /${pattern.source}/`);
+      }
+    }
+  });
+}

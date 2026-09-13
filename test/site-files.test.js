@@ -119,3 +119,17 @@ test("17-org-pdf 完成PDF artifactは存在しLP・原稿page両面から配線
   const page = await readFile(path.join(repoRoot, "content/17-org-pdf/index.html"), "utf8");
   assert.match(page, /href="organization-guide\.pdf" download=/);
 });
+
+
+test("Pages は同じjobでテストと配信木検査に合格してから公開する", async () => {
+  const workflow = await readFile(path.join(repoRoot, ".github/workflows/deploy_pages.yml"), "utf8");
+  const steps = ["run: npm test", "name: Prepare publish tree", "PUBLICATION_ROOT: _site",
+    "run: node --test test/publication-guard.test.js", "uses: actions/upload-pages-artifact@", "uses: actions/deploy-pages@"];
+  let previous = -1;
+  for (const step of steps) {
+    const position = workflow.indexOf(step);
+    assert.ok(position > previous, `${step} が欠落、または公開ゲートの順序が不正`);
+    previous = position;
+  }
+  assert.doesNotMatch(workflow, /continue-on-error:|if:\s*\$?\{?\{?\s*always\(/);
+});
