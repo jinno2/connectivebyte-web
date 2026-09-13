@@ -185,6 +185,8 @@ AIの話を聞くたびに、やることが増えるだけで前に進まない
       var h = t.match(/^(#{1,6})\s+(.*)$/);
       if (h) {
         var lv = h[1].length;
+        // 機械用見出しは表示せず、続く本文リンクと配信shellのCTAを残す。
+        if (h[2].trim() === "CTA") { i += 1; continue; }
         out.push("<h" + lv + ">" + inline(h[2].replace(/\s*#+\s*$/, "")) + "</h" + lv + ">");
         i += 1; continue;
       }

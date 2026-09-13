@@ -8,8 +8,23 @@ import assert from "node:assert/strict";
 import { readFile, readdir } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
+import { createHash } from "node:crypto";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+
+test("配信ページの本文bytesと承認metadataのhashが一致する", async () => {
+  for (const asset of ["01-canonical", "02-entry-read", "15-diagnostic-lp", "17-org-pdf"]) {
+    const dir = path.join(repoRoot, "content", asset);
+    const html = await readFile(path.join(dir, "index.html"), "utf8");
+    const metadata = JSON.parse(await readFile(path.join(dir, "metadata.json"), "utf8"));
+    const body = html.match(/<pre id="asset-body">\n([\s\S]*?)<\/pre>/);
+    assert.ok(body, `${asset}: 本文がない`);
+    assert.equal(metadata.asset_id, asset);
+    const hash = createHash("sha256").update(body[1], "utf8").digest("hex");
+    assert.equal(hash, metadata.content_hash, `${asset}: 本文と承認版が不一致`);
+    assert.ok(html.includes(`content_hash=${hash} -->`), `${asset}: 表示用metadataが不一致`);
+  }
+});
 
 test("deploy workflow は favicon.svg と sitemap.xml を配信木に含める", async () => {
   // 19a0caf で設置した2資産がpublish tree外でlive 404になった実測への回帰防止。
