@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OzBrain 検証レポート ─ AIエージェントが読み書きする社内ナレッジの日本語挙動 (2026-09-13)</title>
+<meta name="description" content="AIエージェントとチームが共有するナレッジベースOzBrainを、日本語の社内規約ドキュメントで実測した検証レポート。日本語の格納・更新・監査ログは完全に動作し、検索機能のみ英語lexical一致で日本語クエリが0件だった構造を2026-09-13時点で報告する。">
+<meta property="og:title" content="OzBrain 検証レポート ─ AIエージェント共有ナレッジの日本語挙動">
+<meta property="og:description" content="日本語ドキュメントで格納・更新・監査を実測。検索だけが英語前提の構造を見つけた単発検証の記録。">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://lab.connectivebyte.com/content/18-blog/ozbrain-ja-knowledge/">
+<meta name="robots" content="index,follow">
+<link rel="canonical" href="https://lab.connectivebyte.com/content/18-blog/ozbrain-ja-knowledge/">
+<link rel="stylesheet" href="../article.css">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<script type="module" src="../../../app.js"></script>
+</head>
+<body>
+<a class="skip-link" href="#article">本文へ移動</a>
+<header class="site-header">
+  <a class="brand" href="../../../" aria-label="ConnectiveByte ホーム">Connective<span>Byte</span></a>
+  <nav aria-label="メインナビゲーション">
+    <a href="../../../#purpose">Purpose</a>
+    <a href="../../../#vision">Vision</a>
+    <a class="nav-cta" href="../../../#diagnostic">5択を始める</a>
+  </nav>
+</header>
+
+<main id="article" class="article">
+  <p class="kicker">FRONTIER NOTE / 検証報告</p>
+  <h1>OzBrain 検証レポート ─ AIエージェントが読み書きする社内ナレッジ基盤の日本語挙動</h1>
+  <p class="article-meta">
+    <span class="stamp">最終確認: 2026-09-13</span>
+    <span>対象: ozbrain.com (運営: Monsef Holdings Pty Ltd・豪メルボルン)</span>
+    <span>検証経路: 無料アカウント + MCP接続プロトコル直接駆動</span>
+  </p>
+  <p class="lead">ClaudeやChatGPTなど複数のAIエージェントが同じナレッジベースを読み書きする海外サービスOzBrainを、2026年9月13日に日本語ドキュメントで実測した。日本語の格納・更新・監査記録はすべて正しく動作した一方、検索機能だけが英語前提の設計で、日本語クエリがすべて0件になる構造を確認した。</p>
+
+  <section class="summary-box" aria-labelledby="summary-title">
+    <p class="box-label" id="summary-title">TL;DR</p>
+    <ul>
+      <li><strong>日本語の格納・自動要約・バージョン更新・監査ログは動作した</strong> (2026-09-13実測・格納は読み出しで完全一致)。</li>
+      <li><strong>検索 (search) 機能のみ英語のlexical一致で、日本語クエリは0件</strong>。公式の接続仕様自体が "English lexical match" と明記している。小規模な利用では記事一覧 (routing index) 経由で日本語は支障なく、規模が伸びて検索に頼る段階で日本語だけ到達できなくなる構造。</li>
+      <li><strong>誰向きか:</strong> 本検証の規模 (一覧が読める範囲) では日本語の読み書きは支障なく動作。ナレッジが増えて検索に依存する段階では、日本語対応の確認が前提になる。数値は単発検証の実測値。</li>
+    </ul>
+  </section>
+
+  <nav class="toc" aria-label="目次">
+    <p class="box-label">目次</p>
+    <ol>
+      <li><a href="#background">発見経緯</a></li>
+      <li><a href="#conditions">検証条件</a></li>
+      <li><a href="#results">実測結果 (比較表)</a></li>
+      <li><a href="#analysis">観察される構造: 検索だけが英語前提</a></li>
+      <li><a href="#limits">未検証項目と有効期限</a></li>
+      <li><a href="#service">サービス基本情報</a></li>
+      <li><a href="#next">次の一歩</a></li>
+    </ol>
+  </nav>
+
+  <h2 id="background">発見経緯</h2>
+  <p>2026年8月21日、海外の技術系掲示板Hacker Newsに「Show HN: OzBrain, a shared brain for knowledge between agents and your team」と題するスレッドが投稿された。確認時点 (2026年9月13日) でポイント93・コメント59。投稿者は開発者のDarius Monsef氏 (オーストラリア・メルボルン) で、コメント欄の質問への応対を続けている。</p>
+  <p>なお、本稿の確認範囲 (2026年9月13日・Web検索で「OzBrain」と日本語キーワードの組合せ) では、日本語圏におけるOzBrainの紹介記事や言及は確認されていない。</p>
+
+  <h2 id="conditions">検証条件</h2>
+  <p>2026年9月13日に無料アカウントで実測検証を実施した。</p>
+  <ul>
+    <li>アカウント: メールアドレスによるワンタイムコードlogin (パスワードなし)・無料プラン (記事数上限50)</li>
+    <li>検証経路: ブラウザのdashboardに加え、公式の接続仕様 (MCP over HTTP・OAuth) に従って自作スクリプトでAPIを直接駆動</li>
+    <li>投入ドキュメント: 日本語の社内規則風の記事「経費精算規約」(交通費の精算条件を記したmarkdown・251字) と、対照用の同内容英語記事</li>
+    <li>確認項目: 格納精度・自動要約・バージョン更新・監査ログ・検索の言語別挙動</li>
+  </ul>
+
+  <h2 id="results">実測結果 (比較表)</h2>
+  <p>単発検証のため、各数値は1回の観測値である。</p>
+  <div class="table-wrap">
+    <table>
+      <caption>OzBrain の日本語挙動 実測結果 (2026-09-13・無料プラン・dashboard + MCP直接駆動)</caption>
+      <thead>
+        <tr><th scope="col">軸</th><th scope="col">結果</th><th scope="col">観測内容</th></tr>
+      </thead>
+      <tbody>
+        <tr><th scope="row">日本語の格納</th><td>動作</td><td>書き込み後の読み出しでtitle・本文とも完全一致 (251字)</td></tr>
+        <tr><th scope="row">自動要約 (description導出)</th><td>動作</td><td>日本語本文から正確な一文「片道1,500円超の移動は事前承認を要する。」を自動生成</td></tr>
+        <tr><th scope="row">バージョン更新</th><td>動作</td><td>v1→v2の置換が正しく反映・readは常に現行版を返す・編集前に対象記事の読了 (read receipt) が必須</td></tr>
+        <tr><th scope="row">監査ログ</th><td>動作</td><td>書き込み提案・確定の全eventに時刻・実行者が記録される</td></tr>
+        <tr><th scope="row">記事一覧 (routing index)</th><td>動作</td><td>日本語title・要約が一覧に掲載され、エージェント側での参照が可能</td></tr>
+        <tr><th scope="row">検索 (日本語)</th><td><strong>0件</strong></td><td>「経費精算」「交通費」「領収書 いつまで」いずれも0件 (titleの語を含めても)</td></tr>
+        <tr><th scope="row">検索 (英語・対照)</th><td>動作</td><td>対照記事の本文語「prior approval」で一致を返す</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2 id="analysis">観察される構造: 検索だけが英語前提</h2>
+  <p>検索機能の入力仕様は接続仕様 (inputSchema) 上で <code>"Search query (English lexical match over title, description, body)"</code> と自己記述されており、日本語クエリが0件になるのは仕様どおりの動作と見られる。この記述からは、日本語の形態素解析や意味検索の層を含まない、英語の字句一致による照合設計と読める。</p>
+  <p>重要なのは影響が規模依存することである。本検証時点の設計では、記事一覧 (routing index) に日本語のtitleと要約が正しく載り、個別記事の読み取りも日本語で正確に動く。一覧がコンテキストに収まる規模なら、日本語ドキュメントの運用に支障はない。しかしナレッジが増えて一覧を全部は読めず検索に頼る段階になると、<strong>日本語で書かれた記事だけに到達できなくなる</strong>。「英語では動くが、日本語の導入では特定の機能で止まる」の実例として記録に値する。</p>
+  <p>また接続プロトコル側は逆に丁寧な作りである。書き込みは必ず「提案 (stage) → 確定 (promote)」の二段階で、編集前に現行版の読了が強制され、更新の衝突に備えた調停 (dispute) 機構も備わる。エージェントによる自動書き込みを想定した、開発途上サービスとしては手の込んだ安全設計だと観察された。</p>
+
+  <section class="note-box" id="limits" aria-labelledby="limits-title">
+    <p class="box-label" id="limits-title">未検証項目と有効期限</p>
+    <ul>
+      <li>有料プラン (Pro $20/月・Max $99/月) およびenterprise共有 (組織横断のbrains) の実挙動</li>
+      <li>実際のClaude / ChatGPT / Geminiコネクタ経由の挙動 (本稿はプロトコル直接駆動による検証)</li>
+      <li>一覧が読み切れなくなる規模でのrouting indexの挙動と、検索依存への移行条件</li>
+      <li>公式が表明するセキュリティ要件 (保存時暗号化・テナント分離等) の独立確認</li>
+      <li><strong>有効期限:</strong> 本稿の数値はいずれも2026年9月13日の単発検証に基づく。特に検索の言語仕様は開発初期段階のサービスであり、日本語対応が追加される可能性がある。再現性の保証は意図的に行わない。</li>
+    </ul>
+  </section>
+
+  <h2 id="service">サービス基本情報</h2>
+  <div class="table-wrap">
+    <table>
+      <caption>ozbrain.com の基本情報 (いずれも2026年9月13日確認)</caption>
+      <thead>
+        <tr><th scope="col">項目</th><th scope="col">内容</th></tr>
+      </thead>
+      <tbody>
+        <tr><th scope="row">名称</th><td>OzBrain</td></tr>
+        <tr><th scope="row">URL</th><td><a href="https://ozbrain.com" target="_blank" rel="noopener noreferrer">https://ozbrain.com</a></td></tr>
+        <tr><th scope="row">用途</th><td>AIエージェントとチームが読み書きする共有ナレッジベース (構造化記事・バージョン管理・監査ログ)</td></tr>
+        <tr><th scope="row">運営</th><td>Monsef Holdings Pty Ltd (オーストラリア)・開発者 Darius Monsef氏</td></tr>
+        <tr><th scope="row">接続方式</th><td>MCP over HTTP (Claude / ChatGPT / Gemini / Cursor等のコネクタ・URLは <code>https://ozbrain.com/api/mcp</code>)</td></tr>
+        <tr><th scope="row">料金</th><td>無料 (記事50まで) / Pro $20/月 (500記事) / Max $99/月 (5,000記事) / enterpriseは個別。紹介リンク経由のsignupで+50記事</td></tr>
+        <tr><th scope="row">認証</th><td>メールによるワンタイムコード (パスワードなし)</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2 id="next">次の一歩</h2>
+  <p>この記事は、気になるサービスを実際に動かして調べた記録である。候補同士を比べる前の整理には、<a href="../../02-entry-read/index.html">同じ形式で候補を並べる入口の記事</a>が使える。自分の関心から次に触れる対象を選びたい場合は、<a href="../../../#diagnostic">ConnectiveByteの5択診断</a>でいま最も近い関心をひとつ選べる。</p>
+  <div class="next-actions">
+    <a class="button button-primary" href="../../../#diagnostic">関心から次を選ぶ (5択・所要30秒) <span aria-hidden="true">→</span></a>
+    <a class="button button-secondary" href="https://news.connectivebyte.com/?utm_source=content_page&amp;utm_medium=web&amp;utm_campaign=newsletter-ozbrain">実測の更新を研究メールで受け取る <span aria-hidden="true">→</span></a>
+  </div>
+</main>
+
+<footer>
+  <a class="brand" href="../../../">Connective<span>Byte</span></a>
+  <p>ConnectiveByte — 海外AIサービスの日本語圏紹介。</p>
+  <p>このページはCookieや端末への保存を使わないアクセス集計のみを行います。</p>
+  <p class="privacy-note">© 2026 ConnectiveByte</p>
+</footer>
+</body>
+</html>
