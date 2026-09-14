@@ -24,11 +24,21 @@ class DevinPolicyTest(unittest.TestCase):
     def test_non_astra_model_reaches_the_mocked_cli_boundary(self):
         completed = type('Completed', (), {'stdout': 'ok\n', 'stderr': '', 'returncode': 0})()
         with patch.dict(os.environ, {'DEVIN_MODEL': 'gpt-6-luna'}), \
-                patch.object(llm_backend.shutil, 'which', return_value='/usr/bin/devin'), \
-                patch.object(llm_backend.os.path, 'exists', return_value=True), \
+                patch.object(llm_backend, 'DEVIN_LAUNCHER', pathlib.Path('/usr/bin/devin')), \
+                patch.object(llm_backend, 'DEVIN_GUARD_MARKER', 'guard'), \
+                patch.object(pathlib.Path, 'is_file', return_value=True), \
+                patch.object(pathlib.Path, 'read_text', return_value='guard'), \
                 patch.object(llm_backend.subprocess, 'run', return_value=completed) as run:
             self.assertEqual(llm_backend._devin('prompt', 1), 'ok')
             self.assertEqual(run.call_args.args[0][-2:], ['--model', 'gpt-6-luna'])
+
+    def test_unmanaged_devin_binary_is_not_used_as_a_fallback(self):
+        with patch.dict(os.environ, {'DEVIN_MODEL': 'gpt-6-luna'}), \
+                patch.object(llm_backend, 'DEVIN_LAUNCHER', pathlib.Path('/missing/devin')), \
+                patch.object(llm_backend.shutil, 'which', return_value='/usr/bin/devin'), \
+                patch.object(llm_backend.subprocess, 'run') as run:
+            self.assertIsNone(llm_backend._devin('prompt', 1))
+            run.assert_not_called()
 
 
 if __name__ == '__main__':

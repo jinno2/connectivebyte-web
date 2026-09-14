@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import json
 import os
+import pathlib
 import shutil
 import subprocess
 import tempfile
@@ -25,6 +26,8 @@ import urllib.request
 
 LITELLM_URL = 'http://localhost:14000/v1/chat/completions'
 ASTRA_POLICY_MESSAGE = '      [llm] Devin Astra model is disabled by fleet policy'
+DEVIN_LAUNCHER = pathlib.Path('/home/jinno/.local/bin/devin')
+DEVIN_GUARD_MARKER = 'TAS-ASTRA-GUARD-MANAGED'
 
 
 def _contains_astra(value: str | None) -> bool:
@@ -58,10 +61,17 @@ def _devin(prompt: str, timeout: int) -> str | None:
     if _contains_astra(model):
         print(ASTRA_POLICY_MESSAGE)
         return None
-    bin_ = shutil.which('devin') or '/home/jinno/.local/bin/devin'  # cron PATH外対策
-    if not os.path.exists(bin_):
-        print(f'      [llm] devin not found: {bin_}')
+    try:
+        guarded_launcher = (DEVIN_LAUNCHER if DEVIN_LAUNCHER.is_file() and
+                            DEVIN_GUARD_MARKER in DEVIN_LAUNCHER.read_text(
+                                encoding='utf-8', errors='replace')[:512]
+                            else None)
+    except OSError:
+        guarded_launcher = None
+    if guarded_launcher is None:
+        print(f'      [llm] guarded devin launcher not found: {DEVIN_LAUNCHER}')
         return None
+    bin_ = str(guarded_launcher)
     cmd = [bin_, '-p', prompt,
            '--respect-workspace-trust', 'false']  # print modeはuntrusted dirで失敗するため
     if model:
