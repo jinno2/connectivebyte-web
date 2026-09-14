@@ -23,7 +23,7 @@ import os
 import pathlib
 import sys
 
-from collect import persona_lines
+from collect import persona_lines, persona_review_draft
 from llm_backend import llm_text
 from x_discover_rules import (BANNED_WORDS, ask_is_interrogative, banned_hits,
                               media_ok, preview_key)
@@ -211,6 +211,19 @@ def main() -> int:
             row['trial_enrich_violation'] = violation
             print(f'  [enrich] {key}: 規律違反 ({violation}) — 旧3行維持')
             continue
+        # 投稿前ペルソナ全件チェック (2026-09-14)。第二起草経路も審査を通る。
+        # 審査不能=旧3行維持でtrial_statusを上げない (翌朝retry)・ngも差し替えない。
+        verdict = persona_review_draft(draft['hook'], draft['take'], draft['ask'],
+                                       row.get('title', ''), row.get('genre_jp', ''))
+        if verdict is None:
+            row['trial_enrich_status'] = 'persona_review_fail'
+            print(f'  [enrich] {key}: persona審査不能 — 旧3行維持 (翌朝retry)')
+            continue
+        if verdict['verdict'] != 'pass':
+            row['trial_enrich_status'] = 'persona_ng'
+            row['trial_enrich_violation'] = 'persona_ng: ' + verdict.get('reason', '')
+            print(f'  [enrich] {key}: persona ng ({verdict.get("reason", "")}) — 旧3行維持')
+            continue
         if 'trial_original' not in row:
             row['trial_original'] = {k: row.get(k, '') for k in ('hook', 'take', 'ask')}
         row.update(draft)
@@ -218,6 +231,8 @@ def main() -> int:
         row['trial_report'] = (rep.get('verdict') or {}).get('summary_ja', '')
         row['trial_report_md'] = str((TRIALS_DIR / key / 'report.md').resolve())
         row['trial_enriched_at'] = dt.datetime.now().astimezone().isoformat(timespec='seconds')
+        row['persona_review'] = {'verdict': 'pass', 'reason': verdict.get('reason', ''),
+                                 'reviewed_at': row['trial_enriched_at']}
         row.pop('trial_enrich_status', None)
         row.pop('trial_enrich_violation', None)
         changed += 1

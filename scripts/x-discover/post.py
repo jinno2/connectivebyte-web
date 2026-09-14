@@ -7,6 +7,10 @@ collect.py が溜めた queue (~/.local/share/cb-fleet/discover-queue.jsonl) の
 steering(却下・品質確認)であり、reject した draft は投稿対象外のまま。
 污垢 (status=not_created) の間は何もしない = cronに入れても安全。
 
+2026-09-14〜: 投稿前ペルソナ全件チェック (fail-closed)。collect.py が付与した
+persona_review (LLM審査・x-discoverer.yaml) の verdict=pass 以外は投稿しない。
+ng → blocked (banned_wordと同一扱い)・unreviewed/無印 → 翌朝collect rereview待ち。
+
   python3 post.py --dry-run
   python3 post.py
 
@@ -374,6 +378,18 @@ def main() -> int:
         d = pick_draft(entries, today)
         if d is None:
             log({'event': 'skip', 'account': alias, 'reason': 'no eligible draft within 48h'})
+            continue
+        # 投稿前ペルソナ全件チェック (2026-09-14・fail-closed)。無印draftは
+        # 旧queue由来でも投稿不可 — 翌朝collect rereviewが判定を付ける。
+        pr = d.get('persona_review') or {}
+        if pr.get('verdict') != 'pass':
+            if pr.get('verdict') == 'ng':
+                d['status'] = 'blocked'
+                d['blocked_reason'] = 'persona_ng: ' + str(pr.get('reason', ''))
+                save_queue(entries)
+            log({'event': 'skip', 'account': alias,
+                 'reason': f"persona_review: {pr.get('verdict', 'missing')}"})
+            rc = 1
             continue
         text = build_text(d, include_url)
         # §11機械検査 (fail-closed): 承認済みでも誇張語を含めば投稿拒否し

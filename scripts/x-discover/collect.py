@@ -185,14 +185,17 @@ def fetch_excerpt(url: str, limit: int = 1600) -> str:
 
 
 def persona_lines() -> list[str]:
-    """media persona (publishing-engine/personas/x-fleet.yaml) を起草prompt行へ変換。
+    """media persona (publishing-engine/personas/x-discoverer.yaml) をprompt行へ変換。
 
+    媒体=x-discoverer (cb_discoverer 垢・発掘メディア) に対応する配備は
+    x-discoverer.yaml (PER-JP-0010・CB-B2探索期「短い実演」)。x-fleet.yaml
+    (PER-JP-0008 CB-B1) はP4事業媒体の別面 — 誤接続を2026-09-14修正。
     全媒体ペルソナレビュー必須(2026-09-14) — persona yaml未接続の起草は禁止。
     yaml不在/壊れ=例外→llm_draftがNone→draftは【要起草】→post.pyがskip (fail-closed)。
     """
     path = os.environ.get(
         'PERSONA_YAML',
-        str(pathlib.Path.home() / 'connectivebyte-publishing-engine/personas/x-fleet.yaml'))
+        str(pathlib.Path.home() / 'connectivebyte-publishing-engine/personas/x-discoverer.yaml'))
     text = pathlib.Path(path).read_text(encoding='utf-8')
     out = []
     for key in ('three_seconds', 'read_through', 'action'):
@@ -200,7 +203,67 @@ def persona_lines() -> list[str]:
         if not m:
             raise ValueError(f'persona yaml missing key: {key} ({path})')
         out.append(f'{key}: {m.group(1).strip()}')
-    return ['読者ペルソナ (CB-B1独立者・タイムラインで3秒「自分の仕事で試せる観測か」を判定):'] + out
+    return ['読者ペルソナ (CB-B2探索期・タイムラインで3秒「未知の変化として自分の関心に関係があるか」を判定):'] + out
+
+
+def persona_review_draft(hook: str, take: str, ask: str,
+                         title: str = '', genre_jp: str = '') -> dict | None:
+    """投稿前ペルソナ全件チェック (LLM審査・2026-09-14)。
+
+    「X投稿は投稿前に全件ペルソナチェック」の機構部品。起草とは別の1呼出で、
+    x-discoverer personaの3段階 (3秒/読了/行動) をなり切り判定させる。
+    戻り値: {'verdict': 'pass'|'ng', 'reason': str} / 審査不能時は None
+    (LLM全滅・応答不備・yaml不在)。Noneをpassに替えない — 呼び出し側は
+    unreviewedとして記録し、post.pyが投稿を拒む (fail-closed)。
+    """
+    if os.environ.get('LLM_BACKEND') != 'codex' and not os.environ.get('LITELLM_API_KEY'):
+        return None
+    try:
+        persona = persona_lines()
+    except (OSError, ValueError):
+        return None
+    prompt = '\n'.join([
+        'あなたはX投稿の投稿前審査者。次の読者ペルソナになり切り、投稿案を判定する。',
+        *persona,
+        '判定はペルソナの3段階に忠実に: ①3秒 (タイムラインで止まるか) ②読了 '
+        '(何の観測か一文でつかめるか・未定義語に依存しないか) ③行動 '
+        '(追跡リストに入れる/正本を見に行く/様子を見る、のどれかが決まるか)',
+        'ngにするのはこの種の欠陥だけ: 未定義語に依存して単体でつかえない / '
+        '自説が素材・題名と繋がらない / 題名やURLに無い固有名詞の創作 / '
+        '一般論の繰り返しで観測そのものが伝わらない。',
+        '文章の好みや「特に驚かない」はng理由にしない (それはこの媒体のbarではない)。',
+    ])
+    if title:
+        prompt += f'\n題名: {title}'
+    if genre_jp:
+        prompt += f'\nジャンル: {genre_jp}'
+    prompt += '\n投稿案:\n' + '\n'.join([hook, take, '', ask]) + '\n' + '\n'.join([
+        '出力形式 (2行のみ・他は書かない):', 'verdict: pass', 'reason: 40字以内の根拠',
+    ])
+    text = llm_text(prompt)
+    if not text:
+        return None
+    verdict = reason = None
+    for line in text.splitlines():
+        line = line.strip()
+        m = re.match(r'^verdict:\s*(pass|ng)\s*$', line)
+        if m:
+            verdict = m.group(1)
+        m = re.match(r'^reason:\s*(.+)$', line)
+        if m and reason is None:
+            reason = m.group(1).strip()[:120]
+    if verdict not in ('pass', 'ng'):
+        return None
+    return {'verdict': verdict, 'reason': reason or ''}
+
+
+def attach_persona_review(draft: dict, title: str = '', genre_jp: str = '') -> dict:
+    """draftへ persona_review を付与 (審査不能は unreviewed — 無印投稿禁止)。"""
+    verdict = persona_review_draft(draft.get('hook', ''), draft.get('take', ''),
+                                   draft.get('ask', ''), title, genre_jp)
+    if verdict is None:
+        return {'verdict': 'unreviewed', 'reason': '審査LLM失敗 (翌朝collectが再審査)'}
+    return verdict
 
 
 def llm_prompt(item: dict, genre_jp: str, recent_hooks: list[str], excerpt: str = '') -> str:
@@ -238,7 +301,7 @@ def llm_prompt(item: dict, genre_jp: str, recent_hooks: list[str], excerpt: str 
 
 
 def llm_draft(item: dict, genre_jp: str, recent_hooks: list[str],
-              excerpt: str = '') -> dict | None:
+              excerpt: str = '', note: str = '') -> dict | None:
     """LLMで一句+自説+問いを起草 (backend=LLM_BACKEND env)。
 
     litellm: proxy localhost:14000経由・modelはLITELLM_MODEL env。
@@ -255,6 +318,8 @@ def llm_draft(item: dict, genre_jp: str, recent_hooks: list[str],
     except (OSError, ValueError) as e:
         print(f'      [llm] persona gate: {e}')
         return None
+    if note:
+        prompt += '\n' + note
     def call(p: str) -> dict | None:
         text = llm_text(p)
         if not text:
@@ -317,12 +382,116 @@ def refill_placeholders(dry: bool = False, limit: int = 3) -> int:
         got = llm_draft(item, r.get('genre_jp', ''), hooks, fetch_excerpt(item['url']))
         if got:
             r.update(got)
+            r['persona_review'] = attach_persona_review(r, item['title'], r.get('genre_jp', ''))
             n += 1
             print(f'  [refill] {item["title"][:60]}')
             print(f'      hook: {r["hook"]}')
+            print(f"      persona: {r['persona_review']['verdict']}")
     if n and not dry:
         QUEUE.write_text(''.join(json.dumps(x, ensure_ascii=False) + '\n' for x in rows))
         print(f'refilled: {n} rows -> {QUEUE}')
+    return n
+
+
+def rereview_unreviewed(dry: bool = False, limit: int = 3, today: dt.date | None = None) -> int:
+    """persona_review無し/unreviewedの実文draftを再審査する (自己修復・2026-09-14)。
+
+    審査LLM失敗で unreviewed のまま残ったdraftは post.py が永遠に投稿しない
+    (fail-closedの帰結) — 毎朝のcollectで回収する。refillと同一のbounded
+    limit・冪等 (pass/ngが付いた行は触らない)。
+    審査対象はpost.py pick_draftと同一の48h窓 (当日+前日) に限定 —
+    古い行は二度と投稿されず、limitを浪費して新鮮行の審査を餓死させるため。
+    """
+    if limit <= 0 or not QUEUE.exists():
+        return 0
+    today = today or dt.date.today()
+    try:
+        rows = [json.loads(l) for l in QUEUE.read_text().splitlines() if l.strip()]
+    except OSError:
+        return 0
+    n = 0
+    for r in rows:
+        if n >= limit:
+            break
+        if r.get('status') != 'draft':
+            continue
+        if (r.get('persona_review') or {}).get('verdict') in ('pass', 'ng'):
+            continue
+        if r.get('hook', '').startswith('【') or r.get('ask', '').startswith('【'):
+            continue  # 未起草はrefillの担当 (審査前に本文が要る)
+        try:
+            age = (today - dt.date.fromisoformat(r['date'])).days
+        except (KeyError, ValueError):
+            continue
+        if not 0 <= age <= 1:
+            continue
+        verdict = persona_review_draft(r.get('hook', ''), r.get('take', ''),
+                                       r.get('ask', ''), r.get('title', ''),
+                                       r.get('genre_jp', ''))
+        if verdict is None:
+            continue  # 翌朝retry
+        r['persona_review'] = verdict
+        n += 1
+        print(f'  [rereview] {r.get("title", "")[:60]} -> {verdict["verdict"]}')
+    if n and not dry:
+        QUEUE.write_text(''.join(json.dumps(x, ensure_ascii=False) + '\n' for x in rows))
+        print(f'rereviewed: {n} rows -> {QUEUE}')
+    return n
+
+
+def redraft_persona_ng(dry: bool = False, limit: int = 2, today: dt.date | None = None) -> int:
+    """persona ng draftの再起草 — 審査loopの閉鎖 (2026-09-14)。
+
+    ng理由をfeedbackに1回だけ書き直し→再審査。passだけqueueを差し替え
+    (ngが続いた行は触らない — barを下げない)。refill/rereviewと同じ48h窓・
+    bounded limit。limit×2呼出 (起草+審査) で実行時間をboundedに。
+    """
+    if limit <= 0 or not QUEUE.exists():
+        return 0
+    today = today or dt.date.today()
+    try:
+        rows = [json.loads(l) for l in QUEUE.read_text().splitlines() if l.strip()]
+    except OSError:
+        return 0
+    hooks = recent_hooks()
+    n = 0
+    attempts = 0
+    for r in rows:
+        if attempts >= limit:
+            break
+        if r.get('status') != 'draft':
+            continue
+        pr = r.get('persona_review') or {}
+        if pr.get('verdict') != 'ng':
+            continue
+        try:
+            age = (today - dt.date.fromisoformat(r['date'])).days
+        except (KeyError, ValueError):
+            continue
+        if not 0 <= age <= 1:
+            continue
+        item = {'title': r.get('title', ''), 'url': r.get('url', ''),
+                'source': r.get('source', ''), 'score': r.get('score', 0)}
+        note = (f'前案はペルソナ審査でng ({pr.get("reason", "")})。'
+                '読者が「追跡リストに加える/正本を見に行く」と判断できる具体'
+                ' (何の観測か・条件・限界) を自説に含めて書き直す。')
+        attempts += 1
+        got = llm_draft(item, r.get('genre_jp', ''), hooks,
+                        fetch_excerpt(item['url']), note=note)
+        if not got:
+            continue
+        verdict = attach_persona_review(got, item['title'], r.get('genre_jp', ''))
+        if verdict.get('verdict') != 'pass':
+            print(f'  [redraft] {item["title"][:50]} -> 仍ng (維持)')
+            continue
+        r.update(got)
+        r['persona_review'] = verdict
+        n += 1
+        print(f'  [redraft] {item["title"][:50]} -> pass')
+        print(f'      hook: {r["hook"]}')
+    if n and not dry:
+        QUEUE.write_text(''.join(json.dumps(x, ensure_ascii=False) + '\n' for x in rows))
+        print(f'redrafted: {n} rows -> {QUEUE}')
     return n
 
 
@@ -387,6 +556,13 @@ def main() -> int:
             got = llm_draft(item, GENRES[item['genre']]['jp'], hooks,
                             fetch_excerpt(item['url']))
             draft.update(got or {'hook': '【要起草】', 'take': '【LLM失敗: 要記入】', 'ask': '【問い: 要記入】'})
+            if got:
+                # 投稿前ペルソナ全件チェック (pass以外はpost.pyが投稿しない)
+                draft['persona_review'] = attach_persona_review(
+                    draft, item['title'][:200], GENRES[item['genre']]['jp'])
+                print(f"      persona: {draft['persona_review']['verdict']}"
+                      + (f" ({draft['persona_review'].get('reason', '')})"
+                         if draft['persona_review'].get('reason') else ''))
         drafts.append(draft)
         seen.add(item['url'])
         print(f'  [{item["genre"]}] {item["score"]:>8.2f} {item["title"][:70]}')
@@ -421,6 +597,10 @@ def main() -> int:
 
     # 未起草プレースホルダの回収 (LLM間欠失敗の滞留対策・2026-09-03)
     refill_placeholders(dry=args.dry, limit=args.refill_limit)
+    # persona未審査draftの再審査 (投稿前全件チェックの自己修復・2026-09-14)
+    rereview_unreviewed(dry=args.dry, limit=args.refill_limit)
+    # persona ngの再起草 (審査loopの閉鎖 — barは下げず書き直しで通す・2026-09-14)
+    redraft_persona_ng(dry=args.dry, limit=2)
     return 0
 
 
