@@ -9,7 +9,9 @@ business_notes `横断/2026-08-28-x_account_fleet_strategy.md` (正本) へ。
 ## 流れ (1日1サイクル)
 
 ```
-09:17  collect.py   (cron) HN/GitHubから当日ジャンルの候補収集 + LLM起草 → queue (draft)
+09:17  collect.py   (cron) HN/GitHubから当日ジャンルの候補収集
+       + LLM起草 (意図設計をpromptで強制) → polish (字単位批評→改稿収束・Q2)
+       → persona gate 全件 (Q3) → queue (draft)
 21:07  post.py     (cron) 48h以内の最良1件を自動投稿 (承認flow撤廃・2026-09-04)
 随時    review.py   (任意steering) rejectしたdraftのみ投稿対象外
 
@@ -17,6 +19,29 @@ business_notes `横断/2026-08-28-x_account_fleet_strategy.md` (正本) へ。
 post.py は未承認draftも自動投稿する(要記入プレースホルダー・問い形でないask・
 単調warn付き・禁止語17語はfail-closedでskip/拒否)。
 ```
+
+## 品質レベル定義と現在地 (2026-09-14)
+
+各gateが**どの階層を担保するか**の定義。誤字脱字などのQ0は議論対象外 —
+機械が落とす。人が見る・議論するのはQ2以上のみ。
+
+| Level | 担保内容 | 担当gate | 記録先 |
+|---|---|---|---|
+| Q0 文字面 | 3行形式・字数・要記入プレースホルダー・問い形ask | 起草後discipline検査 + post.py fail-closed skip | log |
+| Q1 規律 | 禁止語17語・固有名詞/数字の創作禁止・抜粋(実測)根拠・正式名称 | 同上 (`discipline_violation`/`banned_hits`) | log |
+| Q2 意図 | 各1行の意図が1つに定まる・各字に意図と効率が埋まる | 起草promptの意図設計強制 + polish loop (字単位批評→改稿収束) | `polish_rounds` (queue行) |
+| Q3 読者価値 | ペルソナが「未知の変化・自分ごと・試せる」と評するか | persona gate 全件 (collect/enrich両経路) | `persona_review` (queue行) |
+| Q4 実効 | 実読者行動 (impressions/reply) で品質仮説を検証 | 計測のみ — 改善loop未接続 | post-log / metrics |
+
+**現在地 (2026-09-14):** Q0〜Q3はgate実装済 (fail-closed)。Q2は本日実装で
+収束の実績は翌朝cronから (`polish_rounds` を監視)。Q4はリーチ計測がほぼゼロ
+(開設以来impressions 8) でデータ不足 — engagement→persona yaml還流は
+データが溜まってから、現時点は計測継続のみ。
+
+**手順の責務分離:** polishはQ2専任 (批評にQ0/Q1の指摘もQ3の価値判断も混ぜない)、
+persona gateはQ3専任、post.pyの機械検査はQ0/Q1の最終防衛線。機械判定を
+覆せるのはreview.py (人間steering) のみ。同一階層の二重検査を無くし、
+判定基準のブレを防ぐ。
 
 - queue/state/log = `~/.local/share/cb-fleet/` (repo外・git管理外)
 - 秘密 = `~/.local/share/cb-fleet/.env` のみ (LITELLM_API_KEY・X access鍵)
