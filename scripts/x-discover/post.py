@@ -311,6 +311,8 @@ def pick_draft(entries: list[dict], today: dt.date) -> dict | None:
 
     2026-09-04 承認flow撤廃: draft(未承認)も対象。reject/blocked は除外。
     品質skip(fail-closed): 要記入プレースホルダー/問い形でないask/単調warn付き。
+    2026-09-14: persona verdict=pass行を最優先 (最良score行が未審査/ngでも
+    passの2番手で当夜の投稿機会を保全する — gateは投稿前に必ず通る)。
     """
     elig = [d for d in entries
             if d.get('status') in ('draft', 'approved') and not d.get('posted_at')]
@@ -331,8 +333,9 @@ def pick_draft(entries: list[dict], today: dt.date) -> dict | None:
         others = [h for h, e in zip(hooks, elig) if e is not d]
         if uniformity_warning(d.get('hook', ''), others):
             continue
-        cands.append((age, -(d.get('score') or 0), d))
-    return min(cands)[2] if cands else None
+        cands.append((0 if (d.get('persona_review') or {}).get('verdict') == 'pass' else 1,
+                      age, -(d.get('score') or 0), len(cands), d))
+    return min(cands)[-1] if cands else None
 
 
 def build_text(d: dict, include_url: bool = True) -> str:

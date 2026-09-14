@@ -240,7 +240,11 @@ def persona_review_draft(hook: str, take: str, ask: str,
     prompt += '\n投稿案:\n' + '\n'.join([hook, take, '', ask]) + '\n' + '\n'.join([
         '出力形式 (2行のみ・他は書かない):', 'verdict: pass', 'reason: 40字以内の根拠',
     ])
-    text = llm_text(prompt)
+    try:
+        text = llm_text(prompt)
+    except Exception as e:  # noqa: BLE001 — backend例外も審査不能扱い (unreviewed)
+        print(f'      [persona] review LLM error: {e.__class__.__name__}')
+        return None
     if not text:
         return None
     verdict = reason = None
@@ -397,8 +401,8 @@ def rereview_unreviewed(dry: bool = False, limit: int = 3, today: dt.date | None
     """persona_review無し/unreviewedの実文draftを再審査する (自己修復・2026-09-14)。
 
     審査LLM失敗で unreviewed のまま残ったdraftは post.py が永遠に投稿しない
-    (fail-closedの帰結) — 毎朝のcollectで回収する。refillと同一のbounded
-    limit・冪等 (pass/ngが付いた行は触らない)。
+    (fail-closedの帰結) — 毎朝のcollectで回収する。approved行も対象 (判定付与
+    のみ)。refillと同一のbounded limit・冪等 (pass/ngが付いた行は触らない)。
     審査対象はpost.py pick_draftと同一の48h窓 (当日+前日) に限定 —
     古い行は二度と投稿されず、limitを浪費して新鮮行の審査を餓死させるため。
     """
@@ -413,7 +417,9 @@ def rereview_unreviewed(dry: bool = False, limit: int = 3, today: dt.date | None
     for r in rows:
         if n >= limit:
             break
-        if r.get('status') != 'draft':
+        # approvedも対象 (post.py gateはverdict必須 — 人間承認行が無審査で
+        # 永久skipされるのを防ぐ。textは書換えない = 承認と矛盾しない)。
+        if r.get('status') not in ('draft', 'approved'):
             continue
         if (r.get('persona_review') or {}).get('verdict') in ('pass', 'ng'):
             continue
@@ -437,6 +443,19 @@ def rereview_unreviewed(dry: bool = False, limit: int = 3, today: dt.date | None
         QUEUE.write_text(''.join(json.dumps(x, ensure_ascii=False) + '\n' for x in rows))
         print(f'rereviewed: {n} rows -> {QUEUE}')
     return n
+
+
+def discipline_violation(d: dict) -> str | None:
+    """§11機械検査 (enrich.py discipline_violationと同一条件)。"""
+    hits = banned_hits(d.get('hook', ''), d.get('take', ''), d.get('ask', ''))
+    if hits:
+        return 'banned_word: ' + '/'.join(hits)
+    if not ask_is_interrogative(d.get('ask', '')):
+        return 'ask_not_interrogative'
+    text = f"{d.get('hook', '')}\n{d.get('take', '')}\n\n{d.get('ask', '')}"
+    if len(text) > 280 - 23:  # enrich MAX_TOTAL_CHARS (t.co 23字込みで280以内)
+        return f'too_long: {len(text)}'
+    return None
 
 
 def redraft_persona_ng(dry: bool = False, limit: int = 2, today: dt.date | None = None) -> int:
@@ -484,6 +503,10 @@ def redraft_persona_ng(dry: bool = False, limit: int = 2, today: dt.date | None 
         if verdict.get('verdict') != 'pass':
             print(f'  [redraft] {item["title"][:50]} -> 仍ng (維持)')
             continue
+        violation = discipline_violation(got)
+        if violation:
+            print(f'  [redraft] {item["title"][:50]} -> §11違反 ({violation}) — 維持')
+            continue
         r.update(got)
         r['persona_review'] = verdict
         n += 1
@@ -500,7 +523,7 @@ def main() -> int:
     ap.add_argument('--dry', action='store_true', help='キューに書き込まない')
     ap.add_argument('--no-llm', action='store_true', help='LLM起草をスキップ')
     ap.add_argument('--refill-limit', type=int, default=3,
-                    help='未起草draftの再起草上限/回 (0=無効・既定3)')
+                    help='未起草再起草/未審査再審査の上限/回 (0=無効・既定3)')
     args = ap.parse_args()
 
     load_env_file()

@@ -177,6 +177,15 @@ def main() -> int:
             continue
         if row.get('trial_status') == 'done' and not args.force:
             continue
+        # 投稿対象はpick_draftと同一の48h窓 (当日+前日) に限る — 窓外の
+        # ng/review_fail行を毎朝永遠に再起草しない (M2・2026-09-14)。
+        try:
+            age = (dt.date.today() - dt.date.fromisoformat(row['date'])).days
+        except (KeyError, ValueError):
+            pass
+        else:
+            if not 0 <= age <= 1:
+                continue
         report_path = TRIALS_DIR / key / 'report.json'
         if not report_path.exists():
             if args.keys:
