@@ -19,6 +19,7 @@ import datetime as dt
 import json
 import os
 import pathlib
+import re
 import subprocess
 import sys
 import urllib.request
@@ -183,9 +184,32 @@ def fetch_excerpt(url: str, limit: int = 1600) -> str:
     return re.sub(r'\s+', ' ', text).strip()[:limit]
 
 
+def persona_lines() -> list[str]:
+    """media persona (publishing-engine/personas/x-fleet.yaml) を起草prompt行へ変換。
+
+    全媒体ペルソナレビュー必須(2026-09-14) — persona yaml未接続の起草は禁止。
+    yaml不在/壊れ=例外→llm_draftがNone→draftは【要起草】→post.pyがskip (fail-closed)。
+    """
+    path = os.environ.get(
+        'PERSONA_YAML',
+        str(pathlib.Path.home() / 'connectivebyte-publishing-engine/personas/x-fleet.yaml'))
+    text = pathlib.Path(path).read_text(encoding='utf-8')
+    out = []
+    for key in ('three_seconds', 'read_through', 'action'):
+        m = re.search(rf'^  {key}: (.+)$', text, re.M)
+        if not m:
+            raise ValueError(f'persona yaml missing key: {key} ({path})')
+        out.append(f'{key}: {m.group(1).strip()}')
+    return ['読者ペルソナ (CB-B1独立者・タイムラインで3秒「自分の仕事で試せる観測か」を判定):'] + out
+
+
 def llm_prompt(item: dict, genre_jp: str, recent_hooks: list[str], excerpt: str = '') -> str:
-    """起草prompt — X運用基本計画§11 (生成ルール) 準拠。"""
+    """起草prompt — X運用基本計画§11 (生成ルール) 準拠 + media persona (必須)。"""
     lines = ['あなたはAI情報発掘メディアの起草者。X投稿1件分の日本語案のみを出力する。']
+    lines += persona_lines()
+    lines += [
+        '自説はこの読者の「自分でも試せるか」に答えること (単なる驚きの報告は不可)。',
+    ]
     lines += [
         '形式 (3要素をそれぞれ1行、区切りなし、余計な説明禁止):',
         '1行目: 発見の一句 (40字以内・断定調・書き出しの型を固定しない)',
@@ -226,7 +250,11 @@ def llm_draft(item: dict, genre_jp: str, recent_hooks: list[str],
     """
     if os.environ.get('LLM_BACKEND') != 'codex' and not os.environ.get('LITELLM_API_KEY'):
         return None
-    prompt = llm_prompt(item, genre_jp, recent_hooks, excerpt)
+    try:
+        prompt = llm_prompt(item, genre_jp, recent_hooks, excerpt)
+    except (OSError, ValueError) as e:
+        print(f'      [llm] persona gate: {e}')
+        return None
     def call(p: str) -> dict | None:
         text = llm_text(p)
         if not text:

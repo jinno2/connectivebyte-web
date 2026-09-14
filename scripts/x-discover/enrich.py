@@ -23,6 +23,7 @@ import os
 import pathlib
 import sys
 
+from collect import persona_lines
 from llm_backend import llm_text
 from x_discover_rules import (BANNED_WORDS, ask_is_interrogative, banned_hits,
                               media_ok, preview_key)
@@ -86,9 +87,11 @@ def facts_digest(rep: dict) -> str:
 
 
 def enrich_prompt(row: dict, digest: str, recent_hooks: list[str]) -> str:
-    """再起草prompt — collect.py llm_promptと同一規律 (§11)・excerptを実測事実へ差換え。"""
+    """再起草prompt — collect.py llm_promptと同一規律 (§11+media persona)・excerptを実測事実へ差換え。"""
     lines = ['あなたはAI情報発掘メディアの起草者。対象ツールをサンドボックスで'
              '実際に試用した自動レポートがある。X投稿1件分の日本語案のみを出力する。']
+    # 第二起草経路も全媒体ペルソナレビュー必須(2026-09-14)。yaml不在=例外→呼び出し側で旧3行維持
+    lines += persona_lines()
     lines += [
         '形式 (3要素をそれぞれ1行、区切りなし、余計な説明禁止):',
         '1行目: 発見の一句 (40字以内・断定調・書き出しの型を固定しない)',
@@ -193,7 +196,12 @@ def main() -> int:
             continue
 
         digest = facts_digest(rep)
-        draft = call_llm(enrich_prompt(row, digest, recent))
+        try:
+            prompt = enrich_prompt(row, digest, recent)
+        except (OSError, ValueError) as e:
+            print(f'  [enrich] {key}: persona gate ({e}) — 旧3行維持 (無persona差し替え禁止)')
+            continue
+        draft = call_llm(prompt)
         if draft is None:
             print(f'  [enrich] {key}: LLM失敗 — 旧3行維持 (翌朝retry)')
             continue
