@@ -66,3 +66,22 @@ def uniformity_warning(hook: str, recent_hooks: list[str]) -> str | None:
     if sfx and any(hook_suffix(h) == sfx for h in recent_hooks):
         return f'hook末尾「{sfx}」が直近投稿と同一 (均一化回避§11)'
     return None
+
+
+# --- §11機械検査の共通実装 (collect/enrich から参照・2026-09-14統合) --------
+# 起草側の保守的上限: post.py build_text (link_policy=none) + t.co 23字込みで
+# 280字以内。post.py 本体は投稿時にURL込みの実寸を別途検査する (正本はそちら)。
+MAX_TOTAL_CHARS = 280 - 23
+
+
+def discipline_violation(hook: str, take: str, ask: str) -> str | None:
+    """§11機械検査。違反なら理由文字列・正常ならNone (起草側の単一実装)。"""
+    hits = banned_hits(hook, take, ask)
+    if hits:
+        return 'banned_word: ' + '/'.join(hits)
+    if not ask_is_interrogative(ask):
+        return 'ask_not_interrogative'
+    text = f'{hook}\n{take}\n\n{ask}'
+    if len(text) > MAX_TOTAL_CHARS:
+        return f'too_long: {len(text)}>{MAX_TOTAL_CHARS}'
+    return None

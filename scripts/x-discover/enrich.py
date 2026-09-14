@@ -25,8 +25,7 @@ import sys
 
 from collect import persona_lines, persona_review_draft
 from llm_backend import llm_text
-from x_discover_rules import (BANNED_WORDS, ask_is_interrogative, banned_hits,
-                              media_ok, preview_key)
+from x_discover_rules import BANNED_WORDS, discipline_violation, media_ok, preview_key
 
 STATE_DIR = pathlib.Path.home() / '.local/share/cb-fleet'
 # DISCOVER_QUEUE_PATH上書きは検証用 (本番は既定path・trial runnerと同一名のenv)
@@ -34,10 +33,6 @@ QUEUE = pathlib.Path(os.environ.get(
     'DISCOVER_QUEUE_PATH', str(STATE_DIR / 'discover-queue.jsonl')))
 TRIALS_DIR = pathlib.Path(os.environ.get(
     'TRIAL_STATE_DIR', str(STATE_DIR / 'trials')))
-
-# post.py build_text (link_policy=none) + t.co 23字込みで280字超えない上限
-MAX_TOTAL_CHARS = 280 - 23
-
 
 def load_env_file() -> None:
     """cron用: ~/.local/share/cb-fleet/.env を os.environ へ (既存env優先)。"""
@@ -131,17 +126,6 @@ def call_llm(prompt: str) -> dict | None:
     return None
 
 
-def discipline_violation(draft: dict) -> str | None:
-    """§11機械検査 (post.pyと同一条件+総字数)。違反なら理由を返す。"""
-    hits = banned_hits(draft['hook'], draft['take'], draft['ask'])
-    if hits:
-        return 'banned_word: ' + '/'.join(hits)
-    if not ask_is_interrogative(draft['ask']):
-        return 'ask_not_interrogative'
-    text = f"{draft['hook']}\n{draft['take']}\n\n{draft['ask']}"
-    if len(text) > MAX_TOTAL_CHARS:
-        return f'too_long: {len(text)}>{MAX_TOTAL_CHARS}'
-    return None
 
 
 def load_queue() -> list[dict]:
@@ -179,11 +163,13 @@ def main() -> int:
             continue
         # 投稿対象はpick_draftと同一の48h窓 (当日+前日) に限る — 窓外の
         # ng/review_fail行を毎朝永遠に再起草しない (M2・2026-09-14)。
-        try:
-            age = (dt.date.today() - dt.date.fromisoformat(row['date'])).days
-        except (KeyError, ValueError):
-            pass
-        else:
+        # 明示key指定は人手運用なので窓をバイパス (--forceのdocstringと整合)。
+        # date欠損/破損行はpostされないためLLM消費もしない (fail-closed)。
+        if not args.keys:
+            try:
+                age = (dt.date.today() - dt.date.fromisoformat(row['date'])).days
+            except (KeyError, ValueError):
+                continue
             if not 0 <= age <= 1:
                 continue
         report_path = TRIALS_DIR / key / 'report.json'
@@ -214,7 +200,8 @@ def main() -> int:
         if draft is None:
             print(f'  [enrich] {key}: LLM失敗 — 旧3行維持 (翌朝retry)')
             continue
-        violation = discipline_violation(draft)
+        violation = discipline_violation(draft['hook'], draft['take'],
+                                         draft['ask'])
         if violation:
             row['trial_enrich_status'] = 'discipline_violation'
             row['trial_enrich_violation'] = violation

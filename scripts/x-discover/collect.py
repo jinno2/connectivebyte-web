@@ -25,7 +25,8 @@ import sys
 import urllib.request
 
 from llm_backend import llm_text
-from x_discover_rules import BANNED_WORDS, ask_is_interrogative, banned_hits
+from x_discover_rules import (BANNED_WORDS, ask_is_interrogative,
+                              banned_hits, discipline_violation)
 
 STATE_DIR = pathlib.Path.home() / '.local/share/cb-fleet'
 STATE = STATE_DIR / 'discover-state.json'
@@ -360,16 +361,20 @@ def recent_hooks(limit: int = 6) -> list[str]:
     return [r['hook'] for r in rows if r.get('hook')][-limit:]
 
 
-def refill_placeholders(dry: bool = False, limit: int = 3) -> int:
+def refill_placeholders(dry: bool = False, limit: int = 3,
+                        today: dt.date | None = None) -> int:
     """queue内の未起草draft (【要起草】) を再起草して置き換える。
 
     LLM失敗でappendされたdraftは誰も再処理せず滞留し承認draftが枯渇する
     (2026-09-03時点で9件滞留が実測) — 毎回のcollectで回収する。冪等:
     起草できた行だけ置換・できなければ残して翌朝再試行。
     limit/回で実行時間をboundedに (残りは翌朝へ)。
+    対象はrereview/redraftと同一の48h窓 (当日+前日) — 窓外の滞留行は
+    post.py pick_draftでも投稿対象外なのでlimitを浪費させない (2026-09-14)。
     """
     if limit <= 0 or not QUEUE.exists():
         return 0
+    today = today or dt.date.today()
     try:
         rows = [json.loads(l) for l in QUEUE.read_text().splitlines() if l.strip()]
     except OSError:
@@ -380,6 +385,12 @@ def refill_placeholders(dry: bool = False, limit: int = 3) -> int:
         if n >= limit:
             break
         if r.get('status') != 'draft' or r.get('hook') != '【要起草】':
+            continue
+        try:
+            age = (today - dt.date.fromisoformat(r['date'])).days
+        except (KeyError, ValueError):
+            continue
+        if not 0 <= age <= 1:
             continue
         item = {'title': r.get('title', ''), 'url': r.get('url', ''),
                 'source': r.get('source', ''), 'score': r.get('score', 0)}
@@ -445,17 +456,6 @@ def rereview_unreviewed(dry: bool = False, limit: int = 3, today: dt.date | None
     return n
 
 
-def discipline_violation(d: dict) -> str | None:
-    """§11機械検査 (enrich.py discipline_violationと同一条件)。"""
-    hits = banned_hits(d.get('hook', ''), d.get('take', ''), d.get('ask', ''))
-    if hits:
-        return 'banned_word: ' + '/'.join(hits)
-    if not ask_is_interrogative(d.get('ask', '')):
-        return 'ask_not_interrogative'
-    text = f"{d.get('hook', '')}\n{d.get('take', '')}\n\n{d.get('ask', '')}"
-    if len(text) > 280 - 23:  # enrich MAX_TOTAL_CHARS (t.co 23字込みで280以内)
-        return f'too_long: {len(text)}'
-    return None
 
 
 def redraft_persona_ng(dry: bool = False, limit: int = 2, today: dt.date | None = None) -> int:
@@ -499,13 +499,15 @@ def redraft_persona_ng(dry: bool = False, limit: int = 2, today: dt.date | None 
                         fetch_excerpt(item['url']), note=note)
         if not got:
             continue
+        # 機械検査を先 (無料) — 違反案に審査LLMを消費しない (enrichと同一順)
+        violation = discipline_violation(got.get('hook', ''), got.get('take', ''),
+                                         got.get('ask', ''))
+        if violation:
+            print(f'  [redraft] {item["title"][:50]} -> §11違反 ({violation}) — 維持')
+            continue
         verdict = attach_persona_review(got, item['title'], r.get('genre_jp', ''))
         if verdict.get('verdict') != 'pass':
             print(f'  [redraft] {item["title"][:50]} -> 仍ng (維持)')
-            continue
-        violation = discipline_violation(got)
-        if violation:
-            print(f'  [redraft] {item["title"][:50]} -> §11違反 ({violation}) — 維持')
             continue
         r.update(got)
         r['persona_review'] = verdict
@@ -623,7 +625,9 @@ def main() -> int:
     # persona未審査draftの再審査 (投稿前全件チェックの自己修復・2026-09-14)
     rereview_unreviewed(dry=args.dry, limit=args.refill_limit)
     # persona ngの再起草 (審査loopの閉鎖 — barは下げず書き直しで通す・2026-09-14)
-    redraft_persona_ng(dry=args.dry, limit=2)
+    # --refill-limit 0=無効はredraftにも適用 (help文言どおり)
+    if args.refill_limit > 0:
+        redraft_persona_ng(dry=args.dry, limit=2)
     return 0
 
 
