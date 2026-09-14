@@ -27,7 +27,7 @@ import urllib.request
 from llm_backend import llm_text
 from x_discover_rules import (BANNED_WORDS, ask_is_interrogative,
                               banned_hits, discipline_violation, in_post_window,
-                              read_jsonl, write_jsonl_atomic)
+                              pipeline_version, read_jsonl, write_jsonl_atomic)
 
 STATE_DIR = pathlib.Path.home() / '.local/share/cb-fleet'
 STATE = STATE_DIR / 'discover-state.json'
@@ -436,6 +436,9 @@ def llm_draft(item: dict, genre_jp: str, recent_hooks: list[str],
     if POLISH_ROUNDS > 0:
         draft, rounds = polish(draft)
         draft['polish_rounds'] = rounds
+        if rounds:
+            draft['polish_version'] = pipeline_version()
+    draft['gen_version'] = pipeline_version()
     return draft
 
 
@@ -582,6 +585,28 @@ def redraft_persona_ng(dry: bool = False, limit: int = 2, today: dt.date | None 
     return n
 
 
+def regen_stale(dry: bool = False, limit: int = 3,
+                today: dt.date | None = None) -> int:
+    """版違いの生存draftを現行システムで再生成する (生成物の版管理・2026-09-15)。
+
+    システム (prompt/起草code) 更新後、gen/polish_versionが現行と異なる
+    48h窓内draftはstale — repolishの再生成loopで現行versionに揃える
+    (fail-open: 再生成の失敗はcollect本体に影響させない)。limit/回で
+    bounded・残りは翌朝のcollectが繰り越す。即時全件は repolish --limit 0。"""
+    if limit <= 0 or dry:
+        return 0
+    try:
+        from repolish import sweep  # 遅延import — repolishはcollectを参照する
+    except ImportError as e:
+        print(f'  [regen] skip: {e}', file=sys.stderr)
+        return 0
+    try:
+        return sweep(limit=limit, today=today)
+    except Exception as e:  # noqa: BLE001 — sweep失敗 (LLM異常応答含む) でcollectを落とさない
+        print(f'  [regen] skipped ({e.__class__.__name__}: {e})', file=sys.stderr)
+        return 0
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument('--dry', action='store_true', help='キューに書き込まない')
@@ -618,6 +643,7 @@ def main() -> int:
     if not picked:
         print('no candidates today (all seen or empty sources)')
         refill_placeholders(dry=args.dry, limit=args.refill_limit)
+        regen_stale(dry=args.dry, limit=args.refill_limit, today=today)
         return 0
 
     STATE_DIR.mkdir(parents=True, exist_ok=True)
@@ -690,6 +716,8 @@ def main() -> int:
     # --refill-limit 0=無効はredraftにも適用 (help文言どおり)
     if args.refill_limit > 0:
         redraft_persona_ng(dry=args.dry, limit=2)
+    # 版違いdraftの再生成 (システム更新後に現行versionへ追い付き・2026-09-15)
+    regen_stale(dry=args.dry, limit=args.refill_limit, today=today)
     return 0
 
 

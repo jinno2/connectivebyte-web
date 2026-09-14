@@ -30,8 +30,8 @@ from collect import (intent_lines, persona_lines,  # noqa: E402
                      persona_review_draft, polish_draft, POLISH_ROUNDS)
 from llm_backend import llm_text
 from x_discover_rules import (BANNED_WORDS, discipline_violation,
-                              in_post_window, media_ok, preview_key, read_jsonl,
-                              write_jsonl_atomic)
+                              in_post_window, media_ok, pipeline_version,
+                              preview_key, read_jsonl, write_jsonl_atomic)
 
 STATE_DIR = pathlib.Path.home() / '.local/share/cb-fleet'
 # DISCOVER_QUEUE_PATH上書きは検証用 (本番は既定path・trial runnerと同一名のenv)
@@ -232,6 +232,8 @@ def main() -> int:
         if 'trial_original' not in row:
             row['trial_original'] = {k: row.get(k, '') for k in ('hook', 'take', 'ask')}
         row.update(draft)
+        # 実測redraftは現行システムの生成物 — 版を付す (生成物の版管理・2026-09-15)
+        row['polish_version'] = pipeline_version()
         row['trial_status'] = 'done'
         row['trial_report'] = (rep.get('verdict') or {}).get('summary_ja', '')
         row['trial_report_md'] = str((TRIALS_DIR / key / 'report.md').resolve())

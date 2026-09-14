@@ -61,6 +61,9 @@ class GateTest(unittest.TestCase):
         self._patch(repolish, 'load_env_file', lambda: None)
         self._patch(enrich, 'persona_lines',
                     lambda: ['読者ペルソナ: テスト用 (hermetic fixture)'])
+        # 版管理 (2026-09-15): 実git hashに依存させず固定値でhermetic化
+        for m in (collect, enrich, repolish):
+            self._patch(m, 'pipeline_version', lambda: 'vTEST')
 
     def _patch(self, mod, name, value):
         old = getattr(mod, name)
@@ -316,6 +319,7 @@ class TestEnrichWindow(GateTest):
         after = self._read()
         self.assertEqual(after[0]['hook'], '批評反映の一句')     # 改稿が採用される
         self.assertEqual(after[0]['polish_rounds'], 1)
+        self.assertEqual(after[0]['polish_version'], 'vTEST')    # redraftに版を付す
         self.assertEqual(after[0]['persona_review']['verdict'], 'pass')
         self.assertIn('意図を1つ決めてから書く', seen[0])        # 第二起草promptも意図設計を要求
 
@@ -354,6 +358,8 @@ class TestPolish(GateTest):
         d = collect.llm_draft(row(), 'tool', [])
         self.assertEqual(d['hook'], '改稿1の一句')          # 批評1回→改稿1回→収束
         self.assertEqual(d['polish_rounds'], 1)
+        self.assertEqual(d['polish_version'], 'vTEST')      # 採用改稿に版を付す
+        self.assertEqual(d['gen_version'], 'vTEST')         # 起草自体にも版を付す
         self.assertIn('検査する案', calls[1])               # 起草→批評→改稿→批評の順
         # IMPROVED_NONE応答後に改稿が再発生しない (calls[3]への恒真assertInは廃止 —
         # 批評promptの指示文に常にIMPORVED_NONEが含まれ検証になっていないため)
@@ -454,6 +460,7 @@ class TestRepolish(GateTest):
         after = self._read()
         self.assertEqual(after[0]['hook'], '批評反映の一句')   # 改稿が採用される
         self.assertEqual(after[0]['polish_rounds'], 1)
+        self.assertEqual(after[0]['polish_version'], 'vTEST')  # 採用改稿に版を付す
         self.assertEqual(after[0]['persona_review']['verdict'], 'pass')  # 再審査
 
     def test_persona_ng_keeps_old(self):
@@ -490,17 +497,48 @@ class TestRepolish(GateTest):
         after = self._read()
         self.assertEqual(after[0]['hook'], '発見の一句A')      # 現案維持
         self.assertEqual(after[0]['polish_rounds'], 0)         # 検査済み印
+        self.assertEqual(after[0]['polish_version'], 'vTEST')  # 現行versionの検査済み
         self.assertEqual(after[0]['persona_review']['reason'], '元')  # 審査は触らない
         self.assertEqual(len(calls), 1)                        # 批評1回のみ
         backup = self.q.parent / 'discover-queue.pre-repolish.jsonl'
         self.assertTrue(backup.exists())                       # 改稿前snapshot
 
-    def test_idempotent_skips_polished(self):
+    def test_current_version_rows_are_current(self):
+        # 版管理のidempotency: 現行versionで起草/再検査済みの行は触らない
         calls = self._setup_repolish()
-        self._write([row(polish_rounds=2)])
+        self._write([row(polish_version='vTEST'),
+                     row(gen_version='vTEST')])
         self.assertEqual(repolish.main(TODAY), 0)
         self.assertEqual(calls, [])                            # LLM呼出ゼロ
-        self.assertEqual(self._read()[0]['polish_rounds'], 2)
+        after = self._read()
+        self.assertNotIn('polish_rounds', after[0])
+        self.assertNotIn('polish_rounds', after[1])
+
+    def test_legacy_rounds_only_row_is_stale(self):
+        # polish_roundsのみの旧印は旧システム産 → 現行versionで再検査して版を付す
+        calls = self._setup_repolish()                         # 批評は即IMPROVED_NONE
+        self._write([row(polish_rounds=2)])
+        self.assertEqual(repolish.main(TODAY), 0)
+        self.assertEqual(len(calls), 1)
+        after = self._read()
+        self.assertEqual(after[0]['polish_version'], 'vTEST')  # 現行版を記録
+        self.assertEqual(after[0]['polish_rounds'], 0)         # 再検査の結果に更新
+
+    def test_old_version_row_is_stale(self):
+        calls = self._setup_repolish()
+        self._write([row(gen_version='oldv', polish_version='oldv')])
+        self.assertEqual(repolish.main(TODAY), 0)
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(self._read()[0]['polish_version'], 'vTEST')
+
+    def test_force_overrides_version_check(self):
+        # --force: 現行versionの行も再検査する (LLM全滅行の区別用)
+        calls = self._setup_repolish()                         # 批評は即IMPROVED_NONE
+        self._write([row(polish_version='vTEST')])
+        self._patch(sys, 'argv', ['repolish.py', '--force'])
+        self.assertEqual(repolish.main(TODAY), 0)
+        self.assertEqual(len(calls), 1)                        # 現行版でも再検査
+        self.assertEqual(self._read()[0]['polish_rounds'], 0)
 
     def test_skips_dead_rows(self):
         calls = self._setup_repolish()
@@ -550,6 +588,99 @@ class TestRepolish(GateTest):
         self._patch(sys, 'argv', ['repolish.py', '--dry'])
         self.assertEqual(repolish.main(TODAY), 0)
         self.assertNotIn('polish_rounds', self._read()[0])     # 書込なし
+
+    def test_sweep_regens_and_counts(self):
+        # collect朝loop (regen_stale) が呼ぶsweep — stale行を再生成し件数を返す
+        self._setup_repolish()
+        self._write([row(), row(polish_version='vTEST')])
+        n = repolish.sweep(limit=3, today=TODAY)
+        self.assertEqual(n, 1)                                 # stale 1行のみ
+        after = self._read()
+        self.assertEqual(after[0]['polish_version'], 'vTEST')
+        self.assertNotIn('polish_rounds', after[1])            # 現行version行は触らない
+
+
+class TestRegenStale(GateTest):
+    """collect.regen_stale — 朝loopから版違い再生成を呼ぶ配線の検証。"""
+
+    def test_calls_sweep_with_limit_and_today(self):
+        got: list[tuple] = []
+        self._patch(repolish, 'sweep',
+                    lambda limit, today: got.append((limit, today)) or 2)
+        self.assertEqual(collect.regen_stale(limit=3, today=TODAY), 2)
+        self.assertEqual(got, [(3, TODAY)])
+
+    def test_dry_and_zero_limit_are_noop(self):
+        got: list[int] = []
+        self._patch(repolish, 'sweep', lambda limit, today: got.append(limit) or 1)
+        self.assertEqual(collect.regen_stale(dry=True, limit=3, today=TODAY), 0)
+        self.assertEqual(collect.regen_stale(dry=False, limit=0, today=TODAY), 0)
+        self.assertEqual(got, [])                              # sweepは呼ばれない
+
+    def test_sweep_failure_is_fail_open(self):
+        def boom(limit, today):
+            raise ValueError('yaml壊れ')
+        self._patch(repolish, 'sweep', boom)
+        self.assertEqual(collect.regen_stale(limit=3, today=TODAY), 0)
+
+    def test_missing_module_is_fail_open(self):
+        # repolishがimport不能な環境でもcollect本体は失敗にしない
+        real_import = __import__
+
+        def fake_import(name, *a, **k):
+            if name == 'repolish':
+                raise ImportError('no repolish')
+            return real_import(name, *a, **k)
+        import builtins
+        self._patch(builtins, '__import__', fake_import)
+        self.assertEqual(collect.regen_stale(limit=3, today=TODAY), 0)
+
+
+class TestPipelineVersion(GateTest):
+    """pipeline_version — 生成物の版 (git短hash) 取得の検証。"""
+
+    def setUp(self):
+        import x_discover_rules
+        self.xdr = x_discover_rules
+        old = x_discover_rules._PIPELINE_VERSION
+        x_discover_rules._PIPELINE_VERSION = ''
+        self.addCleanup(setattr, x_discover_rules, '_PIPELINE_VERSION', old)
+
+    def _patch_run(self, results: list):
+        calls = []
+
+        class R:
+            def __init__(self, out):
+                self.stdout = out
+
+        def fake_run(cmd, **k):
+            calls.append(cmd)
+            return results.pop(0) if results else R('')
+        self._patch(self.xdr.subprocess, 'run', fake_run)
+        return calls
+
+    def test_hash_and_dirty_suffix(self):
+        calls = self._patch_run([self._R('abc1234\n'), self._R(' M f\n')])
+        self.assertEqual(self.xdr.pipeline_version(), 'abc1234+')
+        self.assertEqual(self.xdr.pipeline_version(), 'abc1234+')  # cache — 再実行しない
+        self.assertEqual(len(calls), 2)                        # 2回目はcache hit
+
+    def test_clean_tree_has_no_suffix(self):
+        self._patch_run([self._R('abc1234\n'), self._R('')])
+        self.assertEqual(self.xdr.pipeline_version(), 'abc1234')
+
+    def test_git_failure_falls_back_to_unknown(self):
+        def boom(cmd, **k):
+            raise OSError('git not found')
+        self._patch(self.xdr.subprocess, 'run', boom)
+        self.assertEqual(self.xdr.pipeline_version(), 'unknown')
+
+    def _R(self, out):
+        class R:
+            pass
+        r = R()
+        r.stdout = out
+        return r
 
 
 if __name__ == '__main__':

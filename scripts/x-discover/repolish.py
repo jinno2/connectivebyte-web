@@ -1,24 +1,24 @@
 #!/usr/bin/env python3
-"""CB発見者 — 既存draftのpolish一括適用 (品質レベル適用・2026-09-14)。
+"""CB発見者 — 版違いdraftの再生成 (生成物の版管理・2026-09-15)。
 
-polish導入前に起草された既存案を現行基準 (Q2意図: 字単位批評→改稿収束) で
-見直す。対象 = 投稿対象になり得る行 (pick_draftと同一の生存条件: 48h窓内・
-未投稿・status=draft/approved・実文draft)。改稿はQ3 persona gateを再通過 —
-落ちたら旧案維持 (fail-open・post.pyは影響なし)。
+生成物は「作られたときのシステムversion」(gen_version/polish_version =
+pipeline git短hash) を持つ。現行versionと異なる生存draft (48h窓内・未投稿・
+status=draft/approved・実文) はstaleとして現行基準 (Q2意図: 字単位批評→
+改稿収束) で再生成する。改稿はQ3 persona gateを再通過 — 落ちたら旧案維持
+(fail-open・post.pyは影響なし)。
 
-  python3 repolish.py                 # 対象行をpolishして書込
+  python3 repolish.py                 # stale行を現行versionで再生成
   python3 repolish.py --dry           # 書込せず結果表示
-  python3 repolish.py --force         # polish済み行も再polish
-  python3 repolish.py --limit 2       # 1実行の最大行数 (分割適用)
+  python3 repolish.py --force         # 現行versionの行も強制再polish
+  python3 repolish.py --limit 2       # 1実行の最大行数 (0=無制限)
 
-既定でpolish_roundsを持たない行のみ処理 (冪等 — 2回目の実行は新規LLM呼出なし)。
-polish_rounds=0は「批評が即収束」と「LLM全滅 (fail-open)」を区別しない —
-全滅行の再検査は--forceで明示する。
+collectの朝loopも同一判定で再生成する (regen_stale — 既定limit 3/回・
+残りは翌朝。システム更新後の自動追い付き)。polish_rounds=0は「批評が
+即収束」と「LLM全滅 (fail-open)」を区別しない — 全滅行の再検査は--force。
 
 書込は最後に1回だけ・直前にqueue再読込してcron競合を検出 (変化あれば中断)。
-退避 (discover-queue.pre-repolish.jsonl) は一生に1回・最初の書込直前のみ —
-2回目以降の--force実行にはsnapshotは無い。実行はcron時刻帯 (09:17/21:07の
-前後) を外すこと (ループが数分〜数十分掛かるため)。
+退避 (discover-queue.pre-repolish.jsonl) は一生に1回・最初の書込直前のみ。
+実行はcron時刻帯 (09:17/21:07の前後) を外すこと (ループが数分〜数十分掛かる)。
 """
 from __future__ import annotations
 
@@ -31,8 +31,8 @@ import sys
 
 from collect import (llm_prompt, persona_review_draft, polish_draft)  # noqa: E402
 from enrich import call_llm, load_env_file  # noqa: E402
-from x_discover_rules import (in_post_window, preview_key, read_jsonl,  # noqa: E402
-                              write_jsonl_atomic)
+from x_discover_rules import (in_post_window, pipeline_version, preview_key,  # noqa: E402
+                              read_jsonl, write_jsonl_atomic)
 
 STATE_DIR = pathlib.Path.home() / '.local/share/cb-fleet'
 # DISCOVER_QUEUE_PATH上書きは検証用 (collect.pyと同一の既定path・env上書き優先)
@@ -46,9 +46,11 @@ def _is_placeholder(row: dict) -> bool:
 
 
 def _eligible(row: dict, today: dt.date, force: bool) -> bool:
-    """投稿対象になり得る行のみ — post.py pick_draftの生存条件の鏡。
+    """再生成対象 = post.py pick_draftの生存条件を満たすstale行。
     窓外・投稿済み (posted_at)・blocked (persona落ちの永久死滅) は
-    改善価値のない死人として対象外。"""
+    改善価値のない死人として対象外。版判定: 現行versionで起草 (gen_version)
+    または再検査/改稿 (polish_version) 済みの行は現行 — それ以外
+    (無印・旧version・旧polish_roundsのみの行) はstale。"""
     if row.get('posted_at'):
         return False
     if row.get('status') not in ('draft', 'approved'):
@@ -57,24 +59,27 @@ def _eligible(row: dict, today: dt.date, force: bool) -> bool:
         return False
     if not in_post_window(row, today):
         return False
-    return force or 'polish_rounds' not in row
+    if force:
+        return True
+    if row.get('polish_version') == pipeline_version():
+        return False
+    if 'polish_version' not in row and row.get('gen_version') == pipeline_version():
+        return False
+    return True
 
 
 def _dump(rows: list[dict]) -> str:
     return ''.join(json.dumps(x, ensure_ascii=False) + '\n' for x in rows)
 
 
-def main(today: dt.date | None = None) -> int:
-    ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument('--dry', action='store_true', help='キューに書き込まない')
-    ap.add_argument('--force', action='store_true', help='polish済み行も再polish')
-    ap.add_argument('--limit', type=int, default=0, help='1実行の最大行数 (0=無制限)')
-    args = ap.parse_args()
-
+def _apply(limit: int, force: bool, dry: bool,
+           today: dt.date | None) -> int:
+    """再生成loop本体 (main/sweep共用)。戻り値=処理行数、異常時は-1
+    (mainはexit codeへ、sweepは再生成行数へ写像)。"""
     load_env_file()
     if not QUEUE.exists():
         print(f'queue not found: {QUEUE}', file=sys.stderr)
-        return 1
+        return -1
     rows = read_jsonl(QUEUE)
     original = [dict(r) for r in rows]  # 競合検出と退避用の改稿前snapshot
     today = today or dt.date.today()
@@ -83,9 +88,9 @@ def main(today: dt.date | None = None) -> int:
 
     changed = 0
     for row in rows:
-        if args.limit and changed >= args.limit:
+        if limit and changed >= limit:
             break
-        if not _eligible(row, today, args.force):
+        if not _eligible(row, today, force):
             continue
         key = preview_key(row.get('url', ''))
         try:
@@ -96,8 +101,10 @@ def main(today: dt.date | None = None) -> int:
                                             row.get('genre_jp', ''),
                                             row.get('title', ''))
             if rounds == 0:
-                # 批評が即収束 (or LLM全滅fail-open) — 現案維持・検査済み印のみ
+                # 批評が即収束 (or LLM全滅fail-open) — 現案維持。
+                # 収束なら現行versionの検査済みとして印 (全滅は--forceで区別)
                 row['polish_rounds'] = 0
+                row['polish_version'] = pipeline_version()
                 changed += 1
                 print(f'  [repolish] {key}: 収束 (改稿なし)')
                 continue
@@ -114,6 +121,7 @@ def main(today: dt.date | None = None) -> int:
             continue
         row.update(polished)
         row['polish_rounds'] = rounds
+        row['polish_version'] = pipeline_version()
         row['persona_review'] = {'verdict': 'pass', 'reason': verdict.get('reason', ''),
                                  'reviewed_at': dt.datetime.now().astimezone()
                                  .isoformat(timespec='seconds')}
@@ -121,13 +129,13 @@ def main(today: dt.date | None = None) -> int:
         print(f'  [repolish] {key}: r{rounds}改稿採用 (persona pass)')
         print(f"      hook: {row['hook']}")
 
-    if changed and not args.dry:
+    if changed and not dry:
         # ループ中にcronが書いた場合、stale snapshotの書込はposted_at/statusを
         # 消す (再投稿・行消失) — 再読込して変化あれば中断する。
         if _dump(read_jsonl(QUEUE)) != _dump(original):
             print('queueが実行中に更新された (cron競合の恐れ) — 書込を中断'
                   ' (--dryで内容確認・時間を置いて再実行)', file=sys.stderr)
-            return 1
+            return -1
         backup = QUEUE.parent / 'discover-queue.pre-repolish.jsonl'
         if not backup.exists():
             backup.write_text(_dump(original), encoding='utf-8')
@@ -137,7 +145,22 @@ def main(today: dt.date | None = None) -> int:
         print(f'repolished (dry): {changed} rows')
     else:
         print('no eligible rows (queue unchanged)')
-    return 0
+    return changed
+
+
+def sweep(limit: int = 3, today: dt.date | None = None) -> int:
+    """stale行の再生成1回分 — collect朝loop (regen_stale) から呼ぶ。"""
+    return max(_apply(limit=limit, force=False, dry=False, today=today), 0)
+
+
+def main(today: dt.date | None = None) -> int:
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument('--dry', action='store_true', help='キューに書き込まない')
+    ap.add_argument('--force', action='store_true', help='現行versionの行も強制再polish')
+    ap.add_argument('--limit', type=int, default=0, help='1実行の最大行数 (0=無制限)')
+    args = ap.parse_args()
+    return 0 if _apply(limit=args.limit, force=args.force,
+                       dry=args.dry, today=today) >= 0 else 1
 
 
 if __name__ == '__main__':

@@ -12,6 +12,7 @@ import datetime as dt
 import json
 import os
 import pathlib
+import subprocess
 import sys
 
 # X運用基本計画§11「自動生成しない」+ 肯定評価の誇張語 (発見者take向け拡張)
@@ -111,6 +112,34 @@ def post_window_age(row: dict, today: dt.date) -> int | None:
 def in_post_window(row: dict, today: dt.date) -> bool:
     """48h窓内かの述語版 (窓外skipのloopにそのまま嵌まる)。"""
     return post_window_age(row, today) is not None
+
+
+# --- 生成物の版管理 (2026-09-15) -------------------------------------------
+# 生成物は「作られたときのシステムversion」を持つ。システム (prompt/起草code)
+# を更新したら、現行versionと異なる生存生成物はすべて現行versionで再生成する。
+# 正本: connective-byte SYSTEM_CONSTITUTION.md「生成物の版管理」。
+
+_PIPELINE_VERSION = ''
+
+
+def pipeline_version() -> str:
+    """生成系の実装version = このscript群 (promptと同一repo) のgit短hash。
+    作業treeが汚れている場合は '+' 接尾で明す。git不在等は 'unknown' —
+    unknown同士は一致扱い (版管理不能環境でstale誤爆を避ける)。"""
+    global _PIPELINE_VERSION
+    if _PIPELINE_VERSION:
+        return _PIPELINE_VERSION
+    here = str(pathlib.Path(__file__).parent)
+    try:
+        head = subprocess.run(['git', '-C', here, 'rev-parse', '--short', 'HEAD'],
+                              capture_output=True, text=True, timeout=5)
+        dirty = subprocess.run(['git', '-C', here, 'status', '--porcelain'],
+                               capture_output=True, text=True, timeout=5)
+        v = (head.stdout.strip() or 'unknown') + ('+' if dirty.stdout.strip() else '')
+    except Exception:  # noqa: BLE001 — git不在/遅延も生成を止めない
+        v = 'unknown'
+    _PIPELINE_VERSION = v
+    return v
 
 
 # --- queue I/O の耐障害化 (collect/enrich/post 共通・2026-09-14) -------------

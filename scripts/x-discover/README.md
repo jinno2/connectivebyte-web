@@ -11,7 +11,8 @@ business_notes `横断/2026-08-28-x_account_fleet_strategy.md` (正本) へ。
 ```
 09:17  collect.py   (cron) HN/GitHubから当日ジャンルの候補収集
        + LLM起草 (意図設計をpromptで強制) → polish (字単位批評→改稿収束・Q2)
-       → persona gate 全件 (Q3) → queue (draft)
+       → persona gate 全件 (Q3) → queue (draft・gen/polish_version記録)
+       + 版違い生存draftの再生成 (regen_stale — 生成物の版管理・limit 3/回)
 21:07  post.py     (cron) 48h以内の最良1件を自動投稿 (承認flow撤廃・2026-09-04)
 随時    review.py   (任意steering) rejectしたdraftのみ投稿対象外
 
@@ -43,6 +44,22 @@ persona gateはQ3専任、post.pyの機械検査はQ0/Q1の最終防衛線。機
 覆せるのはreview.py (人間steering) のみ。同一階層の二重検査を無くし、
 判定基準のブレを防ぐ。
 
+## 生成物の版管理 (2026-09-15)
+
+思想の正本は connective-byte `SYSTEM_CONSTITUTION.md`「生成物の版管理」。
+**生成物は作られたときのシステムversionを持ち、システム更新後は現行versionと
+異なる生存生成物をすべて再生成する。**
+
+- 版 = `pipeline_version()` (このscript群のgit短hash・作業treeが汚れていれば `+`)
+- 記録先: queue行の `gen_version` (起草時・llm_draft) / `polish_version`
+  (polish適用・enrich実測redraft・repolish再検査時に付与)
+- 再生成の発火: ①collect朝loopの `regen_stale` (自動・limit 3/回・残りは翌朝 —
+  生存draftは48h窓なので複数朝で全量カバー) ②`repolish.py` (手動・--limit 0で即時全件)
+- 対象 = 48h窓内・未投稿・実文draftのうち現行version未満の行。窓外 (死人) は
+  二度と投稿されないため再生成しない — 版管理の対象は**生存物のみ**
+- 判定が曖昧な旧印 (`polish_rounds`のみの行) は旧システム産としてstale扱い —
+  最初のregenで現行versionに揃う
+
 - queue/state/log = `~/.local/share/cb-fleet/` (repo外・git管理外)
 - 秘密 = `~/.local/share/cb-fleet/.env` のみ (LITELLM_API_KEY・X access鍵)
 - LLM起草backend = `LLM_BACKENDS` env優先順 (`llm_backend.py`・2026-09-05〜) —
@@ -65,8 +82,9 @@ python3 post.py --dry-run         # 投稿プレビュー (表示のみ)
 python3 review.py                 # draft一覧 (任意steering・推奨=★)
 python3 review.py reject 12       # 却下 (番号=行位置・翌日も有効)
 python3 review.py --all           # 全queue簡易履歴
-python3 repolish.py --dry         # 既存draftへpolish一括適用のプレビュー
-python3 repolish.py               # 適用 (Q2収束+Q3再審査・fail-open・冪等)
+python3 repolish.py --dry         # 版違いdraft再生成のプレビュー
+python3 repolish.py               # 適用 (stale行のみ・Q2収束+Q3再審査・fail-open)
+python3 repolish.py --limit 0     # stale全件を即時再生成 (既定0=無制限)
 ```
 
 ## CB垢作成後の有効化 (残るjinno作業はここだけ)
