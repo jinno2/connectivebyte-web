@@ -26,7 +26,7 @@ import urllib.request
 
 from llm_backend import llm_text
 from x_discover_rules import (BANNED_WORDS, ask_is_interrogative,
-                              banned_hits, discipline_violation)
+                              banned_hits, discipline_violation, in_post_window)
 
 STATE_DIR = pathlib.Path.home() / '.local/share/cb-fleet'
 STATE = STATE_DIR / 'discover-state.json'
@@ -367,7 +367,8 @@ def refill_placeholders(dry: bool = False, limit: int = 3,
 
     LLM失敗でappendされたdraftは誰も再処理せず滞留し承認draftが枯渇する
     (2026-09-03時点で9件滞留が実測) — 毎回のcollectで回収する。冪等:
-    起草できた行だけ置換・できなければ残して翌朝再試行。
+    起草できた行だけ置換・できなければ残して翌朝再試行 (ただし48h窓を過ぎて
+    agingした行は対象外 — 二度と投稿されないため)。
     limit/回で実行時間をboundedに (残りは翌朝へ)。
     対象はrereview/redraftと同一の48h窓 (当日+前日) — 窓外の滞留行は
     post.py pick_draftでも投稿対象外なのでlimitを浪費させない (2026-09-14)。
@@ -386,11 +387,7 @@ def refill_placeholders(dry: bool = False, limit: int = 3,
             break
         if r.get('status') != 'draft' or r.get('hook') != '【要起草】':
             continue
-        try:
-            age = (today - dt.date.fromisoformat(r['date'])).days
-        except (KeyError, ValueError):
-            continue
-        if not 0 <= age <= 1:
+        if not in_post_window(r, today):
             continue
         item = {'title': r.get('title', ''), 'url': r.get('url', ''),
                 'source': r.get('source', ''), 'score': r.get('score', 0)}
@@ -436,11 +433,7 @@ def rereview_unreviewed(dry: bool = False, limit: int = 3, today: dt.date | None
             continue
         if r.get('hook', '').startswith('【') or r.get('ask', '').startswith('【'):
             continue  # 未起草はrefillの担当 (審査前に本文が要る)
-        try:
-            age = (today - dt.date.fromisoformat(r['date'])).days
-        except (KeyError, ValueError):
-            continue
-        if not 0 <= age <= 1:
+        if not in_post_window(r, today):
             continue
         verdict = persona_review_draft(r.get('hook', ''), r.get('take', ''),
                                        r.get('ask', ''), r.get('title', ''),
@@ -454,8 +447,6 @@ def rereview_unreviewed(dry: bool = False, limit: int = 3, today: dt.date | None
         QUEUE.write_text(''.join(json.dumps(x, ensure_ascii=False) + '\n' for x in rows))
         print(f'rereviewed: {n} rows -> {QUEUE}')
     return n
-
-
 
 
 def redraft_persona_ng(dry: bool = False, limit: int = 2, today: dt.date | None = None) -> int:
@@ -483,11 +474,7 @@ def redraft_persona_ng(dry: bool = False, limit: int = 2, today: dt.date | None 
         pr = r.get('persona_review') or {}
         if pr.get('verdict') != 'ng':
             continue
-        try:
-            age = (today - dt.date.fromisoformat(r['date'])).days
-        except (KeyError, ValueError):
-            continue
-        if not 0 <= age <= 1:
+        if not in_post_window(r, today):
             continue
         item = {'title': r.get('title', ''), 'url': r.get('url', ''),
                 'source': r.get('source', ''), 'score': r.get('score', 0)}

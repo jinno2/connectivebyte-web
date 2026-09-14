@@ -8,6 +8,8 @@ collect (起草prompt) / review (承認時警告表示) / post (投稿前fail-cl
 """
 from __future__ import annotations
 
+import datetime as dt
+
 # X運用基本計画§11「自動生成しない」+ 肯定評価の誇張語 (発見者take向け拡張)
 BANNED_WORDS: tuple[str, ...] = (
     # §11 本文列挙
@@ -85,3 +87,23 @@ def discipline_violation(hook: str, take: str, ask: str) -> str | None:
     if len(text) > MAX_TOTAL_CHARS:
         return f'too_long: {len(text)}>{MAX_TOTAL_CHARS}'
     return None
+
+
+def post_window_age(row: dict, today: dt.date) -> int | None:
+    """投稿対象の48h窓 (当日収集+前日残り) 内なら行令age、窓外ならNone。
+
+    collect(refill/rereview/redraft)・post(pick_draft)・enrich の5経路から
+    参照する単一実装。date欠損・null・非文字列・不正形式はすべて窓外扱い —
+    例外種別を問わず耐えないと、手編集/jq事故の1行で毎朝のcron全体が
+    トレースバック死する (TypeErrorは従来のexcept漏れ・実査で確認済み)。
+    """
+    try:
+        age = (today - dt.date.fromisoformat(row['date'])).days
+    except (KeyError, TypeError, ValueError):
+        return None
+    return age if 0 <= age <= 1 else None
+
+
+def in_post_window(row: dict, today: dt.date) -> bool:
+    """48h窓内かの述語版 (窓外skipのloopにそのまま嵌まる)。"""
+    return post_window_age(row, today) is not None

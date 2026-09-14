@@ -8,6 +8,7 @@
   - collect.redraft_persona_ng: §11機械検査を審査LLMの前に実施 (消費防止)
   - enrich: 自動実行は48h窓外をskip・明示key指定は窓をバイパス
   - x_discover_rules.discipline_violation: 禁止語/問い形/字数/正常の4分岐
+  - x_discover_rules.in_post_window/post_window_age: date破損行は例外でなく窓外
 
 LLM依存関数 (llm_draft/attach_persona_review/persona_review_draft/call_llm)
 は全て monkeypatch する。実行: python3 test_persona_gate.py
@@ -27,7 +28,8 @@ sys.path.insert(0, str(HERE))
 import collect  # noqa: E402
 import enrich  # noqa: E402
 import post  # noqa: E402
-from x_discover_rules import BANNED_WORDS, discipline_violation  # noqa: E402
+from x_discover_rules import (BANNED_WORDS, discipline_violation,  # noqa: E402
+                              in_post_window, post_window_age)
 
 TODAY = dt.date(2026, 9, 14)
 YESTERDAY = '2026-09-13'
@@ -43,11 +45,16 @@ def row(**kw) -> dict:
 
 class GateTest(unittest.TestCase):
     def setUp(self):
-        tmp = tempfile.mkdtemp()
-        self.addCleanup(lambda: None)  # tmpdirはOS掃き溜めに任せる
-        self.q = pathlib.Path(tmp) / 'q.jsonl'
+        tmpmgr = tempfile.TemporaryDirectory()
+        self.addCleanup(tmpmgr.cleanup)  # tmpdirも自分で掃除
+        self.q = pathlib.Path(tmpmgr.name) / 'q.jsonl'
         self._patch(collect, 'QUEUE', self.q)
         self._patch(enrich, 'QUEUE', self.q)  # 本番queueを絶対に触らせない
+        # hermetic化: 実~/.env読込 (os.environ汚染) と実persona yaml
+        # (姉妹repo無しマシンで赤になる) に依存させない
+        self._patch(enrich, 'load_env_file', lambda: None)
+        self._patch(enrich, 'persona_lines',
+                    lambda: ['読者ペルソナ: テスト用 (hermetic fixture)'])
 
     def _patch(self, mod, name, value):
         old = getattr(mod, name)
@@ -68,6 +75,16 @@ class TestRules(GateTest):
         self.assertTrue(discipline_violation('あ' * 200, 'い' * 200, 'う' * 200 + '？')
                         .startswith('too_long: '))
         self.assertIsNone(discipline_violation('発見の一句', '自説です', 'どうですか？'))
+
+    def test_post_window_tolerates_broken_date(self):
+        # High 1回帰: date:null/欠損/非文字列は例外ではなく窓外扱い (cron死防止)
+        for bad in ({'date': None}, {}, {'date': 20260914}, {'date': '健全でない'},
+                    {'date': '2026-09-10'}):
+            self.assertFalse(in_post_window(bad, TODAY), bad)
+            self.assertIsNone(post_window_age(bad, TODAY), bad)
+        for good, want in (({'date': '2026-09-14'}, 0), ({'date': '2026-09-13'}, 1)):
+            self.assertTrue(in_post_window(good, TODAY), good)
+            self.assertEqual(post_window_age(good, TODAY), want)
 
 
 class TestPickDraft(GateTest):
@@ -107,6 +124,14 @@ class TestRereview(GateTest):
         self.assertEqual(after[0]['persona_review']['verdict'], 'pass')
         self.assertEqual(after[2]['persona_review']['verdict'], 'ng')
         self.assertNotIn('persona_review', after[4])
+
+    def test_null_date_row_does_not_crash(self):
+        # High 1回帰: 1行のdate:nullで朝collect全体が死なない (skipされて他行は処理)
+        self._patch(collect, 'persona_review_draft',
+                    lambda *a, **k: {'verdict': 'pass', 'reason': 't'})
+        self._write([row(date=None), row()])
+        n = collect.rereview_unreviewed(dry=False, limit=3, today=TODAY)
+        self.assertEqual(n, 1)  # 健全な行だけ処理される
 
 
 class TestRefill(GateTest):
@@ -186,7 +211,7 @@ class TestEnrichWindow(GateTest):
         self._setup_trials(tempfile.mkdtemp())
         self._write([row(date='2026-09-10', title='old'),
                      row(title='new')])
-        sys.argv = ['enrich.py']
+        self._patch(sys, 'argv', ['enrich.py'])
         self.assertEqual(enrich.main(), 0)
         after = self._read()
         self.assertEqual(after[0]['hook'], '発見の一句A')        # 窓外 → 不変
@@ -197,7 +222,8 @@ class TestEnrichWindow(GateTest):
     def test_explicit_keys_bypass_window(self):
         self._setup_trials(tempfile.mkdtemp())
         self._write([row(date='2026-09-10', title='old')])
-        sys.argv = ['enrich.py', enrich.preview_key('https://github.com/a/x')]
+        self._patch(sys, 'argv',
+                    ['enrich.py', enrich.preview_key('https://github.com/a/x')])
         self.assertEqual(enrich.main(), 0)
         after = self._read()
         self.assertEqual(after[0]['trial_status'], 'done')       # 明示指定 → 窓外でも処理

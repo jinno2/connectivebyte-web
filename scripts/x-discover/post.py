@@ -33,8 +33,8 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-from x_discover_rules import (ask_is_interrogative, media_ok, preview_key,  # noqa: E402
-                              uniformity_warning)
+from x_discover_rules import (ask_is_interrogative, media_ok,  # noqa: E402
+                              post_window_age, preview_key, uniformity_warning)
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
@@ -319,11 +319,8 @@ def pick_draft(entries: list[dict], today: dt.date) -> dict | None:
     hooks = [d.get('hook', '') for d in elig]
     cands = []
     for d in elig:
-        try:
-            age = (today - dt.date.fromisoformat(d['date'])).days
-        except (KeyError, ValueError):
-            continue
-        if not 0 <= age <= 1:
+        age = post_window_age(d, today)
+        if age is None:
             continue
         fields = (d.get('hook', ''), d.get('take', ''), d.get('ask', ''))
         if any(PLACEHOLDER_MARK in f for f in fields):

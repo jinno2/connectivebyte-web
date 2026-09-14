@@ -11,7 +11,10 @@ x-discoverのdraft (hook/take/ask) を、サンドボックス試用レポート
   python3 enrich.py --force               # trial_status=doneも再起草
 
 対象: media_ok (製品頁) && trials/<preview_key>/report.json が success|partial
-      && 行のtrial_status != done。冪等: 2回目の実行でqueue byteは不変。
+      && 行のtrial_status != done && 投稿対象の48h窓内 (当日+前日 — 窓外は
+      再度投稿されないため再起草しない)。明示preview_key指定はこの窓を
+      バイパスする (人手運用・--forceと組合せ可)。冪等: 2回目の実行で
+      queue byteは不変。
 fail-open: LLM失敗・規律違反・report無しは旧3行を維持 (post.pyは影響なし)。
 """
 from __future__ import annotations
@@ -25,7 +28,8 @@ import sys
 
 from collect import persona_lines, persona_review_draft
 from llm_backend import llm_text
-from x_discover_rules import BANNED_WORDS, discipline_violation, media_ok, preview_key
+from x_discover_rules import (BANNED_WORDS, discipline_violation,
+                              in_post_window, media_ok, preview_key)
 
 STATE_DIR = pathlib.Path.home() / '.local/share/cb-fleet'
 # DISCOVER_QUEUE_PATH上書きは検証用 (本番は既定path・trial runnerと同一名のenv)
@@ -33,6 +37,7 @@ QUEUE = pathlib.Path(os.environ.get(
     'DISCOVER_QUEUE_PATH', str(STATE_DIR / 'discover-queue.jsonl')))
 TRIALS_DIR = pathlib.Path(os.environ.get(
     'TRIAL_STATE_DIR', str(STATE_DIR / 'trials')))
+
 
 def load_env_file() -> None:
     """cron用: ~/.local/share/cb-fleet/.env を os.environ へ (既存env優先)。"""
@@ -126,8 +131,6 @@ def call_llm(prompt: str) -> dict | None:
     return None
 
 
-
-
 def load_queue() -> list[dict]:
     return [json.loads(l) for l in QUEUE.read_text().splitlines() if l.strip()]
 
@@ -165,13 +168,8 @@ def main() -> int:
         # ng/review_fail行を毎朝永遠に再起草しない (M2・2026-09-14)。
         # 明示key指定は人手運用なので窓をバイパス (--forceのdocstringと整合)。
         # date欠損/破損行はpostされないためLLM消費もしない (fail-closed)。
-        if not args.keys:
-            try:
-                age = (dt.date.today() - dt.date.fromisoformat(row['date'])).days
-            except (KeyError, ValueError):
-                continue
-            if not 0 <= age <= 1:
-                continue
+        if not args.keys and not in_post_window(row, dt.date.today()):
+            continue
         report_path = TRIALS_DIR / key / 'report.json'
         if not report_path.exists():
             if args.keys:
