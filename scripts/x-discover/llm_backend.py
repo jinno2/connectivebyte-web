@@ -1,9 +1,8 @@
 """LLM呼び出しbackendの切替 (2026-09-05〜・devin / codex / litellm proxy)。
 
 LLM_BACKENDS env (~/.local/share/cb-fleet/.env・カンマ区切り優先順):
-  devin    — Devin CLI非対話モード (devin -p)。modelはDEVIN_MODEL env
-             (2026-09-05〜gpt-6-astra-medium・jinno指示「devin優先+Astra試用」)。
-             枠はDevinプランquota (実測9秒/呼出)。t0006のclaude -p箱と同構造。
+  devin    — Devin CLI非対話モード (devin -p)。modelはDEVIN_MODEL env。
+             Astraのモデル指定はprovider起動前に拒否する。枠はDevinプランquota。
   codex    — Codex CLI非対話モード (codex exec)。ChatGPTサブスク範囲内・
              公式CLIの公式自動化インターフェース=key抽出ではない
              (z.ai Coding Plan系の規約問題と構造が違う)。
@@ -25,6 +24,11 @@ import tempfile
 import urllib.request
 
 LITELLM_URL = 'http://localhost:14000/v1/chat/completions'
+ASTRA_POLICY_MESSAGE = '      [llm] Devin Astra model is disabled by fleet policy'
+
+
+def _contains_astra(value: str | None) -> bool:
+    return bool(value and 'astra' in value.casefold())
 
 
 def _litellm(prompt: str, timeout: int, max_tokens: int) -> str | None:
@@ -50,14 +54,18 @@ def _litellm(prompt: str, timeout: int, max_tokens: int) -> str | None:
 
 def _devin(prompt: str, timeout: int) -> str | None:
     """devin -p (headless)。戻り値=応答text or None。modelはDEVIN_MODEL env。"""
+    model = os.environ.get('DEVIN_MODEL')
+    if _contains_astra(model):
+        print(ASTRA_POLICY_MESSAGE)
+        return None
     bin_ = shutil.which('devin') or '/home/jinno/.local/bin/devin'  # cron PATH外対策
     if not os.path.exists(bin_):
         print(f'      [llm] devin not found: {bin_}')
         return None
     cmd = [bin_, '-p', prompt,
            '--respect-workspace-trust', 'false']  # print modeはuntrusted dirで失敗するため
-    if os.environ.get('DEVIN_MODEL'):
-        cmd += ['--model', os.environ['DEVIN_MODEL']]
+    if model:
+        cmd += ['--model', model]
     try:
         p = subprocess.run(cmd, capture_output=True, text=True, timeout=max(timeout, 180),
                            cwd='/tmp')  # repo外で実行=workspace文脈を汚さない
