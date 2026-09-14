@@ -26,7 +26,8 @@ import os
 import pathlib
 import sys
 
-from collect import persona_lines, persona_review_draft
+from collect import (persona_lines, persona_review_draft,  # noqa: E402
+                     polish_draft, POLISH_ROUNDS)
 from llm_backend import llm_text
 from x_discover_rules import (BANNED_WORDS, discipline_violation,
                               in_post_window, media_ok, preview_key, read_jsonl,
@@ -207,6 +208,13 @@ def main() -> int:
             row['trial_enrich_violation'] = violation
             print(f'  [enrich] {key}: 規律違反 ({violation}) — 旧3行維持')
             continue
+        # 第二起草経路も字単位批評→改稿ループを通す (品質反復基準 2026-09-14)。
+        # polish_draft側のfail-openでLLM失敗時は現案維持。
+        if POLISH_ROUNDS > 0:
+            draft, rounds = polish_draft(draft, prompt, call_llm,
+                                         row.get('genre_jp', ''),
+                                         row.get('title', ''))
+            draft['polish_rounds'] = rounds
         # 投稿前ペルソナ全件チェック (2026-09-14)。第二起草経路も審査を通る。
         # 審査不能=旧3行維持でtrial_statusを上げない (翌朝retry)・ngも差し替えない。
         verdict = persona_review_draft(draft['hook'], draft['take'], draft['ask'],

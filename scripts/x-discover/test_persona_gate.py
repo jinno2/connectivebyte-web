@@ -253,6 +253,8 @@ class TestEnrichWindow(GateTest):
                     lambda p: dict(hook='実測差替の一句', take='自説です', ask='どうですか？'))
         self._patch(enrich, 'persona_review_draft',
                     lambda *a, **k: {'verdict': 'pass', 'reason': 'ok'})
+        # enrich経路のpolishもhermetic化: 批評は即IMPROVED_NONE (実LLMに触らせない)
+        self._patch(collect, 'llm_text', lambda p: 'IMPROVED_NONE')
 
     def test_auto_mode_skips_window_out(self):
         self._setup_trials(tempfile.mkdtemp())
@@ -275,6 +277,122 @@ class TestEnrichWindow(GateTest):
         after = self._read()
         self.assertEqual(after[0]['trial_status'], 'done')       # 明示指定 → 窓外でも処理
         self.assertEqual(after[0]['hook'], '実測差替の一句')
+
+    def test_enrich_path_applies_polish(self):
+        # 必須修正の回帰: 第二起草経路 (enrich) も字単位批評→改稿を通る
+        self._setup_trials(tempfile.mkdtemp())
+        drafts = [dict(hook='実測差替の一句', take='自説です', ask='どうですか？'),
+                  dict(hook='批評反映の一句', take='自説です', ask='どうですか？')]
+
+        def fake_call_llm(prompt):
+            if '批評の全指摘を反映' in prompt:                   # polish改稿呼出
+                return drafts[1]
+            return drafts[0]                                    # 起草呼出
+
+        self._patch(enrich, 'call_llm', fake_call_llm)
+
+        crit_state = {'n': 0}
+
+        def fake_critique(p):
+            crit_state['n'] += 1
+            return ('2行目の語が弱い → 直す → ため' if crit_state['n'] == 1
+                    else 'IMPROVED_NONE')
+
+        self._patch(collect, 'llm_text', fake_critique)
+
+        self._write([row()])
+        self._patch(sys, 'argv', ['enrich.py'])
+        self.assertEqual(enrich.main(), 0)
+        after = self._read()
+        self.assertEqual(after[0]['hook'], '批評反映の一句')     # 改稿が採用される
+        self.assertEqual(after[0]['polish_rounds'], 1)
+        self.assertEqual(after[0]['persona_review']['verdict'], 'pass')
+
+
+class TestPolish(GateTest):
+    """字単位批評→改稿ループ (collect.llm_draft内・品質反復基準 2026-09-14)。
+
+    本体のllm_draftを直接呼ぶため LLM_BACKEND env と collect側のpersona/LLMを
+    hermetic化する。fake_llm_textはprompt内容で経路を判別:
+    批評='検査する案' / 改稿='批評の全指摘を反映' / 初期起草=それ以外。"""
+
+    def _setup_polish(self, critiques, rewrites):
+        import os as _os
+        _os.environ['LLM_BACKEND'] = 'codex'
+        self.addCleanup(_os.environ.pop, 'LLM_BACKEND', None)
+        self._patch(collect, 'persona_lines',
+                    lambda: ['読者ペルソナ: テスト用 (polish fixture)'])
+        calls = []
+
+        def fake_llm_text(p):
+            calls.append(p)
+            if '検査する案' in p:
+                return next(critiques, 'IMPROVED_NONE')
+            if '批評の全指摘を反映' in p:
+                return f'{next(rewrites, "改稿尽くしの一句")}\n自説です\nどうしますか？'
+            return '初期の一句\n自説です\nどうしますか？'
+
+        self._patch(collect, 'llm_text', fake_llm_text)
+        return calls
+
+    def test_converges_after_critique_pass(self):
+        calls = self._setup_polish(
+            iter(['2行目の語が曖昧 → 具体へ → 意図が散る']),
+            iter(['改稿1の一句']))
+        self._patch(collect, 'POLISH_ROUNDS', 4)
+        d = collect.llm_draft(row(), 'tool', [])
+        self.assertEqual(d['hook'], '改稿1の一句')          # 批評1回→改稿1回→収束
+        self.assertEqual(d['polish_rounds'], 1)
+        self.assertIn('検査する案', calls[1])               # 起草→批評→改稿→批評の順
+        self.assertIn('IMPROVED_NONE', calls[3])
+
+    def test_round_cap_bounded(self):
+        # 改稿は毎回別文 (同文循環は収束扱いで止まるため)
+        rewrites = (f'改稿{i}の一句' for i in range(1, 10))
+        self._setup_polish(iter(lambda: 'まだ弱い語がある → 直す → ため', None), rewrites)
+        self._patch(collect, 'POLISH_ROUNDS', 3)
+        d = collect.llm_draft(row(), 'tool', [])
+        self.assertEqual(d['polish_rounds'], 3)             # 上限で打ち切り
+        self.assertEqual(d['hook'], '改稿3の一句')
+
+    def test_discipline_violating_rewrite_keeps_current(self):
+        self._setup_polish(iter(['語が弱い → 直す → ため']),
+                           iter([f'禁語{BANNED_WORDS[0]}の一句']))
+        self._patch(collect, 'POLISH_ROUNDS', 4)
+        d = collect.llm_draft(row(), 'tool', [])
+        self.assertEqual(d['hook'], '初期の一句')           # 違反改稿は捨てる
+        self.assertEqual(d['polish_rounds'], 0)
+
+    def test_identical_rewrite_stops(self):
+        self._setup_polish(iter(['語が弱い → 直す → ため']), iter(['初期の一句']))
+        self._patch(collect, 'POLISH_ROUNDS', 4)
+        d = collect.llm_draft(row(), 'tool', [])
+        self.assertEqual(d['hook'], '初期の一句')           # 同一案循環 → 収束扱い
+        self.assertEqual(d['polish_rounds'], 0)
+
+    def test_critique_llm_failure_fail_open(self):
+        calls = self._setup_polish(iter(['']), iter([]))    # 批評LLMが空応答
+        self._patch(collect, 'POLISH_ROUNDS', 4)
+        d = collect.llm_draft(row(), 'tool', [])
+        self.assertEqual(d['hook'], '初期の一句')           # 現案維持
+        self.assertEqual(d['polish_rounds'], 0)
+        self.assertEqual(len(calls), 2)                     # 起草+批評1回のみ
+
+    def test_rewrite_llm_failure_fail_open(self):
+        # 改稿LLMが3行未満 (call→None) — 批評を消すが改稿は採用しない
+        self._setup_polish(iter(['語が弱い → 直す → ため']), iter(['']))
+        self._patch(collect, 'POLISH_ROUNDS', 4)
+        d = collect.llm_draft(row(), 'tool', [])
+        self.assertEqual(d['hook'], '初期の一句')
+        self.assertEqual(d['polish_rounds'], 0)
+
+    def test_disabled_skips_loop(self):
+        calls = self._setup_polish(iter(["改善点あり"]), iter([]))
+        self._patch(collect, 'POLISH_ROUNDS', 0)
+        d = collect.llm_draft(row(), 'tool', [])
+        self.assertEqual(d['hook'], '初期の一句')
+        self.assertNotIn('polish_rounds', d)                # 旧挙動どおり
+        self.assertEqual(len(calls), 1)
 
 
 if __name__ == '__main__':

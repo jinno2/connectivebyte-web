@@ -306,6 +306,70 @@ def llm_prompt(item: dict, genre_jp: str, recent_hooks: list[str], excerpt: str 
     return '\n'.join(lines)
 
 
+def _polish_rounds_env() -> int:
+    """DISCOVER_POLISH_ROUNDS (既定8)。ゴミ値でのimport即死=朝cron全停止を避ける。"""
+    try:
+        return int(os.environ.get('DISCOVER_POLISH_ROUNDS', '8'))
+    except ValueError:
+        print('[polish] DISCOVER_POLISH_ROUNDSが不正 — 既定8にfallback', file=sys.stderr)
+        return 8
+
+
+POLISH_ROUNDS = _polish_rounds_env()
+
+
+def polish_critique_prompt(draft: dict, genre_jp: str = '',
+                           title: str = '') -> str:
+    """字単位批評prompt — 読者ペルソナの目で1文・1字の意図と効率を検査させる
+    (品質反復基準 2026-09-14)。改善点が無い場合のみ先頭行 IMPROVED_NONE。"""
+    lines = ['あなたはAI情報発掘メディアの読者ペルソナ。X投稿案を1文単位・1字単位で検査する。']
+    lines += persona_lines()
+    lines += [
+        f'ジャンル: {genre_jp}', f'題名: {title}',
+        '検査する案:',
+        f"1行目: {draft.get('hook', '')}",
+        f"2行目: {draft.get('take', '')}",
+        f"3行目: {draft.get('ask', '')}",
+        '各文の各語・各字について問え:',
+        '・この字に意図が埋まっているか (曖昧語・逃げの語・説明くさい接続・型どおりの書き出し)',
+        '・この語は最も効率が良いか (同じ音数で強い語はないか・読者が得する具体は入っているか)',
+        '・文の意図は1つに定まっているか (2つの主張を並べてないか・問いは返したくなるか)',
+        '改善点は「行・語 → 直し方 → なぜ」の箇条書きで出せ。指摘はミリ単位で細かくて良い。',
+        '批評は案と題名の範囲で。案に無い固有名詞・数字の新規創作は指示しない。',
+        '改善点が1つも無い場合のみ、先頭行に IMPROVED_NONE とだけ書いて出力せよ。',
+    ]
+    return '\n'.join(lines)
+
+
+def polish_draft(draft: dict, prompt: str, call, genre_jp: str = '',
+                 title: str = '') -> tuple[dict, int]:
+    """字単位批評→改稿ループ — ペルソナの目で改善が止まるまで回す
+    (品質反復基準・収束まで最大POLISH_ROUNDS回)。callは「prompt文字列 →
+    {hook,take,ask}|None」の起草呼出で、collect(llm_draft)とenrich共用。
+    fail-open: 批評/改稿のLLM失敗・改稿の規律違反・同一案循環は現案維持で
+    打ち切り (採用改稿数を返す — 呼び出し側がpolish_roundsとして記録)。"""
+    rounds = 0
+    for _ in range(POLISH_ROUNDS):
+        crit = llm_text(polish_critique_prompt(draft, genre_jp, title))
+        crit_lines = [l for l in (crit or '').splitlines() if l.strip()]
+        if not crit_lines or crit_lines[0].strip().startswith('IMPROVED_NONE'):
+            break  # 批評不能 or 改善点ゼロ → 現案を正式案とする
+        redo = call(prompt + '\n読者ペルソナの字単位批評:\n' + crit
+                    + '\n批評の全指摘を反映して書き直せ (形式は同じ3行・説明禁止)。')
+        if redo is None:
+            break
+        violation = discipline_violation(redo['hook'], redo['take'], redo['ask'])
+        if violation:
+            print(f'      [polish] 改稿が規律違反 ({violation}) — 現案維持')
+            break
+        if redo == draft:
+            break  # 改稿が循環 — 収束扱い
+        draft = redo
+        rounds += 1
+        print(f'      [polish] r{rounds} 改稿採用: {draft["hook"]}')
+    return draft, rounds
+
+
 def llm_draft(item: dict, genre_jp: str, recent_hooks: list[str],
               excerpt: str = '', note: str = '') -> dict | None:
     """LLMで一句+自説+問いを起草 (backend=LLM_BACKEND env)。
@@ -350,6 +414,13 @@ def llm_draft(item: dict, genre_jp: str, recent_hooks: list[str],
         retry = call(prompt + '\n' + note)
         if retry is not None:
             draft = retry
+
+    def polish(d: dict) -> tuple[dict, int]:
+        return polish_draft(d, prompt, call, genre_jp, item.get('title', ''))
+
+    if POLISH_ROUNDS > 0:
+        draft, rounds = polish(draft)
+        draft['polish_rounds'] = rounds
     return draft
 
 
