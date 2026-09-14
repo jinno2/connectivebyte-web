@@ -46,7 +46,8 @@ persona gateはQ3専任、post.pyの機械検査はQ0/Q1の最終防衛線。機
 - queue/state/log = `~/.local/share/cb-fleet/` (repo外・git管理外)
 - 秘密 = `~/.local/share/cb-fleet/.env` のみ (LITELLM_API_KEY・X access鍵)
 - LLM起草backend = `LLM_BACKENDS` env優先順 (`llm_backend.py`・2026-09-05〜) —
-  `devin`=Devin CLI非対話 (`-p`・model=`DEVIN_MODEL` env・現行gpt-6-astra-medium・実測9秒) →
+  `devin`=Devin CLI非対話 (`-p`・model=`DEVIN_MODEL` env)。Astra指定は呼出し側とlauncherの
+  fail-closed guardでprovider起動前に拒否（exit 78、2026-09-15）。安全なモデル設定時のみ →
   `codex`=Codex CLI非対話 (`codex exec`・ChatGPTサブスク・公式自動化IF・実測14秒) →
   `litellm`=localhost:14000 proxy (`LITELLM_MODEL` env・上流全滅時のqwen退避経路)。
   失敗時はchainの次へ・最終fallbackは既存のplaceholder→翌朝refill
