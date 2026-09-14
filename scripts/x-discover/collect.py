@@ -26,7 +26,8 @@ import urllib.request
 
 from llm_backend import llm_text
 from x_discover_rules import (BANNED_WORDS, ask_is_interrogative,
-                              banned_hits, discipline_violation, in_post_window)
+                              banned_hits, discipline_violation, in_post_window,
+                              read_jsonl, write_jsonl_atomic)
 
 STATE_DIR = pathlib.Path.home() / '.local/share/cb-fleet'
 STATE = STATE_DIR / 'discover-state.json'
@@ -354,10 +355,7 @@ def llm_draft(item: dict, genre_jp: str, recent_hooks: list[str],
 
 def recent_hooks(limit: int = 6) -> list[str]:
     """キュー末尾のhook一覧 (均一化回避のため起草promptへ渡す)。"""
-    try:
-        rows = [json.loads(l) for l in QUEUE.read_text().splitlines() if l.strip()]
-    except OSError:
-        return []
+    rows = read_jsonl(QUEUE)
     return [r['hook'] for r in rows if r.get('hook')][-limit:]
 
 
@@ -376,10 +374,7 @@ def refill_placeholders(dry: bool = False, limit: int = 3,
     if limit <= 0 or not QUEUE.exists():
         return 0
     today = today or dt.date.today()
-    try:
-        rows = [json.loads(l) for l in QUEUE.read_text().splitlines() if l.strip()]
-    except OSError:
-        return 0
+    rows = read_jsonl(QUEUE)
     hooks = recent_hooks()
     n = 0
     for r in rows:
@@ -400,7 +395,7 @@ def refill_placeholders(dry: bool = False, limit: int = 3,
             print(f'      hook: {r["hook"]}')
             print(f"      persona: {r['persona_review']['verdict']}")
     if n and not dry:
-        QUEUE.write_text(''.join(json.dumps(x, ensure_ascii=False) + '\n' for x in rows))
+        write_jsonl_atomic(QUEUE, rows)
         print(f'refilled: {n} rows -> {QUEUE}')
     return n
 
@@ -417,10 +412,7 @@ def rereview_unreviewed(dry: bool = False, limit: int = 3, today: dt.date | None
     if limit <= 0 or not QUEUE.exists():
         return 0
     today = today or dt.date.today()
-    try:
-        rows = [json.loads(l) for l in QUEUE.read_text().splitlines() if l.strip()]
-    except OSError:
-        return 0
+    rows = read_jsonl(QUEUE)
     n = 0
     for r in rows:
         if n >= limit:
@@ -444,7 +436,7 @@ def rereview_unreviewed(dry: bool = False, limit: int = 3, today: dt.date | None
         n += 1
         print(f'  [rereview] {r.get("title", "")[:60]} -> {verdict["verdict"]}')
     if n and not dry:
-        QUEUE.write_text(''.join(json.dumps(x, ensure_ascii=False) + '\n' for x in rows))
+        write_jsonl_atomic(QUEUE, rows)
         print(f'rereviewed: {n} rows -> {QUEUE}')
     return n
 
@@ -459,10 +451,7 @@ def redraft_persona_ng(dry: bool = False, limit: int = 2, today: dt.date | None 
     if limit <= 0 or not QUEUE.exists():
         return 0
     today = today or dt.date.today()
-    try:
-        rows = [json.loads(l) for l in QUEUE.read_text().splitlines() if l.strip()]
-    except OSError:
-        return 0
+    rows = read_jsonl(QUEUE)
     hooks = recent_hooks()
     n = 0
     attempts = 0
@@ -502,7 +491,7 @@ def redraft_persona_ng(dry: bool = False, limit: int = 2, today: dt.date | None 
         print(f'  [redraft] {item["title"][:50]} -> pass')
         print(f'      hook: {r["hook"]}')
     if n and not dry:
-        QUEUE.write_text(''.join(json.dumps(x, ensure_ascii=False) + '\n' for x in rows))
+        write_jsonl_atomic(QUEUE, rows)
         print(f'redrafted: {n} rows -> {QUEUE}')
     return n
 

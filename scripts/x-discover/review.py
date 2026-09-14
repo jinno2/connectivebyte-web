@@ -18,7 +18,6 @@ collect.py が毎朝溜めた draft (status=draft) を新しい方から表示�
 from __future__ import annotations
 
 import datetime as dt
-import json
 import os
 import sys
 
@@ -26,24 +25,19 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 
 from x_discover_rules import (ask_is_interrogative, banned_hits,  # noqa: E402
-                              uniformity_warning)
+                              read_jsonl, uniformity_warning,
+                              write_jsonl_atomic)
 
 STATE_DIR = os.path.expanduser('~/.local/share/cb-fleet')
 QUEUE_FILE = os.path.join(STATE_DIR, 'discover-queue.jsonl')
 
 
 def load_queue() -> list[dict]:
-    try:
-        return [json.loads(l) for l in open(QUEUE_FILE, encoding='utf-8') if l.strip()]
-    except OSError:
-        return []
+    return read_jsonl(QUEUE_FILE)
 
 
 def save_queue(entries: list[dict]) -> None:
-    os.makedirs(STATE_DIR, exist_ok=True)
-    with open(QUEUE_FILE, 'w', encoding='utf-8') as f:
-        for d in entries:
-            f.write(json.dumps(d, ensure_ascii=False) + '\n')
+    write_jsonl_atomic(QUEUE_FILE, entries)
 
 
 def draft_rows(entries: list[dict]) -> list[tuple[int, dict]]:

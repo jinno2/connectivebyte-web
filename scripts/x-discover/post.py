@@ -34,7 +34,8 @@ import urllib.parse
 import urllib.request
 
 from x_discover_rules import (ask_is_interrogative, media_ok,  # noqa: E402
-                              post_window_age, preview_key, uniformity_warning)
+                              post_window_age, preview_key, read_jsonl,
+                              uniformity_warning, write_jsonl_atomic)
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
@@ -290,17 +291,11 @@ def x_post_tweet(text: str, env: dict, media_id: str | None = None) -> dict:
 # --- queue -------------------------------------------------------------------
 
 def load_queue() -> list[dict]:
-    try:
-        return [json.loads(l) for l in open(QUEUE_FILE, encoding='utf-8') if l.strip()]
-    except OSError:
-        return []
+    return read_jsonl(QUEUE_FILE)
 
 
 def save_queue(entries: list[dict]) -> None:
-    os.makedirs(STATE_DIR, exist_ok=True)
-    with open(QUEUE_FILE, 'w', encoding='utf-8') as f:
-        for d in entries:
-            f.write(json.dumps(d, ensure_ascii=False) + '\n')
+    write_jsonl_atomic(QUEUE_FILE, entries)
 
 
 PLACEHOLDER_MARK = '【'  # collect失敗時の要記入マーカー(LLM未生成=投稿不可)

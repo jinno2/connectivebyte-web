@@ -9,6 +9,7 @@
   - enrich: 自動実行は48h窓外をskip・明示key指定は窓をバイパス
   - x_discover_rules.discipline_violation: 禁止語/問い形/字数/正常の4分岐
   - x_discover_rules.in_post_window/post_window_age: date破損行は例外でなく窓外
+  - queue I/O: 破損行・truncate行でクラッシュしない / 書込はatomic
 
 LLM依存関数 (llm_draft/attach_persona_review/persona_review_draft/call_llm)
 は全て monkeypatch する。実行: python3 test_persona_gate.py
@@ -29,7 +30,8 @@ import collect  # noqa: E402
 import enrich  # noqa: E402
 import post  # noqa: E402
 from x_discover_rules import (BANNED_WORDS, discipline_violation,  # noqa: E402
-                              in_post_window, post_window_age)
+                              in_post_window, post_window_age, read_jsonl,
+                              write_jsonl_atomic)
 
 TODAY = dt.date(2026, 9, 14)
 YESTERDAY = '2026-09-13'
@@ -86,6 +88,42 @@ class TestRules(GateTest):
             self.assertTrue(in_post_window(good, TODAY), good)
             self.assertEqual(post_window_age(good, TODAY), want)
 
+    def test_read_jsonl_tolerates_corrupt_lines(self):
+        # 中断書込の末尾truncate・手編集の壊行・空行 — 健全行だけで続行
+        self.q.write_text('{"a": 1}\n壊れた行\n\n{"a": 2}\n{"trunc')
+        self.assertEqual([r['a'] for r in read_jsonl(self.q)], [1, 2])
+
+    def test_read_jsonl_missing_file_is_empty(self):
+        self.assertEqual(read_jsonl(self.q), [])
+
+    def test_write_jsonl_atomic_roundtrip(self):
+        # atomic性も実検証: replace時にtmpが存在 (素のwrite_text直書きなら
+        # os.replaceが呼ばれず、このテストは赤になる)
+        import x_discover_rules
+        real_replace = x_discover_rules.os.replace
+        seen = []
+
+        def spy_replace(src, dst):
+            self.assertTrue(pathlib.Path(src).exists(), 'replace時にtmpが無い')
+            seen.append((pathlib.Path(src).name, pathlib.Path(dst).name))
+            real_replace(src, dst)
+
+        self._patch(x_discover_rules.os, 'replace', spy_replace)
+        write_jsonl_atomic(self.q, [{'a': 1}, {'b': '日本語'}])
+        got = read_jsonl(self.q)
+        self.assertEqual([len(r) for r in got], [1, 1])
+        self.assertEqual(got[0]['a'], 1)
+        self.assertEqual(got[1]['b'], '日本語')
+        self.assertEqual(seen, [(self.q.name + '.tmp', self.q.name)])
+        write_jsonl_atomic(self.q, [{'c': 3}])  # 上書き
+        self.assertEqual(read_jsonl(self.q), [{'c': 3}])
+        self.assertFalse(pathlib.Path(str(self.q) + '.tmp').exists())
+
+    def test_read_jsonl_skips_non_dict_lines(self):
+        # JSONとしては合法な非dict行 ("文字列"/配列/null) も下流 AttributeError無くskip
+        self.q.write_text('{"a": 1}\n"ただの文字列"\n[1, 2]\nnull\n{"a": 2}')
+        self.assertEqual([r['a'] for r in read_jsonl(self.q)], [1, 2])
+
 
 class TestPickDraft(GateTest):
     # hookは行ごとに変える (同一末尾hookはuniformity_warningで適正skipされる)
@@ -132,6 +170,15 @@ class TestRereview(GateTest):
         self._write([row(date=None), row()])
         n = collect.rereview_unreviewed(dry=False, limit=3, today=TODAY)
         self.assertEqual(n, 1)  # 健全な行だけ処理される
+
+    def test_corrupt_queue_line_does_not_crash(self):
+        # queueの1行破損で朝collectが死なない (破損行skip・健全2行は処理)
+        self._patch(collect, 'persona_review_draft',
+                    lambda *a, **k: {'verdict': 'pass', 'reason': 't'})
+        self.q.write_text(json.dumps(row(), ensure_ascii=False) + '\n{壊れた行\n'
+                          + json.dumps(row(date=YESTERDAY), ensure_ascii=False) + '\n')
+        n = collect.rereview_unreviewed(dry=False, limit=3, today=TODAY)
+        self.assertEqual(n, 2)
 
 
 class TestRefill(GateTest):

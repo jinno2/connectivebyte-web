@@ -9,6 +9,10 @@ collect (起草prompt) / review (承認時警告表示) / post (投稿前fail-cl
 from __future__ import annotations
 
 import datetime as dt
+import json
+import os
+import pathlib
+import sys
 
 # X運用基本計画§11「自動生成しない」+ 肯定評価の誇張語 (発見者take向け拡張)
 BANNED_WORDS: tuple[str, ...] = (
@@ -107,3 +111,41 @@ def post_window_age(row: dict, today: dt.date) -> int | None:
 def in_post_window(row: dict, today: dt.date) -> bool:
     """48h窓内かの述語版 (窓外skipのloopにそのまま嵌まる)。"""
     return post_window_age(row, today) is not None
+
+
+# --- queue I/O の耐障害化 (collect/enrich/post 共通・2026-09-14) -------------
+# 書込は全save経路でatomic (tmp+os.replace)。読込は破損行をskip — 中断された
+# 書込や手編集の1行で朝collect・晩postが丸ごと死ぬのを防ぐ (実査済み欠陥)。
+
+def read_jsonl(path: str | os.PathLike) -> list[dict]:
+    """1行1JSONのqueueを読む。破損行・非dict行はstderrに警告してskip・
+    file無しは空list。破損行は次の書戻し時に物理削除される (復元不可・仕様:
+    復元が必要ならqueueを手動backupしてから再実行)。"""
+    try:
+        lines = pathlib.Path(path).read_text(encoding='utf-8').splitlines()
+    except OSError:
+        return []
+    rows: list[dict] = []
+    for i, line in enumerate(lines, 1):
+        if not line.strip():
+            continue
+        try:
+            row = json.loads(line)
+        except json.JSONDecodeError:
+            print(f'[queue] 破損行をskip: {path}:{i}', file=sys.stderr)
+            continue
+        if not isinstance(row, dict):  # "文字列" や [配列] 行が下流でAttributeErrorするのを防ぐ
+            print(f'[queue] 非dict行をskip: {path}:{i}', file=sys.stderr)
+            continue
+        rows.append(row)
+    return rows
+
+
+def write_jsonl_atomic(path: str | os.PathLike, rows: list[dict]) -> None:
+    """queueをtmp+os.replaceで書き換える — 中断しても旧queueは無傷。"""
+    p = pathlib.Path(path)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    tmp = p.with_name(p.name + '.tmp')
+    tmp.write_text(''.join(json.dumps(x, ensure_ascii=False) + '\n' for x in rows),
+                   encoding='utf-8')
+    os.replace(tmp, p)

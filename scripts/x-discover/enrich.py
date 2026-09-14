@@ -29,7 +29,8 @@ import sys
 from collect import persona_lines, persona_review_draft
 from llm_backend import llm_text
 from x_discover_rules import (BANNED_WORDS, discipline_violation,
-                              in_post_window, media_ok, preview_key)
+                              in_post_window, media_ok, preview_key, read_jsonl,
+                              write_jsonl_atomic)
 
 STATE_DIR = pathlib.Path.home() / '.local/share/cb-fleet'
 # DISCOVER_QUEUE_PATH上書きは検証用 (本番は既定path・trial runnerと同一名のenv)
@@ -132,11 +133,11 @@ def call_llm(prompt: str) -> dict | None:
 
 
 def load_queue() -> list[dict]:
-    return [json.loads(l) for l in QUEUE.read_text().splitlines() if l.strip()]
+    return read_jsonl(QUEUE)
 
 
 def save_queue(rows: list[dict]) -> None:
-    QUEUE.write_text(''.join(json.dumps(x, ensure_ascii=False) + '\n' for x in rows))
+    write_jsonl_atomic(QUEUE, rows)
 
 
 def main() -> int:
@@ -147,11 +148,12 @@ def main() -> int:
     args = ap.parse_args()
 
     load_env_file()
-    try:
-        rows = load_queue()
-    except OSError as e:
-        print(f'queue unreadable: {e}', file=sys.stderr)
+    # queue欠損は旧挙動どおり rc=1 (collect.pyが毎朝生成するはずの存在).
+    # read_jsonlは欠損を空listにするため、ここで明示チェックする。
+    if not QUEUE.exists():
+        print(f'queue not found: {QUEUE}', file=sys.stderr)
         return 1
+    rows = load_queue()
     before = ''.join(json.dumps(x, ensure_ascii=False) + '\n' for x in rows)
     recent = [r['hook'] for r in rows if r.get('hook')][-6:]
 
