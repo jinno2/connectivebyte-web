@@ -26,8 +26,8 @@ import os
 import pathlib
 import sys
 
-from collect import (persona_lines, persona_review_draft,  # noqa: E402
-                     polish_draft, POLISH_ROUNDS)
+from collect import (intent_lines, persona_lines,  # noqa: E402
+                     persona_review_draft, polish_draft, POLISH_ROUNDS)
 from llm_backend import llm_text
 from x_discover_rules import (BANNED_WORDS, discipline_violation,
                               in_post_window, media_ok, preview_key, read_jsonl,
@@ -94,11 +94,8 @@ def enrich_prompt(row: dict, digest: str, recent_hooks: list[str]) -> str:
              '実際に試用した自動レポートがある。X投稿1件分の日本語案のみを出力する。']
     # 第二起草経路も全媒体ペルソナレビュー必須(2026-09-14)。yaml不在=例外→呼び出し側で旧3行維持
     lines += persona_lines()
+    lines += intent_lines('「自分でも試せる」に実測事実で何を足すか')
     lines += [
-        '書く前に各1行の意図を1つ決めてから書く (意図の定まらない語は書かない):',
-        '1行目は読者が何を得て足を止める一句か・2行目は「自分でも試せる」に実測事実で'
-        '何を足すか・3行目は読者がなぜ返したくなるか。同じ意味で短く強い語があれば'
-        'そちらに替え、繋ぎ・曖昧語・逃げの語は削る。',
         '形式 (3要素をそれぞれ1行、区切りなし、余計な説明禁止):',
         '1行目: 発見の一句 (40字以内・断定調・書き出しの型を固定しない)',
         '2行目: 自説1-2文 (なぜ重要か・独自の視点・80字以内・個人体験を語らない)',
