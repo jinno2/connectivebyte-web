@@ -19,6 +19,7 @@ from __future__ import annotations
 import datetime as dt
 import json
 import pathlib
+import shutil
 import sys
 import tempfile
 import unittest
@@ -242,6 +243,10 @@ class TestRedraft(GateTest):
 
 class TestEnrichWindow(GateTest):
     def _setup_trials(self, tmp):
+        self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
+        # import時にambient DISCOVER_POLISH_ROUNDSを取り込むため明示固定
+        # (envに0があるとpolish_roundsが記録されず偽失敗する)
+        self._patch(enrich, 'POLISH_ROUNDS', 8)
         tr = pathlib.Path(tmp) / 'trials'
         key = enrich.preview_key('https://github.com/a/x')
         d = tr / key
@@ -283,8 +288,10 @@ class TestEnrichWindow(GateTest):
         self._setup_trials(tempfile.mkdtemp())
         drafts = [dict(hook='実測差替の一句', take='自説です', ask='どうですか？'),
                   dict(hook='批評反映の一句', take='自説です', ask='どうですか？')]
+        seen: list[str] = []
 
         def fake_call_llm(prompt):
+            seen.append(prompt)
             if '批評の全指摘を反映' in prompt:                   # polish改稿呼出
                 return drafts[1]
             return drafts[0]                                    # 起草呼出
@@ -307,6 +314,7 @@ class TestEnrichWindow(GateTest):
         self.assertEqual(after[0]['hook'], '批評反映の一句')     # 改稿が採用される
         self.assertEqual(after[0]['polish_rounds'], 1)
         self.assertEqual(after[0]['persona_review']['verdict'], 'pass')
+        self.assertIn('意図を1つ決めてから書く', seen[0])        # 第二起草promptも意図設計を要求
 
 
 class TestPolish(GateTest):
@@ -344,7 +352,10 @@ class TestPolish(GateTest):
         self.assertEqual(d['hook'], '改稿1の一句')          # 批評1回→改稿1回→収束
         self.assertEqual(d['polish_rounds'], 1)
         self.assertIn('検査する案', calls[1])               # 起草→批評→改稿→批評の順
-        self.assertIn('IMPROVED_NONE', calls[3])
+        # IMPROVED_NONE応答後に改稿が再発生しない (calls[3]への恒真assertInは廃止 —
+        # 批評promptの指示文に常にIMPORVED_NONEが含まれ検証になっていないため)
+        self.assertEqual(len(calls), 4)
+        self.assertIn('意図を1つ決めてから書く', calls[0])   # 起草promptが意図設計を要求
 
     def test_round_cap_bounded(self):
         # 改稿は毎回別文 (同文循環は収束扱いで止まるため)
