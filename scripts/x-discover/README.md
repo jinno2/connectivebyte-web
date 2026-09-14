@@ -63,6 +63,8 @@ python3 post.py --dry-run         # 投稿プレビュー (表示のみ)
 python3 review.py                 # draft一覧 (任意steering・推奨=★)
 python3 review.py reject 12       # 却下 (番号=行位置・翌日も有効)
 python3 review.py --all           # 全queue簡易履歴
+python3 repolish.py --dry         # 既存draftへpolish一括適用のプレビュー
+python3 repolish.py               # 適用 (Q2収束+Q3再審査・fail-open・冪等)
 ```
 
 ## CB垢作成後の有効化 (残るjinno作業はここだけ)

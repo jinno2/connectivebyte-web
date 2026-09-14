@@ -30,6 +30,7 @@ sys.path.insert(0, str(HERE))
 import collect  # noqa: E402
 import enrich  # noqa: E402
 import post  # noqa: E402
+import repolish  # noqa: E402
 from x_discover_rules import (BANNED_WORDS, discipline_violation,  # noqa: E402
                               in_post_window, post_window_age, read_jsonl,
                               write_jsonl_atomic)
@@ -53,9 +54,11 @@ class GateTest(unittest.TestCase):
         self.q = pathlib.Path(tmpmgr.name) / 'q.jsonl'
         self._patch(collect, 'QUEUE', self.q)
         self._patch(enrich, 'QUEUE', self.q)  # 本番queueを絶対に触らせない
+        self._patch(repolish, 'QUEUE', self.q)
         # hermetic化: 実~/.env読込 (os.environ汚染) と実persona yaml
         # (姉妹repo無しマシンで赤になる) に依存させない
         self._patch(enrich, 'load_env_file', lambda: None)
+        self._patch(repolish, 'load_env_file', lambda: None)
         self._patch(enrich, 'persona_lines',
                     lambda: ['読者ペルソナ: テスト用 (hermetic fixture)'])
 
@@ -404,6 +407,149 @@ class TestPolish(GateTest):
         self.assertEqual(d['hook'], '初期の一句')
         self.assertNotIn('polish_rounds', d)                # 旧挙動どおり
         self.assertEqual(len(calls), 1)
+
+
+class TestRepolish(GateTest):
+    """既存draftへpolish一括適用 (repolish.py) の検証。"""
+
+    def _setup_repolish(self) -> list[str]:
+        self._patch(repolish, 'persona_review_draft',
+                    lambda *a, **k: {'verdict': 'pass', 'reason': 'ok'})
+        self._patch(collect, 'POLISH_ROUNDS', 4)
+        self._patch(collect, 'persona_lines',
+                    lambda: ['読者ペルソナ: テスト用 (hermetic fixture)'])
+        calls: list[str] = []
+
+        def fake_llm_text(p):
+            calls.append(p)
+            return 'IMPROVED_NONE'                          # 既定: 批評は即収束
+
+        self._patch(collect, 'llm_text', fake_llm_text)
+        return calls
+
+    def _one_critique_then_converge(self):
+        # 1回目の批評だけ指摘あり→改稿1回→2回目で収束
+        state = {'n': 0}
+
+        def fake_crit(p):
+            state['n'] += 1
+            return ('2行目の語が弱い → 直す → ため' if state['n'] == 1
+                    else 'IMPROVED_NONE')
+
+        self._patch(collect, 'llm_text', fake_crit)
+
+    def test_applies_polish_and_rereview(self):
+        self._setup_repolish()
+        self._one_critique_then_converge()
+
+        def fake_call_llm(p):
+            if '批評の全指摘を反映' in p:                   # polish改稿呼出
+                return dict(hook='批評反映の一句', take='自説です',
+                            ask='どうしますか？')
+            return None
+
+        self._patch(repolish, 'call_llm', fake_call_llm)
+        self._write([row()])
+        self.assertEqual(repolish.main(TODAY), 0)
+        after = self._read()
+        self.assertEqual(after[0]['hook'], '批評反映の一句')   # 改稿が採用される
+        self.assertEqual(after[0]['polish_rounds'], 1)
+        self.assertEqual(after[0]['persona_review']['verdict'], 'pass')  # 再審査
+
+    def test_persona_ng_keeps_old(self):
+        self._setup_repolish()
+        self._one_critique_then_converge()
+        self._patch(repolish, 'persona_review_draft',
+                    lambda *a, **k: {'verdict': 'ng', 'reason': '弱い'})
+        self._patch(repolish, 'call_llm',
+                    lambda p: dict(hook='批評反映の一句', take='自説です',
+                                   ask='どうしますか？'))
+        self._write([row()])
+        self.assertEqual(repolish.main(TODAY), 0)
+        after = self._read()
+        self.assertEqual(after[0]['hook'], '発見の一句A')      # 旧3行維持
+        self.assertNotIn('polish_rounds', after[0])            # 改稿は記録しない
+
+    def test_review_fail_keeps_old(self):
+        self._setup_repolish()
+        self._one_critique_then_converge()
+        self._patch(repolish, 'persona_review_draft', lambda *a, **k: None)
+        self._patch(repolish, 'call_llm',
+                    lambda p: dict(hook='批評反映の一句', take='自説です',
+                                   ask='どうしますか？'))
+        self._write([row()])
+        self.assertEqual(repolish.main(TODAY), 0)
+        after = self._read()
+        self.assertEqual(after[0]['hook'], '発見の一句A')
+        self.assertNotIn('polish_rounds', after[0])
+
+    def test_zero_rounds_records_marker_and_backup(self):
+        calls = self._setup_repolish()                         # 批評は即IMPROVED_NONE
+        self._write([row(persona_review={'verdict': 'pass', 'reason': '元'})])
+        self.assertEqual(repolish.main(TODAY), 0)
+        after = self._read()
+        self.assertEqual(after[0]['hook'], '発見の一句A')      # 現案維持
+        self.assertEqual(after[0]['polish_rounds'], 0)         # 検査済み印
+        self.assertEqual(after[0]['persona_review']['reason'], '元')  # 審査は触らない
+        self.assertEqual(len(calls), 1)                        # 批評1回のみ
+        backup = self.q.parent / 'discover-queue.pre-repolish.jsonl'
+        self.assertTrue(backup.exists())                       # 改稿前snapshot
+
+    def test_idempotent_skips_polished(self):
+        calls = self._setup_repolish()
+        self._write([row(polish_rounds=2)])
+        self.assertEqual(repolish.main(TODAY), 0)
+        self.assertEqual(calls, [])                            # LLM呼出ゼロ
+        self.assertEqual(self._read()[0]['polish_rounds'], 2)
+
+    def test_skips_dead_rows(self):
+        calls = self._setup_repolish()
+        self._write([row(status='rejected'),                    # 却下済み
+                     row(date='2026-09-01'),                    # 窓外=二度とpostされない
+                     row(hook='【要起草】'),                     # 未起草
+                     row(posted_at='2026-09-14T21:07:00+09:00'),  # 投稿済み
+                     row(status='blocked'),                     # persona落ちの永久死滅
+                     row()])                                    # 生存行のみ対象
+        self.assertEqual(repolish.main(TODAY), 0)
+        self.assertEqual(len(calls), 1)
+
+    def test_stale_queue_aborts_write(self):
+        # ループ中にcronが書いた場合 — 再読込がsnapshotと不一致なら書込中断 (rc=1)
+        self._setup_repolish()
+        self._one_critique_then_converge()
+        self._patch(repolish, 'call_llm',
+                    lambda p: dict(hook='批評反映の一句', take='自説です',
+                                   ask='どうしますか？'))
+        fresh = [row(hook='cronが書換えた一句')]               # 2回目のread_jsonlが返す状態
+
+        real_read = repolish.read_jsonl
+
+        def fake_read(path):
+            fake_read.n += 1
+            return [dict(r) for r in fresh] if fake_read.n >= 2 else real_read(path)
+
+        fake_read.n = 0
+        self._patch(repolish, 'read_jsonl', fake_read)
+        self._write([row()])
+        self.assertEqual(repolish.main(TODAY), 1)              # 中断
+        self.assertNotIn('polish_rounds', self._read()[0])     # 書込は起きていない
+
+    def test_limit_bounds_processed_rows(self):
+        calls = self._setup_repolish()                         # 批評は即IMPROVED_NONE
+        self._patch(sys, 'argv', ['repolish.py', '--limit', '1'])
+        self._write([row(), row()])
+        self.assertEqual(repolish.main(TODAY), 0)
+        self.assertEqual(len(calls), 1)                        # 1行目のみ処理
+        after = self._read()
+        self.assertEqual(after[0]['polish_rounds'], 0)
+        self.assertNotIn('polish_rounds', after[1])
+
+    def test_dry_writes_nothing(self):
+        self._setup_repolish()
+        self._write([row()])
+        self._patch(sys, 'argv', ['repolish.py', '--dry'])
+        self.assertEqual(repolish.main(TODAY), 0)
+        self.assertNotIn('polish_rounds', self._read()[0])     # 書込なし
 
 
 if __name__ == '__main__':
