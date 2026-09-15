@@ -59,7 +59,7 @@ EOF
 ## 実測 (2026-09-15・版管理の初回full cycle完了時点)
 
 - pipeline_version = `c82e1c4c96fa` (初回cycle時点・当時はscripts/木tree hash) —
-  **現行 = `99f88ba074c1`** (.py限定・版定義節参照)
+  **現行 = `a476ac13d71d`** (.py限定・版定義節参照)
 - 監査: posted 14 / out_of_window 43 / rejected 2 / **current 5** /
   STALE 0 / placeholder 0 — 版印は生存5行すべて `c82e1c4c96fa` で単一versionに収束
 - 初回cycleの証跡: ①09:17 cronが新規3件を版印付きで起草+stale 2行を自動再生成
@@ -73,6 +73,9 @@ EOF
   で版が `c82e1c4c96fa` → `99f88ba074c1` へ一度だけ移動 — これは生成系実装の
   変更なので正当な版移動。生存5行は翌朝cronの`regen_stale` (limit 3/回) で
   順次現行版へ揃う
+- ⑥t0007のapprove時⚠stale警告+検証用`OUTREACH_QUEUE_PATH`追加 (レビュー指摘
+  2件・テストpin 1件) で版は `99f88ba074c1` → `a476ac13d71d` — 同じく
+  生成系実装 (.py) の変更なので正当。 docs-only commitでは版不変を継続実証
 - 以後、文書変更 (本台帳の更新・scripts下READMEの更新を含む) では版は不変 —
   scripts/下の.py (codeとpromptの実体) が変わったときだけ版が動く。本節の
   更新commitで版が変わらないことがそのまま実証になる
