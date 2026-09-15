@@ -19,7 +19,7 @@ approved (kind=outreach) ─browser送信 (Claude workset)─▶ sent --channel=
 |---|---|---|
 | `engagement` | cron毎朝 | discover-queueの投稿済みtweetの公開指標を outreach-metrics.jsonl へ追記 (1日1回冪等) |
 | `draft quetab` | 随時 (LLM) | dossier + 計測を素材に記事案とアウトリーチ文面 (英語) を起草 → キューへ |
-| `show [--pending] [id]` | jinno | キューの一覧と本文表示 (⚠禁止語/Subject欠落チェック付き) |
+| `show [--pending] [id]` | jinno | キューの一覧と本文表示 (⚠禁止語/Subject欠落/旧版staleチェック付き) |
 | `approve <id>` / `reject <id>` | jinno | 承認・棄却 (draftのみ) |
 | `publish-article <id>` | approve後 | `content/18-blog/<slug>/index.html` 生成 → **npm test (publication guard)** → git add/commit/push → URL記録 |
 | `sent <id> --channel=...` | 送信後 | 文面送信済みとして記録 (browser送信はClaude worksetが実施) |
@@ -61,6 +61,8 @@ dossierへ追記してから `draft` を走らせる。
 - X資格 = x-discover と同じ CBD_* env (読み取りは public_metrics のみ)
 - 提携前の言及は中立・事実ベース (ステマ規制: 教会と国家の分離)
 - 誇張禁止語 (X運用基本計画§11) は記事にも⚠表示 — 機械拒否はせずjinno判断
+- draftは `gen_version` (scripts/木tree hash) を記録する (生成物の版管理・正本は
+  repo root `ARTIFACTS.md`)。旧version産はshowで⚠stale表示 — approve前に再起草を判断
 
 ## cron
 
