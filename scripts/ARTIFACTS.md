@@ -53,12 +53,15 @@ EOF
 - 生存行は `current` か `STALE` のみ。`STALE` は翌朝collectが自動で現行版に揃える
 - outreach queue: `python3 outreach.py show --pending` — 旧version行に ⚠stale 表示
 
-## 実測 (2026-09-15・版管理実装commit時点)
+## 実測 (2026-09-15・版管理の初回full cycle完了時点)
 
-- pipeline_version = `6ae371c` (x-discover版管理commit hash)
-- discover-queue.jsonl 61行: posted 14 / out_of_window 43 / rejected 2 /
-  **STALE 2** (行59・60 — 版印無しの生存行のみ) / current 0 / placeholder 0
-- version印済み 0行 — 実装直後のため。翌朝09:17 collectが生存2行を再検査して
-  現行版に揃え、以後の新規行は起草時に印を付ける (limit 3/回・生存2行は1朝で完遂)
-- outreach-queue.jsonl 18行 (article/outreach×draft/approved/sent/published/rejected) —
-  版印は新規draftから付与。旧行はshowで⚠stale表示・approve前に再起草を判断
+- pipeline_version = `22f2a156f6de` (scripts/木tree hash)
+- 監査: posted 14 / out_of_window 43 / rejected 2 / **current 5** /
+  STALE 0 / placeholder 0
+- 初回cycleの証跡: ①09:17 cronが新規3件を版印付きで起草+stale 2行を自動再生成
+  (`regen_stale`初運転) ②別セッションのdocs-only commit (d185f87) で全生存行が
+  spuriously stale化する実害を検出 → 版対象をscripts/木tree hashへ修正 (6b1d078)
+  ③`repolish.py`で生存5行を再検査 — 全件r8収束・persona pass・現行版印付き
+- 生存行の`gen_version`が旧形式 (dfdddbc) でも`polish_version`が現行ならcurrent
+  扱い — 「最新の再検査が現行システム」が版管理の判定意味
+- 本節の更新commitはdocs-only — 版が不変であること自体が修正の実証になる
