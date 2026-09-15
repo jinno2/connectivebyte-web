@@ -68,6 +68,10 @@ EOF
   (9979ad9) ④`repolish.py`で生存5行を再検査 — 全件r8収束・persona pass
 - 生存行の`gen_version`が旧形式 (dfdddbc) でも`polish_version`が現行ならcurrent
   扱い — 「最新の再検査が現行システム」が版管理の判定意味
-- 以後、文書変更 (本台帳の更新を含む) では版は不変 — scripts/下のcodeとpromptの
-  実体が変わったときだけ版が動く。本節の更新commitで版が変わらないことが
-  そのまま実証になる
+- ⑤文書のscope修正commit (版対象を.py限定・README/t0007文書の同期と同一commit)
+  で版が `c82e1c4c96fa` → `99f88ba074c1` へ一度だけ移動 — これは生成系実装の
+  変更なので正当な版移動。生存5行は翌朝cronの`regen_stale` (limit 3/回) で
+  順次現行版へ揃う
+- 以後、文書変更 (本台帳の更新・scripts下READMEの更新を含む) では版は不変 —
+  scripts/下の.py (codeとpromptの実体) が変わったときだけ版が動く。本節の
+  更新commitで版が変わらないことがそのまま実証になる
