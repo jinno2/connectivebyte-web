@@ -55,13 +55,16 @@ EOF
 
 ## 実測 (2026-09-15・版管理の初回full cycle完了時点)
 
-- pipeline_version = `22f2a156f6de` (scripts/木tree hash)
+- pipeline_version = `c82e1c4c96fa` (scripts/木tree hash)
 - 監査: posted 14 / out_of_window 43 / rejected 2 / **current 5** /
-  STALE 0 / placeholder 0
+  STALE 0 / placeholder 0 — 版印は生存5行すべて `c82e1c4c96fa` で単一versionに収束
 - 初回cycleの証跡: ①09:17 cronが新規3件を版印付きで起草+stale 2行を自動再生成
   (`regen_stale`初運転) ②別セッションのdocs-only commit (d185f87) で全生存行が
   spuriously stale化する実害を検出 → 版対象をscripts/木tree hashへ修正 (6b1d078)
-  ③`repolish.py`で生存5行を再検査 — 全件r8収束・persona pass・現行版印付き
+  ③台帳自身がscripts/木内にあったため台帳更新でも版が変転 → repo rootへ移動
+  (9979ad9) ④`repolish.py`で生存5行を再検査 — 全件r8収束・persona pass
 - 生存行の`gen_version`が旧形式 (dfdddbc) でも`polish_version`が現行ならcurrent
   扱い — 「最新の再検査が現行システム」が版管理の判定意味
-- 本節の更新commitはdocs-only — 版が不変であること自体が修正の実証になる
+- 以後、文書変更 (本台帳の更新を含む) では版は不変 — scripts/下のcodeとpromptの
+  実体が変わったときだけ版が動く。本節の更新commitで版が変わらないことが
+  そのまま実証になる
