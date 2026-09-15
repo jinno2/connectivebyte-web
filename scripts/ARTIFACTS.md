@@ -25,7 +25,8 @@
 
 ## 監査手順 (再現可能・LLM消費ゼロ)
 
-discover queue全行を生存/死人/版stateに分類する (repolishと同一判定関数を使用):
+discover queue全行を生存/死人/版stateに分類する (stale判定は `repolish._eligible`
+そのものを呼ぶ — logicの複製を作らない):
 
 ```bash
 cd scripts/x-discover && python3 - <<'EOF'
@@ -40,10 +41,8 @@ for r in rows:
     elif r.get('status') not in ('draft', 'approved'): cats['dead:' + str(r.get('status'))] += 1
     elif repolish._is_placeholder(r): cats['placeholder'] += 1
     elif not repolish.in_post_window(r, today): cats['out_of_window'] += 1
-    elif (r.get('polish_version') == repolish.pipeline_version()
-          or ('polish_version' not in r and r.get('gen_version') == repolish.pipeline_version())):
-        cats['current'] += 1
-    else: cats['STALE'] += 1
+    elif repolish._eligible(r, today, force=False): cats['STALE'] += 1
+    else: cats['current'] += 1
 print(dict(cats))
 EOF
 ```
