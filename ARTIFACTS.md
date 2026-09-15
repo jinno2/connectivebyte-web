@@ -22,7 +22,7 @@ README/GENRES/画像/x-discover-config.json は選定・投稿policyのパラメ
 | x-discover `collect.py llm_draft` (main/refill/redraft 全3経路) | queue行の hook/take/ask | `gen_version` | `repolish._eligible` | 朝cron `regen_stale` (limit 3/回) ・ `repolish.py --limit 0` |
 | x-discover `polish_draft` (collect/enrich/repolish共用) | 字単位批評→改稿後の同3行 | `polish_version` | 同上 | 同上 |
 | x-discover `enrich.py` (実測redraft) | 試用実測事実版の3行 | `polish_version` | 同上 | enrich再実行 / repolish |
-| t0007-outreach `draft` | 記事案 / アウトリーチ文面 | `gen_version` | `show` が旧版に ⚠stale を表示 | 再 `draft <target>` → 既存approve gate |
+| t0007-outreach `draft` | 記事案 / アウトリーチ文面 | `gen_version` | `show`/`approve` が旧版に ⚠stale を表示 | 再 `draft <target>` → 既存approve gate |
 | 投稿済みtweet (x-discover post.py) | 行に `posted_at`/`tweet_id` を記録 | 行の版fieldが生成時の証跡として残る | — (提供済=死人居) | 対象外 |
 | 公開済み記事HTML (outreach publish-article) | 本文からHTMLを生成しgit commit | git履歴が版 | — (提供済) | 再publish |
 

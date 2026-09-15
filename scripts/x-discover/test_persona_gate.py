@@ -662,16 +662,18 @@ class TestPipelineVersion(GateTest):
         return hashlib.sha256(
             self.py_path.encode() + b'\0' + (code or self.py_code)).hexdigest()[:12]
 
-    def _patch_run(self, dirty: bytes = b''):
+    def _patch_run(self, dirty: bytes = b'', files: bytes = None):
         calls = []
 
         class R:
             def __init__(self, out):
                 self.stdout = out
 
-        outputs = [R(f'{self.py_path}\0{self.md_path}\0'.encode()),   # ls-files
-                   R(f'{self.tmp.name}\n'.encode()),                  # show-toplevel
-                   R(dirty)]                                          # status
+        if files is None:
+            files = f'{self.py_path}\0{self.md_path}\0'.encode()
+        outputs = [R(files),                                       # ls-files
+                   R(f'{self.tmp.name}\n'.encode()),               # show-toplevel
+                   R(dirty)]                                       # status
         def fake_run(cmd, **k):
             calls.append(cmd)
             return outputs.pop(0)
@@ -693,8 +695,12 @@ class TestPipelineVersion(GateTest):
         # scripts下のdocs (.md) 修正は '+' を付けない — 3例目のspurious churn対策
         self._patch_run(dirty=f' M {self.md_path}\0'.encode())
         self.assertEqual(self.xdr.pipeline_version(), self._expected())
-        # ls-filesに文書しか上がらない環境でも安定した版を出す (空hash固定化防止)
-        self.assertNotEqual(self._expected(), '')
+        # ls-filesに文書しか上がらない環境でも版は安定した決定値 (unknownでない)
+        import hashlib
+        self.xdr._PIPELINE_VERSION = ''  # cache解除 — 別シナリオを同じtestで見る
+        self._patch_run(files=f'{self.md_path}\0'.encode())
+        self.assertEqual(self.xdr.pipeline_version(),
+                         hashlib.sha256(b'').hexdigest()[:12])
 
     def test_py_content_change_moves_version(self):
         # .pyの実体が変われば版が動く — 版管理の最低要件

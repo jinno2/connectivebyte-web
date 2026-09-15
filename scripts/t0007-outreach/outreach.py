@@ -37,7 +37,9 @@ from post import load_env, oauth_header, resolve_env  # noqa: E402
 from x_discover_rules import banned_hits, pipeline_version  # noqa: E402
 
 FLEET = os.path.expanduser('~/.local/share/cb-fleet')
-QUEUE = os.path.join(FLEET, 'outreach-queue.jsonl')
+# OUTREACH_QUEUE_PATH上書きは検証用 (env上書き優先 — x-discoverと同一の規律)
+QUEUE = os.environ.get(
+    'OUTREACH_QUEUE_PATH', os.path.join(FLEET, 'outreach-queue.jsonl'))
 METRICS = os.path.join(FLEET, 'outreach-metrics.jsonl')
 DISCOVER_QUEUE = os.path.join(FLEET, 'discover-queue.jsonl')
 REPO = os.path.dirname(os.path.dirname(HERE))
@@ -292,6 +294,12 @@ def cmd_decide(args) -> int:
             if r['status'] != 'draft':
                 print(f"id={args.id} is {r['status']} (draft以外は変更不可)")
                 return 1
+            ver = r.get('gen_version', '')
+            if args.action == 'approved' and ver != pipeline_version():
+                # 生成物の版管理: show経由でなくapproveだけ打った場合の抜け道を
+                # ⚠表示で塞ぐ (機械拒否はせずjinno判断 — 禁止語⚠と同じ規律)
+                print(f"⚠ stale (gen_version={ver or '無印'} / 現行="
+                      f"{pipeline_version()}) — 再起草: draft <target>")
             update_queue(i, status=args.action, decided_at=now_iso())
             print(f'id={args.id} -> {args.action}')
             return 0
