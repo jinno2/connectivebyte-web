@@ -10,6 +10,17 @@ GitHub Actionsによるイベント駆動。開発確認はローカルCLI。運
 
 [CI](.github/workflows/ci.yml)はpush/PR。[Pages](.github/workflows/deploy_pages.yml)はmaster pushとworkflow_dispatch。正確な条件はworkflowを参照する。
 
+### ローカルcrontab（実測 2026-09-15）
+
+GitHub Actions以外に、ローカルcrontabで以下が毎日発火する。停止（Kill Switch）は`crontab -e`で該当行を削除する。
+
+```
+17 9 * * * cd /home/jinno/connectivebyte-web && /home/jinno/.local/share/mise/installs/python/3.13/bin/python3 scripts/x-discover/collect.py >> /home/jinno/.local/share/cb-fleet/collect.log 2>&1
+7 21 * * * cd /home/jinno/connectivebyte-web && /home/jinno/.local/share/mise/installs/python/3.13/bin/python3 scripts/x-discover/post.py >> /home/jinno/.local/share/cb-fleet/post.log 2>&1
+47 8 * * * cd /home/jinno/connectivebyte-web && /home/jinno/.local/share/mise/installs/python/3.13/bin/python3 scripts/t0007-outreach/outreach.py engagement >> /home/jinno/.local/share/cb-fleet/outreach.log 2>&1
+53 8 * * * cd /home/jinno/connectivebyte-web && /home/jinno/.local/share/mise/installs/python/3.13/bin/python3 scripts/t0007-outreach/crm.py digest --inbox >> /home/jinno/.local/share/cb-fleet/crm-alerts.log 2>&1
+```
+
 ## Entrypoint（実行コマンド）
 
 `npm test`で公開ガードと動作を検査し、`npm run serve`で画面を確認する。Pages workflowは`_site/`に必要な配信物を組み立てる。
@@ -34,4 +45,4 @@ Pages jobは同じcheckoutの`npm test`と、組立後の`_site/`の公開検査
 
 コミットする全文が公開対象。非公開の定義・運用情報・個人情報を記録しない。公開条件の正本は[AGENTS.md](AGENTS.md)。
 
-_最終更新: 2026-09-13 ／ driver・workflow・委譲先変更時は本ファイルと入口の参照を更新すること。_
+_最終更新: 2026-09-15 ／ driver・workflow・委譲先変更時は本ファイルと入口の参照を更新すること。_
