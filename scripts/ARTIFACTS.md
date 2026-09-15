@@ -4,8 +4,11 @@
 生成物は作られたときのシステムversionを記録し、システム更新後は現行versionと
 異なる**生存**生成物をすべて再生成する。本fileはこのrepo内の全生成機構の台帳。
 
-版 = `pipeline_version()` (`x_discover_rules.py`) = script群のgit短hash
-(作業treeが汚れていれば `+`、git不在は `unknown`)。
+版 = `pipeline_version()` (`x_discover_rules.py`) = scripts/木のgit tree hash
+短縮形 (scripts下が汚れていれば `+`、git不在は `unknown`)。生成codeとpromptの
+実体が変わったときだけ変わる — docs-only commitでは不変 (repo全体のHEAD短hash
+だった頃は、docs commitだけで全生存行がspuriously stale化する実害があった・
+2026-09-15修正)。
 対象 = pipelineが自動生成し提供され得るもの (LLM起草物とその直接レンダリング)。
 手作りasset (brand logo等) はpipeline生成物でなくgit管理のみ。
 

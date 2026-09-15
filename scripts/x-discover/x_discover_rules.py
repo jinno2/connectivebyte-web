@@ -123,19 +123,24 @@ _PIPELINE_VERSION = ''
 
 
 def pipeline_version() -> str:
-    """生成系の実装version = このscript群 (promptと同一repo) のgit短hash。
-    作業treeが汚れている場合は '+' 接尾で明す。git不在等は 'unknown' —
-    unknown同士は一致扱い (版管理不能環境でstale誤爆を避ける)。"""
+    """生成系の実装version = scripts/木のgit tree hash短縮形。
+    生成codeとpromptの実体が変わったときだけ変わる — repo全体のHEADや
+    docs-only commitでは不変 (docs commitで全行がspuriously stale化した
+    実測 2026-09-15 を受け、HEAD短hashからscripts/木へ対象を修正)。
+    scripts下の作業treeが汚れていれば '+' 接尾で明す。git不在等は
+    'unknown' — unknown同士は一致扱い (版管理不能環境でstale誤爆を避ける)。"""
     global _PIPELINE_VERSION
     if _PIPELINE_VERSION:
         return _PIPELINE_VERSION
     here = str(pathlib.Path(__file__).parent)
     try:
-        head = subprocess.run(['git', '-C', here, 'rev-parse', '--short', 'HEAD'],
+        tree = subprocess.run(['git', '-C', here, 'rev-parse', '--short=12',
+                               'HEAD:scripts'],
                               capture_output=True, text=True, timeout=5)
-        dirty = subprocess.run(['git', '-C', here, 'status', '--porcelain'],
+        dirty = subprocess.run(['git', '-C', here, 'status', '--porcelain',
+                                '--', ':(top)scripts'],
                                capture_output=True, text=True, timeout=5)
-        v = (head.stdout.strip() or 'unknown') + ('+' if dirty.stdout.strip() else '')
+        v = (tree.stdout.strip() or 'unknown') + ('+' if dirty.stdout.strip() else '')
     except Exception:  # noqa: BLE001 — git不在/遅延も生成を止めない
         v = 'unknown'
     _PIPELINE_VERSION = v

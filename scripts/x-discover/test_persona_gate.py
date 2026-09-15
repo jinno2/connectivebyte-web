@@ -637,7 +637,7 @@ class TestRegenStale(GateTest):
 
 
 class TestPipelineVersion(GateTest):
-    """pipeline_version — 生成物の版 (git短hash) 取得の検証。"""
+    """pipeline_version — 生成物の版 (scripts/木tree hash) 取得の検証。"""
 
     def setUp(self):
         import x_discover_rules
@@ -660,10 +660,14 @@ class TestPipelineVersion(GateTest):
         return calls
 
     def test_hash_and_dirty_suffix(self):
-        calls = self._patch_run([self._R('abc1234\n'), self._R(' M f\n')])
-        self.assertEqual(self.xdr.pipeline_version(), 'abc1234+')
-        self.assertEqual(self.xdr.pipeline_version(), 'abc1234+')  # cache — 再実行しない
+        calls = self._patch_run([self._R('abc123def456\n'), self._R(' M f\n')])
+        self.assertEqual(self.xdr.pipeline_version(), 'abc123def456+')
+        self.assertEqual(self.xdr.pipeline_version(), 'abc123def456+')  # cache — 再実行しない
         self.assertEqual(len(calls), 2)                        # 2回目はcache hit
+        # 版の対象は生成系の実体 (scripts/木) — docs-only commitでは不変。
+        # :(top)でroot相対にする (-C がx-discover深層でもpathspecが効く)
+        self.assertIn('HEAD:scripts', calls[0])
+        self.assertIn(':(top)scripts', calls[1])
 
     def test_clean_tree_has_no_suffix(self):
         self._patch_run([self._R('abc1234\n'), self._R('')])
