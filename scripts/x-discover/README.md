@@ -47,6 +47,7 @@ persona gateはQ3専任、post.pyの機械検査はQ0/Q1の最終防衛線。機
 ## 生成物の版管理 (2026-09-15)
 
 思想の正本は connective-byte `SYSTEM_CONSTITUTION.md`「生成物の版管理」。
+全生成機構の台帳と監査手順は [../ARTIFACTS.md](../ARTIFACTS.md)。
 **生成物は作られたときのシステムversionを持ち、システム更新後は現行versionと
 異なる生存生成物をすべて再生成する。**
 

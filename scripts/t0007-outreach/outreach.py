@@ -34,7 +34,7 @@ sys.path.insert(0, HERE)
 
 from llm_backend import llm_text  # noqa: E402
 from post import load_env, oauth_header, resolve_env  # noqa: E402
-from x_discover_rules import banned_hits  # noqa: E402
+from x_discover_rules import banned_hits, pipeline_version  # noqa: E402
 
 FLEET = os.path.expanduser('~/.local/share/cb-fleet')
 QUEUE = os.path.join(FLEET, 'outreach-queue.jsonl')
@@ -231,7 +231,8 @@ def cmd_draft(args) -> int:
             return 1
         aid = next_id()
         append_queue({'id': aid, 'target': args.target, 'kind': 'article',
-                      'status': 'draft', 'body': article, 'created_at': now_iso()})
+                      'status': 'draft', 'body': article, 'created_at': now_iso(),
+                      'gen_version': pipeline_version()})  # 生成物の版管理
         print(f'article draft -> id={aid}')
     else:
         # 記事キューの最新 (draft/approved) を素材に使う。無ければ生成のみ (キューに入れない)
@@ -247,7 +248,8 @@ def cmd_draft(args) -> int:
         return 1
     oid = next_id()
     append_queue({'id': oid, 'target': args.target, 'kind': 'outreach',
-                  'status': 'draft', 'body': draft, 'created_at': now_iso()})
+                  'status': 'draft', 'body': draft, 'created_at': now_iso(),
+                  'gen_version': pipeline_version()})  # 生成物の版管理
     print(f'outreach draft -> id={oid}')
     print(f'check: python3 {os.path.abspath(__file__)} show')
     return 0
@@ -267,6 +269,12 @@ def cmd_show(args) -> int:
             continue
         print(f"=== id={r['id']} [{r['kind']}/{r['status']}] target={r['target']} "
               f"({r.get('created_at', '')})")
+        ver = r.get('gen_version', '')
+        if ver != pipeline_version():
+            # 生成物の版管理: 旧version産 (無印含む) はapprove前に再起草の判断を
+            # 人のgateで落とす — t0007はapprove必須なので自動再生成はしない
+            print(f"⚠ stale (gen_version={ver or '無印'} / 現行={pipeline_version()})"
+                  ' — 再起草: draft <target>')
         hits = banned_hits(r['body'], '', '')
         if hits:
             print(f'⚠ 誇張禁止語残存 (要修正確認): {"/".join(hits)}')
