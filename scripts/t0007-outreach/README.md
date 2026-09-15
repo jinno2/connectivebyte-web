@@ -61,8 +61,9 @@ dossierへ追記してから `draft` を走らせる。
 - X資格 = x-discover と同じ CBD_* env (読み取りは public_metrics のみ)
 - 提携前の言及は中立・事実ベース (ステマ規制: 教会と国家の分離)
 - 誇張禁止語 (X運用基本計画§11) は記事にも⚠表示 — 機械拒否はせずjinno判断
-- draftは `gen_version` (scripts/木tree hash) を記録する (生成物の版管理・正本は
-  repo root `ARTIFACTS.md`)。旧version産はshowで⚠stale表示 — approve前に再起草を判断
+- draftは `gen_version` (scripts下.pyのcontent hash) を記録する (生成物の版管理・
+  正本はrepo root `ARTIFACTS.md`)。旧version産はshowで⚠stale表示 — approve前に
+  再起草を判断
 
 ## cron
 

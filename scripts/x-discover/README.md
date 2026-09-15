@@ -51,8 +51,9 @@ persona gateはQ3専任、post.pyの機械検査はQ0/Q1の最終防衛線。機
 **生成物は作られたときのシステムversionを持ち、システム更新後は現行versionと
 異なる生存生成物をすべて再生成する。**
 
-- 版 = `pipeline_version()` (scripts/木のgit tree hash・scripts下が汚れていれば
-  `+`。docs-only commitでは不変 — 生成codeとpromptの実体が変わったときだけ変わる)
+- 版 = `pipeline_version()` (scripts下tracked .pyのcontent hash・.pyに未commit
+  変更があれば `+`。docs-only commitでは不変 — 生成codeとpromptの実体が
+  変わったときだけ変わる)
 - 記録先: queue行の `gen_version` (起草時・llm_draft) / `polish_version`
   (polish適用・enrich実測redraft・repolish再検査時に付与)
 - 再生成の発火: ①collect朝loopの `regen_stale` (自動・limit 3/回・残りは翌朝 —

@@ -637,7 +637,7 @@ class TestRegenStale(GateTest):
 
 
 class TestPipelineVersion(GateTest):
-    """pipeline_version — 生成物の版 (scripts/木tree hash) 取得の検証。"""
+    """pipeline_version — 生成物の版 (scripts下tracked .pyのcontent hash) の検証。"""
 
     def setUp(self):
         import x_discover_rules
@@ -645,46 +645,71 @@ class TestPipelineVersion(GateTest):
         old = x_discover_rules._PIPELINE_VERSION
         x_discover_rules._PIPELINE_VERSION = ''
         self.addCleanup(setattr, x_discover_rules, '_PIPELINE_VERSION', old)
+        # 版の実体となる.pyをtmp repoに置き (subprocess結果のmock用)、
+        # 文書 (.md) が版に影響しないことを同じ材料で確かめる
+        import tempfile
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.py_path = 'scripts/x-discover/gen.py'
+        self.md_path = 'scripts/x-discover/README.md'
+        self.py_code = b'PROMPT = "draft"\n'
+        (pathlib.Path(self.tmp.name, self.py_path).parent.mkdir(parents=True))
+        pathlib.Path(self.tmp.name, self.py_path).write_bytes(self.py_code)
+        pathlib.Path(self.tmp.name, self.md_path).write_bytes(b'# docs\n')
 
-    def _patch_run(self, results: list):
+    def _expected(self, code: bytes = None) -> str:
+        import hashlib
+        return hashlib.sha256(
+            self.py_path.encode() + b'\0' + (code or self.py_code)).hexdigest()[:12]
+
+    def _patch_run(self, dirty: bytes = b''):
         calls = []
 
         class R:
             def __init__(self, out):
                 self.stdout = out
 
+        outputs = [R(f'{self.py_path}\0{self.md_path}\0'.encode()),   # ls-files
+                   R(f'{self.tmp.name}\n'.encode()),                  # show-toplevel
+                   R(dirty)]                                          # status
         def fake_run(cmd, **k):
             calls.append(cmd)
-            return results.pop(0) if results else R('')
+            return outputs.pop(0)
         self._patch(self.xdr.subprocess, 'run', fake_run)
         return calls
 
-    def test_hash_and_dirty_suffix(self):
-        calls = self._patch_run([self._R('abc123def456\n'), self._R(' M f\n')])
-        self.assertEqual(self.xdr.pipeline_version(), 'abc123def456+')
-        self.assertEqual(self.xdr.pipeline_version(), 'abc123def456+')  # cache — 再実行しない
-        self.assertEqual(len(calls), 2)                        # 2回目はcache hit
-        # 版の対象は生成系の実体 (scripts/木) — docs-only commitでは不変。
-        # :(top)でroot相対にする (-C がx-discover深層でもpathspecが効く)
-        self.assertIn('HEAD:scripts', calls[0])
-        self.assertIn(':(top)scripts', calls[1])
+    def test_py_hash_and_dirty_suffix(self):
+        calls = self._patch_run(dirty=f' M {self.py_path}\0'.encode())
+        self.assertEqual(self.xdr.pipeline_version(), self._expected() + '+')
+        self.assertEqual(self.xdr.pipeline_version(), self._expected() + '+')  # cache
+        self.assertEqual(len(calls), 3)                        # 2回目はcache hit
+        # 版の対象は生成系の実体 (.py) のみ。:(top)でroot相対にする
+        # (-C がx-discover深層でもpathspecが効く)
+        self.assertIn('ls-files', calls[0])
+        self.assertIn(':(top)scripts', calls[0])
+        self.assertIn(':(top)scripts', calls[2])
 
-    def test_clean_tree_has_no_suffix(self):
-        self._patch_run([self._R('abc1234\n'), self._R('')])
-        self.assertEqual(self.xdr.pipeline_version(), 'abc1234')
+    def test_md_change_does_not_move_version(self):
+        # scripts下のdocs (.md) 修正は '+' を付けない — 3例目のspurious churn対策
+        self._patch_run(dirty=f' M {self.md_path}\0'.encode())
+        self.assertEqual(self.xdr.pipeline_version(), self._expected())
+        # ls-filesに文書しか上がらない環境でも安定した版を出す (空hash固定化防止)
+        self.assertNotEqual(self._expected(), '')
+
+    def test_py_content_change_moves_version(self):
+        # .pyの実体が変われば版が動く — 版管理の最低要件
+        import pathlib as pl
+        new_code = b'PROMPT = "draft v2"\n'
+        pl.Path(self.tmp.name, self.py_path).write_bytes(new_code)
+        self._patch_run()
+        self.assertEqual(self.xdr.pipeline_version(), self._expected(new_code))
+        self.assertNotEqual(self.xdr.pipeline_version(), self._expected())
 
     def test_git_failure_falls_back_to_unknown(self):
         def boom(cmd, **k):
             raise OSError('git not found')
         self._patch(self.xdr.subprocess, 'run', boom)
         self.assertEqual(self.xdr.pipeline_version(), 'unknown')
-
-    def _R(self, out):
-        class R:
-            pass
-        r = R()
-        r.stdout = out
-        return r
 
 
 if __name__ == '__main__':

@@ -9,6 +9,7 @@ collect (起草prompt) / review (承認時警告表示) / post (投稿前fail-cl
 from __future__ import annotations
 
 import datetime as dt
+import hashlib
 import json
 import os
 import pathlib
@@ -123,24 +124,38 @@ _PIPELINE_VERSION = ''
 
 
 def pipeline_version() -> str:
-    """生成系の実装version = scripts/木のgit tree hash短縮形。
-    生成codeとpromptの実体が変わったときだけ変わる — repo全体のHEADや
-    docs-only commitでは不変 (docs commitで全行がspuriously stale化した
-    実測 2026-09-15 を受け、HEAD短hashからscripts/木へ対象を修正)。
-    scripts下の作業treeが汚れていれば '+' 接尾で明す。git不在等は
-    'unknown' — unknown同士は一致扱い (版管理不能環境でstale誤爆を避ける)。"""
+    """生成系の実装version = scripts下のtracked .py (code+埋込みpromptの実体)
+    のcontent hash短縮形。生成codeとpromptが変わったときだけ変わる — repo全体
+    のHEADやscripts下の文書・媒体・config (README/GENRES/画像/運用config) では
+    不変。scripts/木tree hashまでの対象絞りでもscripts下READMEのdocs commitで
+    版が動く実害があった (2026-09-15・HEAD短hash→tree hash→.py限定の3段階)。
+    scripts下の.pyに未commit変更 (改変・追加・削除) があれば '+' 接尾で明す。
+    git不在等は 'unknown' — unknown同士は一致扱い (版管理不能環境でstale誤爆を
+    避ける)。"""
     global _PIPELINE_VERSION
     if _PIPELINE_VERSION:
         return _PIPELINE_VERSION
-    here = str(pathlib.Path(__file__).parent)
+    here = pathlib.Path(__file__).parent
     try:
-        tree = subprocess.run(['git', '-C', here, 'rev-parse', '--short=12',
-                               'HEAD:scripts'],
-                              capture_output=True, text=True, timeout=5)
-        dirty = subprocess.run(['git', '-C', here, 'status', '--porcelain',
-                                '--', ':(top)scripts'],
-                               capture_output=True, text=True, timeout=5)
-        v = (tree.stdout.strip() or 'unknown') + ('+' if dirty.stdout.strip() else '')
+        ls = subprocess.run(['git', '-C', str(here), 'ls-files', '-z',
+                             '--full-name', '--', ':(top)scripts'],
+                            capture_output=True, timeout=5, check=True)
+        top = subprocess.run(['git', '-C', str(here), 'rev-parse',
+                              '--show-toplevel'],
+                             capture_output=True, timeout=5, check=True)
+        h = hashlib.sha256()
+        root = pathlib.Path(top.stdout.decode().strip())
+        for f in sorted(ls.stdout.decode().split('\0')):
+            if f.endswith('.py'):
+                h.update(f.encode())
+                h.update(b'\0')
+                h.update((root / f).read_bytes())
+        v = h.hexdigest()[:12]
+        dirty = subprocess.run(['git', '-C', str(here), 'status', '--porcelain',
+                                '-z', '--', ':(top)scripts'],
+                               capture_output=True, timeout=5, check=True)
+        if any(e.endswith('.py') for e in dirty.stdout.decode().split('\0') if e):
+            v += '+'  # .pyの未commit変更は版確定前の実体 — 文書は対象外
     except Exception:  # noqa: BLE001 — git不在/遅延も生成を止めない
         v = 'unknown'
     _PIPELINE_VERSION = v
