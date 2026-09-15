@@ -259,6 +259,13 @@ def cmd_draft(args) -> int:
 
 # ---------------------------------------------------------------- 承認
 
+def _stale_msg(ver: str) -> str:
+    """旧version産draftの警告文 — show表示とapprove警告で共用 (文言の
+    片側取り残し防止)。無印=版管理導入前の行。"""
+    return (f"⚠ stale (gen_version={ver or '無印'} / 現行={pipeline_version()})"
+            ' — 再起草: draft <target>')
+
+
 def cmd_show(args) -> int:
     rows = load_queue()
     if not rows:
@@ -275,8 +282,7 @@ def cmd_show(args) -> int:
         if ver != pipeline_version():
             # 生成物の版管理: 旧version産 (無印含む) はapprove前に再起草の判断を
             # 人のgateで落とす — t0007はapprove必須なので自動再生成はしない
-            print(f"⚠ stale (gen_version={ver or '無印'} / 現行={pipeline_version()})"
-                  ' — 再起草: draft <target>')
+            print(_stale_msg(ver))
         hits = banned_hits(r['body'], '', '')
         if hits:
             print(f'⚠ 誇張禁止語残存 (要修正確認): {"/".join(hits)}')
@@ -298,8 +304,7 @@ def cmd_decide(args) -> int:
             if args.action == 'approved' and ver != pipeline_version():
                 # 生成物の版管理: show経由でなくapproveだけ打った場合の抜け道を
                 # ⚠表示で塞ぐ (機械拒否はせずjinno判断 — 禁止語⚠と同じ規律)
-                print(f"⚠ stale (gen_version={ver or '無印'} / 現行="
-                      f"{pipeline_version()}) — 再起草: draft <target>")
+                print(_stale_msg(ver))
             update_queue(i, status=args.action, decided_at=now_iso())
             print(f'id={args.id} -> {args.action}')
             return 0
