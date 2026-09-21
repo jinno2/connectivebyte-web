@@ -1,4 +1,4 @@
-# TAS repo metadata — 暫定(2026-09-21)・正本は contracts repo 稼働開始時に移行
+# TAS repo metadata — 正本=contracts repo registry(同期 2026-09-21)
 schema: tas/repo-meta/v1
 repo_id: connectivebyte-web
 remote: https://github.com/jinno2/connectivebyte-web.git
