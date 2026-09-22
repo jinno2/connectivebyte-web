@@ -1,20 +1,23 @@
 // share.js — 成果物共有ループ (X運用基本計画 v1) の純関数モジュール。
 // DOM非依存 (canvas描画は app.js 側)。段階の表示は logic.js の公開用PHASESのみを使う。
 import { PHASES } from "./logic.js";
+import {
+  VALID_ASCII_DOMAIN,
+  VALID_DOMAIN,
+  VALID_URL_PATH,
+  VALID_URL_PRECEDING_CHARS,
+  VALID_URL_QUERY_CHARS,
+  VALID_URL_QUERY_ENDING_CHARS
+} from "./twitter-text-regex.js";
 
 export const MAX_POST_LENGTH = 280;
 export const URL_WEIGHTED_LENGTH = 23; // X上のURLは t.co 展開で23字扱い
-const UNICODE_TLDS = [
-  "みんな", "ポイント", "ファッション", "セール", "ストア", "コム", "クラウド",
-  "通販", "购物", "网站", "网址", "在线", "公司", "网络", "中国", "中國", "香港", "台湾",
-  "台灣", "日本", "한국", "ไทย", "рф", "сайт", "онлайн", "москва", "ком", "рус"
-].sort((a, b) => b.length - a.length);
-const DOMAIN_LABEL = "[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?";
-const DOMAIN_TLD = `(?:[A-Za-z]{2,63}|${UNICODE_TLDS.join("|")})`;
 const URL_PATTERN = new RegExp(
-  `(?<![A-Za-z0-9@＠$#＃_.\\/-])(?:https?:\\/\\/)?(?:${DOMAIN_LABEL}\\.)+${DOMAIN_TLD}(?::\\d{1,5})?(?:[/?#][A-Za-z0-9!$&'()*+,;=%#/?[\\]@_~:\\-\\u00c0-\\u02af\\u0400-\\u052f]*)?`,
-  "giu"
+  `(${VALID_URL_PRECEDING_CHARS})((?<protocol>https?:\\/\\/)?(?<domain>${VALID_DOMAIN})(?::\\d{1,5})?(?<path>\\/${VALID_URL_PATH}*)?(?<query>\\?${VALID_URL_QUERY_CHARS}*${VALID_URL_QUERY_ENDING_CHARS})?)`,
+  "gi"
 );
+const ASCII_DOMAIN_PATTERN = new RegExp(VALID_ASCII_DOMAIN, "gi");
+const TCO_URL_PATTERN = /^https?:\/\/t\.co\/([a-z0-9]+)(?:\?[^\s]*)?/i;
 const URL_TRAILING_PUNCTUATION = /[.,!?;:、。！？，．；：]+$/u;
 const NEXT_ACTION_MAX = 40;
 const NEXT_ACTION_MAX_WEIGHT = 80;
@@ -65,18 +68,62 @@ function textWeight(text) {
     .reduce((total, cluster) => total + graphemeWeight(cluster), 0);
 }
 
+function trimUrl(raw) {
+  let trimmed = raw.replace(URL_TRAILING_PUNCTUATION, "");
+  while (trimmed.endsWith(")") &&
+         (trimmed.match(/\(/g)?.length ?? 0) < (trimmed.match(/\)/g)?.length ?? 0)) {
+    trimmed = trimmed.slice(0, -1);
+  }
+  return trimmed;
+}
+
+function validDomainShape(domain) {
+  return domain.split(".").every((label) => {
+    if (Array.from(label).length > 63) return false;
+    return !/^xn--/i.test(label) || /^[a-z0-9-]+$/i.test(label);
+  });
+}
+
 function urlRanges(text) {
   const ranges = [];
-  for (const match of String(text ?? "").matchAll(URL_PATTERN)) {
-    const raw = match[0];
-    let trimmed = raw.replace(URL_TRAILING_PUNCTUATION, "");
-    while (trimmed.endsWith(")") &&
-           (trimmed.match(/\(/g)?.length ?? 0) < (trimmed.match(/\)/g)?.length ?? 0)) {
-      trimmed = trimmed.slice(0, -1);
+  const value = String(text ?? "");
+  for (const match of value.matchAll(URL_PATTERN)) {
+    const url = match[2];
+    const urlStart = match.index + match[1].length;
+    const { protocol, domain, path, query } = match.groups;
+    if (!validDomainShape(domain)) continue;
+    if (protocol) {
+      const tco = TCO_URL_PATTERN.exec(url);
+      if (tco && tco[1].length > 40) continue;
+      const trimmed = trimUrl(tco ? tco[0] : url);
+      if (trimmed) ranges.push({ start: urlStart, end: urlStart + trimmed.length });
+      continue;
     }
-    if (trimmed) ranges.push({ start: match.index, end: match.index + trimmed.length });
+
+    if (/[-_.\/]$/u.test(match[1])) continue;
+
+    // twitter-text emits only ASCII-domain portions for scheme-less URLs.
+    // Unicode TLDs remain supported, e.g. twitter.みんな.
+    const asciiMatches = [];
+    ASCII_DOMAIN_PATTERN.lastIndex = 0;
+    let asciiMatch;
+    while ((asciiMatch = ASCII_DOMAIN_PATTERN.exec(domain)) !== null) {
+      asciiMatches.push(asciiMatch);
+      if (asciiMatch[0].length === 0) ASCII_DOMAIN_PATTERN.lastIndex += 1;
+    }
+    asciiMatches.forEach((asciiMatch, index) => {
+      const start = urlStart + asciiMatch.index;
+      const suffix = index === asciiMatches.length - 1 && (path || query) ? url.slice(domain.length) : "";
+      const trimmed = trimUrl(`${asciiMatch[0]}${suffix}`);
+      if (trimmed) ranges.push({ start, end: start + trimmed.length });
+    });
   }
   return ranges;
+}
+
+export function extractUrls(text) {
+  const value = String(text ?? "");
+  return urlRanges(value).map(({ start, end }) => value.slice(start, end));
 }
 
 // twitter-text v3: max 280, scale 100, URL=23, ASCII-like ranges=1,

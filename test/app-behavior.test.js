@@ -321,5 +321,39 @@ test("既存Storage値が書込み拒否後のページ内consentと関心選択
   const removalDenied = await loadApp("storage-existing-remove-denied");
   assert.equal(removalDenied.saveConsent(false), false, "削除拒否を保存成功と扱わない");
   assert.equal(removalDenied.readJson("consent", null).analytics, false);
+  assert.deepEqual(removalDenied.readJson("events", []), [], "削除失敗でもページ内の旧イベントを復活させない");
   assert.equal(removalDeniedStorage.values.has("consent"), true, "削除拒否では旧永続値が残ることを区別");
+});
+
+test("同意拒否はconsent保存失敗でも待機イベントを破棄し、復旧後に旧イベントを送らない", async () => {
+  const storage = new FakeStorage({
+    consent: { analytics: true, email: false, decided: true },
+    events: [{ name: "landing_viewed", cta_id: "probe_1" }]
+  }, { set: true });
+  const calls = [];
+  const context = setup({
+    storage,
+    elements: { "#consent-panel": element() },
+    fetchImpl: async (_url, options) => {
+      calls.push(JSON.parse(options.body));
+      return { status: 202 };
+    }
+  });
+  navigator.onLine = false;
+  const app = await loadApp("consent-reject-clears-queue");
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.equal(app.saveConsent(false), false, "consent書込み失敗を成功扱いしない");
+  assert.deepEqual(app.readJson("events", []), [], "拒否時は待機キューをページ内でも破棄");
+  assert.equal(storage.values.has("events"), false, "removeItem成功時は永続キューも破棄");
+  app.track("interest_selected", { cta_id: "after_reject" });
+  navigator.onLine = true;
+  context.windowListeners.get("online")();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(calls.length, 0, "拒否中の操作・online復帰で送信しない");
+
+  storage.mode.set = false;
+  app.saveConsent(true);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.ok(calls.flat().every((event) => event.cta_id !== "probe_1"), "再同意後に拒否前のイベントを送らない");
 });

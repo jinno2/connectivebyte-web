@@ -9,6 +9,7 @@ import {
   phaseLabel,
   nextHintFor,
   truncateJa,
+  extractUrls,
   weightedLength,
   buildShareText,
   buildIntentUrl,
@@ -121,6 +122,43 @@ test("公式extract fixtureのschemeなしURLとURL単位の切詰めを扱う",
   assert.equal(weightedLength("a".repeat(281)), 281);
   assert.equal(weightedLength(`${"a".repeat(278)}👩🏽‍💻`), 280);
   assert.equal(weightedLength(`${"a".repeat(279)}👩🏽‍💻`), 281);
+});
+
+test("公式twitter-textのURL抽出fixtureを独立期待値で検証する", () => {
+  const fixtures = [
+    ["http://ああ.com", ["http://ああ.com"]],
+    ["http://あ-あ.com", ["http://あ-あ.com"]],
+    ["foo.com foo.net foo.org foo.edu foo.gov", ["foo.com", "foo.net", "foo.org", "foo.edu", "foo.gov"]],
+    [
+      "foo.baz foo.co.jp www.xxxxxxx.baz www.foo.co.uk wwwww.xxxxxxx foo.comm foo.somecom foo.govedu foo.jp",
+      ["foo.co.jp", "www.foo.co.uk", "foo.jp"]
+    ],
+    ["example.comてすとですtwitter.みんなです", ["example.com", "twitter.みんな"]],
+    [
+      "これは日本語です。example.com/path/index.html中国語example.com/path한국",
+      ["example.com/path/index.html", "example.com/path"]
+    ],
+    ["#test.com @test.com #http://test.com @http://test.com", []],
+    ["I really like http://t.co/pbY2NfTZ's website", ["http://t.co/pbY2NfTZ"]],
+    ["http://xn--はじめよう.com/index.html", []],
+    ["test http://-leadingdash.twitter.com", []]
+  ];
+  for (const [input, expected] of fixtures) assert.deepEqual(extractUrls(input), expected);
+
+  const invalidTldFixture = fixtures[3][0];
+  assert.equal(weightedLength(invalidTldFixture), 141);
+  assert.equal(weightedLength("http://ああ.com"), 23);
+  assert.equal(weightedLength("http://あ-あ.com"), 23);
+});
+
+test("日本語ドメインを含む288相当の共有文は生成後に上限超過を許可しない", () => {
+  const freeText = `${"あ".repeat(120)} http://ああ.com`;
+  const url = "https://lab.connectivebyte.com/?r=P2";
+  assert.equal(weightedLength(`${freeText}\n${url}`), 288);
+  const draft = buildShareText("free", { freeText, url });
+  assert.ok(weightedLength(draft.text) <= MAX_POST_LENGTH);
+  assert.deepEqual(extractUrls(draft.text).slice(-1), [url]);
+  assert.ok(!draft.text.includes("http://ああ.co"), "URL途中で切詰めない");
 });
 
 test("unknown template returns null", () => {

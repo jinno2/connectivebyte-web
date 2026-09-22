@@ -35,6 +35,26 @@ for text, expected in vectors:
 assert m.weighted_length('あ' * 200 + '\\n' + url) == 424
 assert m.weighted_length('example.comてすとですtwitter.みんなです') == 60
 assert m.weighted_length('example.com あ twitter.みんな') == 50
+official = [
+    ('http://ああ.com', ['http://ああ.com']),
+    ('http://あ-あ.com', ['http://あ-あ.com']),
+    ('foo.com foo.net foo.org foo.edu foo.gov', ['foo.com', 'foo.net', 'foo.org', 'foo.edu', 'foo.gov']),
+    ('foo.baz foo.co.jp www.xxxxxxx.baz www.foo.co.uk wwwww.xxxxxxx foo.comm foo.somecom foo.govedu foo.jp',
+     ['foo.co.jp', 'www.foo.co.uk', 'foo.jp']),
+    ('example.comてすとですtwitter.みんなです', ['example.com', 'twitter.みんな']),
+    ('これは日本語です。example.com/path/index.html中国語example.com/path한국',
+     ['example.com/path/index.html', 'example.com/path']),
+    ('#test.com @test.com #http://test.com @http://test.com', []),
+    ("I really like http://t.co/pbY2NfTZ's website", ['http://t.co/pbY2NfTZ']),
+    ('http://xn--はじめよう.com/index.html', []),
+    ('test http://-leadingdash.twitter.com', []),
+]
+for text, expected in official:
+    assert m.extract_urls(text) == expected, (text, m.extract_urls(text), expected)
+assert m.weighted_length(official[3][0]) == 141
+assert m.weighted_length('http://ああ.com') == 23
+assert m.weighted_length('http://あ-あ.com') == 23
+assert m.post_length_ok('あ' * 120 + ' http://ああ.com\\n' + url) is False
 `;
   execFileSync("python3", ["-c", script], { cwd: repoRoot, encoding: "utf8" });
 });
