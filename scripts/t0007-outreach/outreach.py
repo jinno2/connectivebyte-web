@@ -20,10 +20,13 @@
 """
 import argparse
 import datetime as dt
+import html
 import json
 import os
+import shutil
 import subprocess
 import sys
+import tempfile
 import urllib.parse
 import urllib.request
 
@@ -43,6 +46,8 @@ QUEUE = os.environ.get(
 METRICS = os.path.join(FLEET, 'outreach-metrics.jsonl')
 DISCOVER_QUEUE = os.path.join(FLEET, 'discover-queue.jsonl')
 REPO = os.path.dirname(os.path.dirname(HERE))
+PUBLISH_ROOT_FILES = ('index.html', 'styles.css', 'app.js', 'logic.js', 'share.js',
+                      'favicon.svg', 'sitemap.xml')
 
 
 def load_env_file() -> None:
@@ -402,6 +407,18 @@ def md_to_html(md: str) -> str:
     return '\n'.join(lines)
 
 
+def prepare_publish_tree(root: str, candidate_rel: str, page: str) -> str:
+    """Build the same isolated tree that Pages publishes, including the candidate."""
+    for name in PUBLISH_ROOT_FILES:
+        shutil.copy2(os.path.join(REPO, name), os.path.join(root, name))
+    shutil.copytree(os.path.join(REPO, 'content'), os.path.join(root, 'content'))
+    candidate = os.path.join(root, candidate_rel)
+    os.makedirs(os.path.dirname(candidate), exist_ok=True)
+    with open(candidate, 'w', encoding='utf-8') as f:
+        f.write(page)
+    return candidate
+
+
 def cmd_publish(args) -> int:
     rows = load_queue()
     for i, r in enumerate(rows):
@@ -414,26 +431,55 @@ def cmd_publish(args) -> int:
         first_h1 = next((l.lstrip('# ') for l in r['body'].splitlines()
                          if l.startswith('# ')), spec['slug'])
         out_dir = os.path.join(REPO, 'content', '18-blog', spec['slug'])
-        os.makedirs(out_dir, exist_ok=True)
         # 記事説明: 本文最初の80字 (HTML化前のplain textから。meta/OG用・未記載ならslugにフォールバック)
         plain = [l.strip() for l in r['body'].splitlines()
                  if l.strip() and not l.strip().startswith(('#', '-', '*', '<!--', '```'))]
         description = next(iter(plain), spec['slug'])[:80]
         updated = now_iso()[:10]
-        page = ARTICLE_TMPL.format(title=first_h1, slug=spec['slug'],
-                                   description=description, updated=updated,
-                                   body=md_to_html(r['body']))
+        body_lines = r['body'].splitlines()
+        title_removed = False
+        body_without_title = []
+        for line in body_lines:
+            if not title_removed and line.startswith('# '):
+                title_removed = True
+                continue
+            body_without_title.append(line)
+        page = ARTICLE_TMPL.format(title=html.escape(first_h1, quote=True),
+                                   slug=html.escape(spec['slug'], quote=True),
+                                   description=html.escape(description, quote=True),
+                                   updated=html.escape(updated, quote=True),
+                                   body=md_to_html('\n'.join(body_without_title)))
         out = os.path.join(out_dir, 'index.html')
-        with open(out, 'w') as f:
-            f.write(page)
-        print(f'wrote {out} — publication guard走行...')
-        tst = subprocess.run(['npm', 'test'], cwd=REPO, capture_output=True, text=True)
-        if tst.returncode != 0:
-            print('npm test FAIL — 公開中止 (手動確認すること):')
-            print(tst.stdout[-2000:])
-            os.remove(out)
-            return 1
         rel = os.path.relpath(out, REPO)
+        stage_root = tempfile.mkdtemp(prefix='cb-publish-')
+        try:
+            prepare_publish_tree(stage_root, rel, page)
+            print(f'prepared {out} in isolated publish tree — publication guard走行...')
+            test_env = os.environ.copy()
+            test_env['PUBLICATION_ROOT'] = stage_root
+            guard = subprocess.run(['node', '--test', 'test/publication-guard.test.js'],
+                                   cwd=REPO, env=test_env, capture_output=True, text=True)
+            tst = subprocess.run(['npm', 'test'], cwd=REPO, env=test_env,
+                                 capture_output=True, text=True)
+            if tst.returncode != 0 or guard.returncode != 0:
+                print('npm test FAIL — 公開中止 (既存記事とgit indexは未変更):')
+                print((tst.stdout + tst.stderr + guard.stdout + guard.stderr)[-2000:])
+                return 1
+        finally:
+            shutil.rmtree(stage_root, ignore_errors=True)
+        os.makedirs(out_dir, exist_ok=True)
+        fd, temp_out = tempfile.mkstemp(prefix='.index.', suffix='.html', dir=out_dir)
+        try:
+            with os.fdopen(fd, 'w', encoding='utf-8') as f:
+                f.write(page)
+            os.replace(temp_out, out)
+        except Exception:
+            try:
+                os.unlink(temp_out)
+            except OSError:
+                pass
+            raise
+        print(f'wrote {out} — isolated publication guard passed')
         url = f'https://lab.connectivebyte.com/{rel}'
         git = subprocess.run(['git', 'add', rel], cwd=REPO)
         if git.returncode != 0:

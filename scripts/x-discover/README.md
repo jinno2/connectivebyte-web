@@ -28,7 +28,7 @@ post.py は未承認draftも自動投稿する(要記入プレースホルダー
 
 | Level | 担保内容 | 担当gate | 記録先 |
 |---|---|---|---|
-| Q0 文字面 | 3行形式・字数・要記入プレースホルダー・問い形ask | 起草後discipline検査 + post.py fail-closed skip | log |
+| Q0 文字面 | 3行形式・X重み付き字数・要記入プレースホルダー・問い形ask | 起草後discipline検査 + post.py fail-closed skip | log |
 | Q1 規律 | 禁止語17語・固有名詞/数字の創作禁止・抜粋(実測)根拠・正式名称 | 同上 (`discipline_violation`/`banned_hits`) | log |
 | Q2 意図 | 各1行の意図が1つに定まる・各字に意図と効率が埋まる | 起草promptの意図設計強制 + polish loop (字単位批評→改稿収束) | `polish_rounds` (queue行) |
 | Q3 読者価値 | ペルソナが「未知の変化・自分ごと・試せる」と評するか | persona gate 全件 (collect/enrich両経路) | `persona_review` (queue行) |

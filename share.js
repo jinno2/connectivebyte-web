@@ -4,8 +4,98 @@ import { PHASES } from "./logic.js";
 
 export const MAX_POST_LENGTH = 280;
 export const URL_WEIGHTED_LENGTH = 23; // X上のURLは t.co 展開で23字扱い
-const FREE_TEXT_MAX = MAX_POST_LENGTH - URL_WEIGHTED_LENGTH - 1; // 改行1字分
+const URL_PATTERN = /https?:\/\/[^\s<>"']+/giu;
+const URL_TRAILING_PUNCTUATION = /[.,!?;:、。！？，．；：)\]}」』】]+$/u;
 const NEXT_ACTION_MAX = 40;
+const NEXT_ACTION_MAX_WEIGHT = 80;
+
+function isEmojiCodePoint(codePoint) {
+  return (codePoint >= 0x1f000 && codePoint <= 0x1faff) ||
+    (codePoint >= 0x2600 && codePoint <= 0x27bf);
+}
+
+function isVariationOrModifier(codePoint) {
+  return (codePoint >= 0xfe00 && codePoint <= 0xfe0f) ||
+    (codePoint >= 0x1f3fb && codePoint <= 0x1f3ff) ||
+    (codePoint >= 0x1d167 && codePoint <= 0x1d169) ||
+    (codePoint >= 0x20e3 && codePoint <= 0x20e3);
+}
+
+function isWeightedOne(codePoint) {
+  return codePoint <= 0x10ff ||
+    (codePoint >= 0x2000 && codePoint <= 0x200d) ||
+    (codePoint >= 0x2032 && codePoint <= 0x2037) ||
+    (codePoint >= 0x2042 && codePoint <= 0x2047);
+}
+
+function graphemes(text) {
+  const points = Array.from(String(text ?? ""), (char) => char.codePointAt(0));
+  const result = [];
+  for (let i = 0; i < points.length;) {
+    const cluster = [points[i++]];
+    if (cluster[0] >= 0x1f1e6 && cluster[0] <= 0x1f1ff &&
+        points[i] >= 0x1f1e6 && points[i] <= 0x1f1ff) cluster.push(points[i++]);
+    while (i < points.length && isVariationOrModifier(points[i])) cluster.push(points[i++]);
+    while (points[i] === 0x200d && i + 1 < points.length) {
+      cluster.push(points[i++], points[i++]);
+      while (i < points.length && isVariationOrModifier(points[i])) cluster.push(points[i++]);
+    }
+    result.push(cluster);
+  }
+  return result;
+}
+
+function graphemeWeight(cluster) {
+  if (cluster.some(isEmojiCodePoint) || cluster.includes(0x20e3)) return 2;
+  return cluster.reduce((total, codePoint) => total + (isWeightedOne(codePoint) ? 1 : 2), 0);
+}
+
+function textWeight(text) {
+  return graphemes(String(text ?? "").normalize("NFC"))
+    .reduce((total, cluster) => total + graphemeWeight(cluster), 0);
+}
+
+function urlRanges(text) {
+  const ranges = [];
+  for (const match of String(text ?? "").matchAll(URL_PATTERN)) {
+    const raw = match[0];
+    const trimmed = raw.replace(URL_TRAILING_PUNCTUATION, "");
+    if (trimmed) ranges.push({ start: match.index, end: match.index + trimmed.length });
+  }
+  return ranges;
+}
+
+// twitter-text v3: max 280, scale 100, URL=23, ASCII-like ranges=1,
+// default Unicode=2, and emoji grapheme clusters=2.
+export function weightedLength(text) {
+  const value = String(text ?? "").normalize("NFC");
+  let total = 0;
+  let cursor = 0;
+  for (const range of urlRanges(value)) {
+    total += textWeight(value.slice(cursor, range.start)) + URL_WEIGHTED_LENGTH;
+    cursor = range.end;
+  }
+  return total + textWeight(value.slice(cursor));
+}
+
+function truncateWeighted(text, maxWeight) {
+  const value = String(text ?? "");
+  if (weightedLength(value) <= maxWeight) return value;
+  const ellipsis = "…";
+  let output = "";
+  for (const cluster of graphemes(value.normalize("NFC"))) {
+    const next = output + String.fromCodePoint(...cluster);
+    if (weightedLength(next + ellipsis) > maxWeight) break;
+    output = next;
+  }
+  return output + ellipsis;
+}
+
+function fitBeforeUrl(prefix, url) {
+  const suffix = `\n${url}`;
+  const budget = Math.max(0, MAX_POST_LENGTH - weightedLength(suffix));
+  return `${truncateWeighted(prefix, budget)}${suffix}`;
+}
 
 // 共有可能URL: ?r=P{n} + UTM (campaign解析は既存の utm_* 読み取りに乗る)
 export function shareUrlFor(baseUrl, phase) {
@@ -50,9 +140,7 @@ export function buildShareText(templateId, ctx) {
   const url = ctx.url;
   if (!SHARE_TEMPLATES.includes(templateId)) return null;
   if (templateId === "free") {
-    // 切詰め時に「…」が1字加算されるため上限から1字引いておく
-    const free = truncateJa((ctx.freeText ?? "").trim(), FREE_TEXT_MAX - 1);
-    return { text: `${free}\n${url}`, template: templateId };
+    return { text: fitBeforeUrl((ctx.freeText ?? "").trim(), url), template: templateId };
   }
   const label = ctx.phaseLabel || phaseLabel(ctx.phase);
   const rawNext = ctx.nextHint ?? nextHintFor(ctx.phase);
@@ -61,8 +149,8 @@ export function buildShareText(templateId, ctx) {
     "あなたの現在地はどこですか?",
     url
   ];
-  if (rawNext) lines.splice(1, 0, `次の一手は「${truncateJa(rawNext, NEXT_ACTION_MAX)}」。`);
-  return { text: lines.join("\n"), template: templateId };
+  if (rawNext) lines.splice(1, 0, `次の一手は「${truncateWeighted(rawNext, NEXT_ACTION_MAX_WEIGHT)}」。`);
+  return { text: fitBeforeUrl(lines.slice(0, -1).join("\n"), url), template: templateId };
 }
 
 // X Web Intent — ユーザー自身が確認して投稿する形式 (API不要・計画§10)

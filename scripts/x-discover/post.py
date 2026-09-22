@@ -27,8 +27,10 @@ import hashlib
 import hmac
 import json
 import os
+import re
 import sys
 import time
+import unicodedata
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -57,6 +59,71 @@ PRICE = {'url': 0.200, 'nourl': 0.015}  # 実測単価 (URL付き/抜き・credi
 MEDIA_LIMIT = 5 * 1024 * 1024  # v1.1 simple upload上限 (GIF/PNGとも)
 CHUNK_BYTES = 4 * 1024 * 1024  # v2 append segment (docs: ≤5MB推奨・server max 8MB)
 VIDEO_LIMIT = 15 * 1024 * 1024  # 投稿MP4の運用上限 (API上の上限はもっと大きい)
+MAX_POST_WEIGHT = 280
+URL_WEIGHT = 23
+URL_RE = re.compile(r"https?://[^\s<>\"']+", re.IGNORECASE)
+URL_TRAILING = '.,!?;:、。！？，．；：)]}」』】'
+
+
+def _is_emoji(code_point: int) -> bool:
+    return 0x1f000 <= code_point <= 0x1faff or 0x2600 <= code_point <= 0x27bf
+
+
+def _is_variation_or_modifier(code_point: int) -> bool:
+    return ((0xfe00 <= code_point <= 0xfe0f) or
+            (0x1f3fb <= code_point <= 0x1f3ff) or
+            (0x1d167 <= code_point <= 0x1d169) or code_point == 0x20e3)
+
+
+def _clusters(text: str) -> list[list[int]]:
+    points = [ord(char) for char in unicodedata.normalize('NFC', str(text))]
+    result = []
+    i = 0
+    while i < len(points):
+        cluster = [points[i]]
+        i += 1
+        if (0x1f1e6 <= cluster[0] <= 0x1f1ff and i < len(points) and
+                0x1f1e6 <= points[i] <= 0x1f1ff):
+            cluster.append(points[i])
+            i += 1
+        while i < len(points) and _is_variation_or_modifier(points[i]):
+            cluster.append(points[i])
+            i += 1
+        while i < len(points) and points[i] == 0x200d and i + 1 < len(points):
+            cluster.extend((points[i], points[i + 1]))
+            i += 2
+            while i < len(points) and _is_variation_or_modifier(points[i]):
+                cluster.append(points[i])
+                i += 1
+        result.append(cluster)
+    return result
+
+
+def _cluster_weight(cluster: list[int]) -> int:
+    if any(_is_emoji(code_point) for code_point in cluster) or 0x20e3 in cluster:
+        return 2
+    return sum(1 if (code_point <= 0x10ff or 0x2000 <= code_point <= 0x200d or
+                     0x2032 <= code_point <= 0x2037 or 0x2042 <= code_point <= 0x2047)
+               else 2 for code_point in cluster)
+
+
+def weighted_length(text: str) -> int:
+    """twitter-text v3 compatible weight for ordinary text and URLs."""
+    value = unicodedata.normalize('NFC', str(text))
+    total = 0
+    cursor = 0
+    for match in URL_RE.finditer(value):
+        trimmed = match.group(0).rstrip(URL_TRAILING)
+        if not trimmed:
+            continue
+        total += sum(_cluster_weight(cluster) for cluster in _clusters(value[cursor:match.start()]))
+        total += URL_WEIGHT
+        cursor = match.start() + len(trimmed)
+    return total + sum(_cluster_weight(cluster) for cluster in _clusters(value[cursor:]))
+
+
+def post_length_ok(text: str) -> bool:
+    return weighted_length(text) <= MAX_POST_WEIGHT
 
 
 def load_env() -> dict:
@@ -398,10 +465,9 @@ def main() -> int:
             save_queue(entries)
             rc = 1
             continue
-        if len(text) - (len(d['url']) if include_url else 0) + (23 if include_url else 0) > 280:
+        if not post_length_ok(text):
             log({'event': 'fail', 'account': alias, 'kind': 'too_long',
-                 'length': len(text) - (len(d['url']) if include_url else 0)
-                           + (23 if include_url else 0)})
+                 'length': weighted_length(text)})
             rc = 1
             continue
 

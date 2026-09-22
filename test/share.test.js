@@ -9,6 +9,7 @@ import {
   phaseLabel,
   nextHintFor,
   truncateJa,
+  weightedLength,
   buildShareText,
   buildIntentUrl,
   cardLines,
@@ -17,10 +18,6 @@ import {
   resultText
 } from "../share.js";
 import { PHASES } from "../logic.js";
-
-function weightedLength(text, url) {
-  return text.length - url.length + URL_WEIGHTED_LENGTH;
-}
 
 test("shareUrlFor → parseShareParams round trip for every phase", () => {
   PHASES.forEach((def, index) => {
@@ -72,8 +69,8 @@ test("result template fits 280 weighted chars for every phase", () => {
     assert.ok(draft, `draft missing for P${phase}`);
     assert.ok(draft.text.includes(def.label));
     assert.ok(draft.text.includes(url));
-    assert.ok(weightedLength(draft.text, url) <= MAX_POST_LENGTH,
-      `P${phase} over cap: ${weightedLength(draft.text, url)}`);
+    assert.ok(weightedLength(draft.text) <= MAX_POST_LENGTH,
+      `P${phase} over cap: ${weightedLength(draft.text)}`);
   });
 });
 
@@ -90,8 +87,21 @@ test("free template uses user text plus url and caps length", () => {
   const short = buildShareText("free", { freeText: "診断が分かりやすかった", url });
   assert.equal(short.text, "診断が分かりやすかった\nhttps://lab.connectivebyte.com/");
   const long = buildShareText("free", { freeText: "あ".repeat(400), url });
-  assert.ok(weightedLength(long.text, url) <= MAX_POST_LENGTH);
+  assert.ok(weightedLength(long.text) <= MAX_POST_LENGTH);
   assert.ok(long.text.endsWith(url));
+});
+
+test("weightedLengthはXのCJK/ASCII/URL/emoji重みを扱い、共有文を上限内に切り詰める", () => {
+  const url = "https://lab.connectivebyte.com/?r=P2";
+  assert.equal(weightedLength("a".repeat(280)), 280);
+  assert.equal(weightedLength("あ".repeat(140)), 280);
+  assert.equal(weightedLength(`${"あ".repeat(200)}\n${url}`), 424);
+  assert.equal(weightedLength(`a ${url} b https://example.com/x`), 51);
+  assert.equal(weightedLength("👨‍🎤"), 2);
+  assert.equal(weightedLength("👩🏽‍💻"), 2);
+  const draft = buildShareText("free", { freeText: "あ".repeat(200), url });
+  assert.ok(weightedLength(draft.text) <= MAX_POST_LENGTH);
+  assert.ok(draft.text.endsWith(url));
 });
 
 test("unknown template returns null", () => {

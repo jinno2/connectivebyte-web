@@ -99,6 +99,7 @@ test("イベント仕様と保存キーを静的検証する", async () => {
     "eligible_segments",
     "consent",
     "events",
+    "progress",
     "diagnosis_result",
     "feedback_notes",
     "newsletter_registered"

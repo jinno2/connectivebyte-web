@@ -21,7 +21,7 @@ approved (kind=outreach) ─browser送信 (Claude workset)─▶ sent --channel=
 | `draft quetab` | 随時 (LLM) | dossier + 計測を素材に記事案とアウトリーチ文面 (英語) を起草 → キューへ |
 | `show [--pending] [id]` | jinno | キューの一覧と本文表示 (⚠禁止語/Subject欠落/旧版staleチェック付き) |
 | `approve <id>` / `reject <id>` | jinno | 承認・棄却 (draftのみ・旧版をapproveすると⚠stale警告) |
-| `publish-article <id>` | approve後 | `content/18-blog/<slug>/index.html` 生成 → **npm test (publication guard)** → git add/commit/push → URL記録 |
+| `publish-article <id>` | approve後 | Pages配信物と新規記事を隔離publish treeへ組み立て → **publication guard + npm test** → 実ファイル更新 → git add/commit/push → URL記録 |
 | `sent <id> --channel=...` | 送信後 | 文面送信済みとして記録 (browser送信はClaude worksetが実施) |
 
 ## 受信メール (mail.py — 2026-08-30 完全自動化)
