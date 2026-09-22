@@ -480,7 +480,8 @@ def cmd_publish(args) -> int:
                 pass
             raise
         print(f'wrote {out} — isolated publication guard passed')
-        url = f'https://lab.connectivebyte.com/{rel}'
+        published_path = os.path.dirname(rel).replace(os.sep, '/') + '/'
+        url = f'https://lab.connectivebyte.com/{published_path}'
         git = subprocess.run(['git', 'add', rel], cwd=REPO)
         if git.returncode != 0:
             print('git add fail')

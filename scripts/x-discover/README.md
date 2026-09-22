@@ -73,6 +73,7 @@ persona gateはQ3専任、post.pyの機械検査はQ0/Q1の最終防衛線。機
   `litellm`=localhost:14000 proxy (`LITELLM_MODEL` env・上流全滅時のqwen退避経路)。
   失敗時はchainの次へ・最終fallbackは既存のplaceholder→翌朝refill
 - 投稿形 = hook / take / URL / ask の4行 — copy link 20.0 最重量actionへの最適化
+- 投稿長はXのweighted character count（URL 23、CJK/emoji 2、ASCII 1）で280以内を判定
 - 選定 = score=(points+2×comments)÷経過時間 (HN議論速度) + 曜日ジャンルカレンダー。
   起草は**本文抜粋を取得して根拠付け** (2026-08-30〜・fetch失敗は題名のみ)。
   `review.py` に P/C/経過時間 を表示 — 「なぜこれが選ばれたか」を30秒reviewで確認可

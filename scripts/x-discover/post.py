@@ -61,8 +61,19 @@ CHUNK_BYTES = 4 * 1024 * 1024  # v2 append segment (docs: ≤5MB推奨・server 
 VIDEO_LIMIT = 15 * 1024 * 1024  # 投稿MP4の運用上限 (API上の上限はもっと大きい)
 MAX_POST_WEIGHT = 280
 URL_WEIGHT = 23
-URL_RE = re.compile(r"https?://[^\s<>\"']+", re.IGNORECASE)
-URL_TRAILING = '.,!?;:、。！？，．；：)]}」』】'
+UNICODE_TLDS = (
+    'みんな', 'ポイント', 'ファッション', 'セール', 'ストア', 'コム', 'クラウド',
+    '通販', '购物', '网站', '网址', '在线', '公司', '网络', '中国', '中國', '香港', '台湾',
+    '台灣', '日本', '한국', 'ไทย', 'рф', 'сайт', 'онлайн', 'москва', 'ком', 'рус'
+)
+DOMAIN_LABEL = r'[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?'
+DOMAIN_TLD = r'(?:[A-Za-z]{2,63}|' + '|'.join(sorted(UNICODE_TLDS, key=len, reverse=True)) + r')'
+URL_RE = re.compile(
+    r'(?<![A-Za-z0-9@＠$#＃_.\/-])(?:https?://)?(?:' + DOMAIN_LABEL + r'\.)+' + DOMAIN_TLD +
+    r'(?::\d{1,5})?(?:[/?#][A-Za-z0-9!$&\'()*+,;=%#/?[\]@_~:\-\u00c0-\u02af\u0400-\u052f]*)?',
+    re.IGNORECASE
+)
+URL_TRAILING = '.,!?;:、。！？，．；：'
 
 
 def _is_emoji(code_point: int) -> bool:

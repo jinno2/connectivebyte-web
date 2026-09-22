@@ -72,7 +72,8 @@ const campaign = (() => {
   const params = new URLSearchParams(window.location.search);
   // 記事ページ (content/18-blog/) からの計測では asset_id に記事slugを使う。
   // LP単体のときは従来どおり landing_page (URL不問の既存挙動を変えない)。
-  const articleSlug = location.pathname.match(/content\/18-blog\/([^/]+)\/$/)?.[1];
+  const articlePath = location.pathname.replace(/\/index\.html$/, "/");
+  const articleSlug = articlePath.match(/content\/18-blog\/([^/]+)\/$/)?.[1];
   const articlePage = Boolean(articleSlug);
   return Object.freeze({
     source_id: params.get("source_id") ?? (articleSlug ? "lab_article" : "direct"),
@@ -90,13 +91,16 @@ const campaign = (() => {
 
 function readJson(key, fallback) {
   if (storageTombstones.has(key)) return memoryStorage.has(key) ? memoryStorage.get(key) : fallback;
+  if (memoryOnlyKeys.has(key) && memoryStorage.has(key)) return memoryStorage.get(key);
   let value;
   try {
     value = localStorage.getItem(key);
   } catch {
     // Consent fails closed when storage cannot be read. Other state may use
     // the in-page fallback so the current interaction remains usable.
-    return key === "consent" ? fallback : memoryStorage.get(key) ?? fallback;
+    return memoryOnlyKeys.has(key) && memoryStorage.has(key)
+      ? memoryStorage.get(key)
+      : key === "consent" ? fallback : memoryStorage.get(key) ?? fallback;
   }
   if (value === null) {
     if (key === "events" && !memoryOnlyKeys.has(key)) eventRecords = [];
@@ -125,13 +129,22 @@ function writeJson(key, value) {
   storageTombstones.delete(key);
   memoryStorage.set(key, value);
   if (key === "events" && Array.isArray(value)) hydrateEventIds(value);
+  let persisted = true;
   try {
     localStorage.setItem(key, serialized);
     memoryOnlyKeys.delete(key);
   } catch {
+    persisted = false;
     memoryOnlyKeys.add(key);
+    if (key === "consent" && value?.analytics === false) {
+      try {
+        localStorage.removeItem(key);
+      } catch {
+        // The in-page value remains authoritative until this page is closed.
+      }
+    }
   }
-  return true;
+  return persisted;
 }
 
 function removeJson(key) {
@@ -140,12 +153,14 @@ function removeJson(key) {
   if (key === "events") eventRecords = [];
   memoryOnlyKeys.delete(key);
   storageTombstones.add(key);
+  let removed = true;
   try {
     localStorage.removeItem(key);
   } catch {
+    removed = false;
     // The tombstone prevents stale persistent data from returning in this page.
   }
-  return true;
+  return removed;
 }
 
 function eventKey(event) {
@@ -813,7 +828,7 @@ function download(name, type, content) {
 
 function saveConsent(analytics) {
   const current = getConsent();
-  writeJson("consent", { analytics, email: current.email, decided: true });
+  const persisted = writeJson("consent", { analytics, email: current.email, decided: true });
   document.querySelector("#consent-panel").hidden = true;
   if (analytics) {
     track("landing_viewed", { cta_id: "consent_accepted" });
@@ -823,8 +838,9 @@ function saveConsent(analytics) {
       track("shared_result_viewed", { asset_id: "shared_result", cta_id: `r_P${sharedResultPhaseThisView}` });
     }
   } else {
-    removeJson("events");
+    return persisted && removeJson("events");
   }
+  return persisted;
 }
 
 function initializeConsent() {
@@ -1045,7 +1061,9 @@ if (document.querySelector("#apply-form")) {
 }
 
 const restoredInterest = readJson("declared_interest", null);
-if (!campaign.articlePage && getInterestRoute(restoredInterest)) renderRoute(restoredInterest, false);
+if (!campaign.articlePage && document.querySelector("#route-result") && getInterestRoute(restoredInterest)) {
+  renderRoute(restoredInterest, false);
+}
 if (document.querySelector("#share-free-text")) {
   document.querySelectorAll("input[name=share-template]").forEach((radio) => {
     radio.addEventListener("change", () => {

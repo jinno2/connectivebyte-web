@@ -21,10 +21,20 @@ vectors = [
     ('👨‍🎤', True),
     ('👩🏽‍💻', True),
     ('a ' + url + ' b https://example.com/x', True),
-]
+    ('example.comてすとですtwitter.みんなです', True),
+    ('example.com あ twitter.みんな', True),
+    ('あ' * 120 + ' example.com\\n' + url, False),
+    ('a' * 279, True),
+    ('a' * 280, True),
+    ('a' * 281, False),
+    ('a' * 278 + '👩🏽‍💻', True),
+    ('a' * 279 + '👩🏽‍💻', False),
+  ]
 for text, expected in vectors:
     assert m.post_length_ok(text) is expected, (m.weighted_length(text), expected)
 assert m.weighted_length('あ' * 200 + '\\n' + url) == 424
+assert m.weighted_length('example.comてすとですtwitter.みんなです') == 60
+assert m.weighted_length('example.com あ twitter.みんな') == 50
 `;
   execFileSync("python3", ["-c", script], { cwd: repoRoot, encoding: "utf8" });
 });

@@ -104,6 +104,25 @@ test("weightedLengthはXのCJK/ASCII/URL/emoji重みを扱い、共有文を上�
   assert.ok(draft.text.endsWith(url));
 });
 
+test("公式extract fixtureのschemeなしURLとURL単位の切詰めを扱う", () => {
+  assert.equal(weightedLength("example.comてすとですtwitter.みんなです"), 60);
+  assert.equal(weightedLength("example.com あ twitter.みんな"), 50);
+  assert.equal(weightedLength("a https://example.com/path_(x),"), 26);
+  assert.equal(weightedLength(`${"あ".repeat(120)} example.com\nhttps://lab.connectivebyte.com/?r=P1`), 288);
+  const draft = buildShareText("free", {
+    freeText: `${"あ".repeat(120)} example.com`,
+    url: "https://lab.connectivebyte.com/?r=P1"
+  });
+  assert.ok(weightedLength(draft.text) <= MAX_POST_LENGTH);
+  assert.ok(draft.text.endsWith("https://lab.connectivebyte.com/?r=P1"));
+  assert.ok(!draft.text.includes("example.c"), "URL途中で切詰めない");
+  assert.equal(weightedLength("a".repeat(279)), 279);
+  assert.equal(weightedLength("a".repeat(280)), 280);
+  assert.equal(weightedLength("a".repeat(281)), 281);
+  assert.equal(weightedLength(`${"a".repeat(278)}👩🏽‍💻`), 280);
+  assert.equal(weightedLength(`${"a".repeat(279)}👩🏽‍💻`), 281);
+});
+
 test("unknown template returns null", () => {
   assert.equal(buildShareText("promo", { url: "https://x.jp/" }), null);
   assert.deepEqual(SHARE_TEMPLATES, ["result", "free"]);
