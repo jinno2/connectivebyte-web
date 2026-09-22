@@ -31,7 +31,7 @@ test("deploy workflow は favicon.svg と sitemap.xml を配信木に含める",
   const yml = await readFile(path.join(repoRoot, ".github/workflows/deploy_pages.yml"), "utf8");
   const cpLine = yml.split("\n").find((l) => l.includes("cp index.html"));
   assert.ok(cpLine, "publish treeのcp行が見つからない");
-  for (const file of ["favicon.svg", "sitemap.xml", "app.js", "logic.js", "share.js"]) {
+  for (const file of ["favicon.svg", "sitemap.xml", "app.js", "logic.js", "share.js", "twitter-text-regex.js"]) {
     assert.ok(cpLine.includes(file), `配信木に ${file} が無い: ${cpLine.trim()}`);
   }
 });

@@ -47,7 +47,7 @@ METRICS = os.path.join(FLEET, 'outreach-metrics.jsonl')
 DISCOVER_QUEUE = os.path.join(FLEET, 'discover-queue.jsonl')
 REPO = os.path.dirname(os.path.dirname(HERE))
 PUBLISH_ROOT_FILES = ('index.html', 'styles.css', 'app.js', 'logic.js', 'share.js',
-                      'favicon.svg', 'sitemap.xml')
+                      'twitter-text-regex.js', 'favicon.svg', 'sitemap.xml')
 
 
 def load_env_file() -> None:

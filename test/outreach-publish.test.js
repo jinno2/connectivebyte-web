@@ -39,6 +39,7 @@ real_run = m.subprocess.run
 bad_page = m.ARTICLE_TMPL.format(title='新規記事', slug='new-article', description='知能接続', updated='2026-09-22', body=m.md_to_html('# 新規記事\\n\\n知能接続'))
 stage = tempfile.mkdtemp(prefix='cb-publish-guard-')
 m.prepare_publish_tree(stage, 'content/18-blog/new-article/index.html', bad_page)
+assert os.path.isfile(os.path.join(stage, 'twitter-text-regex.js'))
 guard_env = {**os.environ, 'PUBLICATION_ROOT': stage}
 guard_env.pop('NODE_TEST_CONTEXT', None)
 guard_fixture = real_run(['node', '--test', 'test/publication-guard.test.js'], cwd=work,
