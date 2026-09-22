@@ -107,11 +107,11 @@ test("consent grant re-emits shared_result_viewed dropped before consent", () =>
 test("article pages measure article_viewed (slug=asset_id, consentless minimal, LP consent unchanged)", () => {
   const source = readFileSync(fileURLToPath(new URL("../app.js", import.meta.url)), "utf8");
   // 18-blog パスからslugを取り asset_id へ。LPは従来どおり同意ゲート内の landing_viewed。
-  assert.match(
-    source,
-    /const articleSlug = location\.pathname\.match\(\/content.{1,4}18-blog.{1,4}\(\[\^\/\]\+\).{1,4}\$\/\)/,
-    "18-blog slug extraction missing"
+  assert.ok(
+    source.includes('const articlePath = location.pathname.replace(/\\/index\\.html$/, "/");'),
+    "18-blog path normalization missing"
   );
+  assert.match(source, /const articleSlug = articlePath\.match\(\/content.{1,4}18-blog.{1,4}\(\[\^\/\]\+\).{1,4}\$\/\)/);
   // article_viewedのみ同意ゲート外 (jinno決定2026-09-05)。LPは従来どおり。
   assert.match(source, /if \(campaign\.articlePage\) trackArticleViewed\(\);\s*\n\s*else if \(consent\.analytics\) track\("landing_viewed"\);/);
   // 最小data原則: anonymous_id (端末ID) を持たない・端末に保存せず即送信・referrer無し

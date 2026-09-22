@@ -1,5 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 
 let importCounter = 0;
 
@@ -64,7 +66,9 @@ function setup({ path = "/", search = "", storage, elements = {}, fetchImpl } = 
   Object.defineProperty(globalThis, "navigator", {
     value: { onLine: true, clipboard: null }, configurable: true, writable: true
   });
-  globalThis.localStorage = storage;
+  Object.defineProperty(globalThis, "localStorage", {
+    value: storage, configurable: true, writable: true
+  });
   globalThis.fetch = fetchImpl ?? (async () => ({ status: 202, async json() { return {}; } }));
   Object.defineProperty(globalThis, "crypto", {
     value: { randomUUID: () => `test-id-${++importCounter}` }, configurable: true, writable: true
@@ -81,21 +85,29 @@ function event(name, index = 0) {
   return { name, index, occurred_at: `2026-09-22T00:00:${String(index).padStart(2, "0")}Z` };
 }
 
-test("記事は保存済みE/D/C/B/Aや保存なしでも初期化し、記事計測を1回送る", async () => {
+test("実記事は末尾/とindex.htmlの両方で保存済みE/D/C/B/Aや保存なしでも初期化する", async () => {
+  const article = readFileSync(fileURLToPath(new URL("../content/18-blog/quetab-ai-game-builder/index.html", import.meta.url)), "utf8");
+  assert.match(article, /<script type="module" src="\.\.\/\.\.\/\.\.\/app\.js"><\/script>/);
+  const paths = [
+    "/content/18-blog/quetab-ai-game-builder/",
+    "/content/18-blog/quetab-ai-game-builder/index.html"
+  ];
   for (const interest of [null, "E", "D", "C", "B", "A"]) {
-    const storage = new FakeStorage(interest ? { declared_interest: interest } : {});
-    const calls = [];
-    setup({
-      path: "/content/18-blog/test-article/",
-      storage,
-      fetchImpl: async (_url, options) => {
-        calls.push(JSON.parse(options.body));
-        return { status: 202 };
-      }
-    });
-    await assert.doesNotReject(loadApp(`article-${interest ?? "none"}`));
-    assert.equal(calls.length, 1, `article_viewed count for ${interest ?? "none"}`);
-    assert.equal(calls[0][0].name, "article_viewed");
+    for (const path of paths) {
+      const storage = new FakeStorage(interest ? { declared_interest: interest } : {});
+      const calls = [];
+      setup({
+        path,
+        storage,
+        fetchImpl: async (_url, options) => {
+          calls.push(JSON.parse(options.body));
+          return { status: 202 };
+        }
+      });
+      await assert.doesNotReject(loadApp(`article-${path.endsWith("index.html") ? "index" : "slash"}-${interest ?? "none"}`));
+      assert.equal(calls.length, 1, `${path} article_viewed count for ${interest ?? "none"}`);
+      assert.equal(calls[0][0].name, "article_viewed");
+    }
   }
 });
 
@@ -264,4 +276,50 @@ test("Storage拒否・QuotaExceeded・不正JSONでも同意を捏造せず基�
     getterDenied.track("interest_selected");
   });
   assert.equal(getterDenied.readJson("consent", null), null);
+});
+
+test("既存Storage値が書込み拒否後のページ内consentと関心選択を上書きしない", async () => {
+  const storage = new FakeStorage({
+    consent: { analytics: true, email: false, decided: true },
+    declared_interest: "E",
+    events: [event("landing_viewed", 8)]
+  }, { set: true });
+  const elements = { "#consent-panel": element() };
+  const calls = [];
+  setup({
+    storage,
+    elements,
+    fetchImpl: async (_url, options) => {
+      calls.push(JSON.parse(options.body));
+      return { status: 202 };
+    }
+  });
+  const app = await loadApp("storage-existing-write-denied");
+  const callsBeforeRevoke = calls.length;
+  assert.equal(app.readJson("consent", null).analytics, true);
+  assert.equal(app.writeJson("consent", { analytics: false, email: false, decided: true }), false);
+  assert.equal(app.saveConsent(false), false, "永続化失敗を保存成功と扱わない");
+  assert.equal(elements["#consent-panel"].hidden, true);
+  assert.equal(app.readJson("consent", null).analytics, false);
+  app.track("interest_selected", { asset_id: "interest_selector" });
+  assert.equal(calls.length, callsBeforeRevoke, "撤回後の新規イベントを送信しない");
+  assert.deepEqual(app.readJson("events", []), [], "撤回後に旧イベントを復活させない");
+
+  app.writeJson("declared_interest", "C");
+  assert.equal(app.readJson("declared_interest", null), "C", "ページ内の最新選択を維持");
+  app.writeJson("diagnosis_result", { current_phase: 3, phase_label: "P3", next_hints: ["最新"] });
+  assert.equal(app.readJson("diagnosis_result", null).current_phase, 3, "診断結果の最新値を維持");
+  app.track("diagnostic_completed");
+  assert.equal(app.readJson("progress", {}).diagnostic_completed, true, "進捗の最新値を維持");
+  assert.equal(storage.values.has("consent"), false, "拒否後は旧永続consentを削除する");
+
+  const removalDeniedStorage = new FakeStorage({
+    consent: { analytics: true, email: false, decided: true },
+    events: [event("landing_viewed", 9)]
+  }, { set: true, remove: true });
+  setup({ storage: removalDeniedStorage, elements: { "#consent-panel": element() } });
+  const removalDenied = await loadApp("storage-existing-remove-denied");
+  assert.equal(removalDenied.saveConsent(false), false, "削除拒否を保存成功と扱わない");
+  assert.equal(removalDenied.readJson("consent", null).analytics, false);
+  assert.equal(removalDeniedStorage.values.has("consent"), true, "削除拒否では旧永続値が残ることを区別");
 });

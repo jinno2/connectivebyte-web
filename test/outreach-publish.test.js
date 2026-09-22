@@ -78,6 +78,8 @@ assert page.count('<h1>') == 1, page
 assert 'content="Description &lt;b&gt; &amp; &quot;quoted&quot;"' in page, page
 assert '<b>' not in page
 assert any(cmd[:2] == ['git', 'add'] for cmd in calls), calls
+published = json.loads(open(queue, encoding='utf-8').read())['published_url']
+assert published == 'https://lab.connectivebyte.com/content/18-blog/new-article/', published
 shutil.rmtree(work)
 `;
   execFileSync("python3", ["-c", script], { cwd: repoRoot, encoding: "utf8" });

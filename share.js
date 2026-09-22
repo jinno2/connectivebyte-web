@@ -4,8 +4,18 @@ import { PHASES } from "./logic.js";
 
 export const MAX_POST_LENGTH = 280;
 export const URL_WEIGHTED_LENGTH = 23; // X上のURLは t.co 展開で23字扱い
-const URL_PATTERN = /https?:\/\/[^\s<>"']+/giu;
-const URL_TRAILING_PUNCTUATION = /[.,!?;:、。！？，．；：)\]}」』】]+$/u;
+const UNICODE_TLDS = [
+  "みんな", "ポイント", "ファッション", "セール", "ストア", "コム", "クラウド",
+  "通販", "购物", "网站", "网址", "在线", "公司", "网络", "中国", "中國", "香港", "台湾",
+  "台灣", "日本", "한국", "ไทย", "рф", "сайт", "онлайн", "москва", "ком", "рус"
+].sort((a, b) => b.length - a.length);
+const DOMAIN_LABEL = "[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?";
+const DOMAIN_TLD = `(?:[A-Za-z]{2,63}|${UNICODE_TLDS.join("|")})`;
+const URL_PATTERN = new RegExp(
+  `(?<![A-Za-z0-9@＠$#＃_.\\/-])(?:https?:\\/\\/)?(?:${DOMAIN_LABEL}\\.)+${DOMAIN_TLD}(?::\\d{1,5})?(?:[/?#][A-Za-z0-9!$&'()*+,;=%#/?[\\]@_~:\\-\\u00c0-\\u02af\\u0400-\\u052f]*)?`,
+  "giu"
+);
+const URL_TRAILING_PUNCTUATION = /[.,!?;:、。！？，．；：]+$/u;
 const NEXT_ACTION_MAX = 40;
 const NEXT_ACTION_MAX_WEIGHT = 80;
 
@@ -59,7 +69,11 @@ function urlRanges(text) {
   const ranges = [];
   for (const match of String(text ?? "").matchAll(URL_PATTERN)) {
     const raw = match[0];
-    const trimmed = raw.replace(URL_TRAILING_PUNCTUATION, "");
+    let trimmed = raw.replace(URL_TRAILING_PUNCTUATION, "");
+    while (trimmed.endsWith(")") &&
+           (trimmed.match(/\(/g)?.length ?? 0) < (trimmed.match(/\)/g)?.length ?? 0)) {
+      trimmed = trimmed.slice(0, -1);
+    }
     if (trimmed) ranges.push({ start: match.index, end: match.index + trimmed.length });
   }
   return ranges;
@@ -83,7 +97,19 @@ function truncateWeighted(text, maxWeight) {
   if (weightedLength(value) <= maxWeight) return value;
   const ellipsis = "…";
   let output = "";
-  for (const cluster of graphemes(value.normalize("NFC"))) {
+  let cursor = 0;
+  for (const range of urlRanges(value)) {
+    for (const cluster of graphemes(value.slice(cursor, range.start).normalize("NFC"))) {
+      const next = output + String.fromCodePoint(...cluster);
+      if (weightedLength(next + ellipsis) > maxWeight) return output + ellipsis;
+      output = next;
+    }
+    const url = value.slice(range.start, range.end);
+    if (weightedLength(output + url + ellipsis) > maxWeight) return output + ellipsis;
+    output += url;
+    cursor = range.end;
+  }
+  for (const cluster of graphemes(value.slice(cursor).normalize("NFC"))) {
     const next = output + String.fromCodePoint(...cluster);
     if (weightedLength(next + ellipsis) > maxWeight) break;
     output = next;
