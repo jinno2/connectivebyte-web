@@ -122,7 +122,7 @@ test("article pages measure article_viewed (slug=asset_id, consentless minimal, 
   assert.doesNotMatch(trackFn, /referrer/);
   assert.match(trackFn, /send_events\(\[\{/);
   // LP側の同意ゲートと匿名ID (端末内保存) は無変更
-  assert.match(source, /if \(!EVENT_NAMES\.has\(name\) \|\| !getConsent\(\)\.analytics\) return;/);
+  assert.match(source, /if \(!EVENT_NAMES\.has\(name\)\) return;\s*recordProgress\(name\);\s*if \(!getConsent\(\)\.analytics\) return;/);
   assert.match(source, /anonymous_id: anonymousId\(\)/);
   // 同意UI (#consent-panel/#analytics-consent) はLPにしか無いため null 安全であること
   assert.match(source, /if \(consentCheckbox\) consentCheckbox\.checked = consent\.analytics;/);

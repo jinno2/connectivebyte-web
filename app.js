@@ -18,6 +18,7 @@ const STORAGE_KEYS = Object.freeze([
   "eligible_segments",
   "consent",
   "events",
+  "progress",
   "diagnosis_result",
   "feedback_notes",
   "newsletter_registered"
@@ -49,6 +50,24 @@ const EVENT_NAMES = new Set([
   "apply_submitted"
 ]);
 
+const PROGRESS_BY_EVENT = Object.freeze({
+  diagnostic_started: "diagnostic_started",
+  diagnostic_completed: "diagnostic_completed",
+  comparison_template_viewed: "comparison_viewed",
+  comparison_template_started: "comparison_started",
+  comparison_template_completed: "comparison_completed",
+  comparison_template_downloaded: "comparison_downloaded",
+  frontier_article_read_75: "frontier_article_read",
+  org_pdf_downloaded: "org_pdf_downloaded"
+});
+
+const memoryStorage = new Map();
+const storageTombstones = new Set();
+const memoryOnlyKeys = new Set();
+let eventIdCounter = 0;
+let eventRecords = [];
+const eventIds = new WeakMap();
+
 const campaign = (() => {
   const params = new URLSearchParams(window.location.search);
   // 記事ページ (content/18-blog/) からの計測では asset_id に記事slugを使う。
@@ -70,18 +89,106 @@ const campaign = (() => {
 })();
 
 function readJson(key, fallback) {
+  if (storageTombstones.has(key)) return memoryStorage.has(key) ? memoryStorage.get(key) : fallback;
+  let value;
   try {
-    const value = localStorage.getItem(key);
-    return value === null ? fallback : JSON.parse(value);
+    value = localStorage.getItem(key);
   } catch {
-    localStorage.removeItem(key);
+    // Consent fails closed when storage cannot be read. Other state may use
+    // the in-page fallback so the current interaction remains usable.
+    return key === "consent" ? fallback : memoryStorage.get(key) ?? fallback;
+  }
+  if (value === null) {
+    if (key === "events" && !memoryOnlyKeys.has(key)) eventRecords = [];
+    return memoryOnlyKeys.has(key) && memoryStorage.has(key) ? memoryStorage.get(key) : fallback;
+  }
+  try {
+    const parsed = JSON.parse(value);
+    memoryStorage.set(key, parsed);
+    memoryOnlyKeys.delete(key);
+    if (key === "events" && Array.isArray(parsed)) hydrateEventIds(parsed);
+    return parsed;
+  } catch {
+    removeJson(key);
     return fallback;
   }
 }
 
 function writeJson(key, value) {
   if (!STORAGE_KEYS.includes(key)) throw new Error("Unsupported storage key");
-  localStorage.setItem(key, JSON.stringify(value));
+  let serialized;
+  try {
+    serialized = JSON.stringify(value);
+  } catch {
+    return false;
+  }
+  storageTombstones.delete(key);
+  memoryStorage.set(key, value);
+  if (key === "events" && Array.isArray(value)) hydrateEventIds(value);
+  try {
+    localStorage.setItem(key, serialized);
+    memoryOnlyKeys.delete(key);
+  } catch {
+    memoryOnlyKeys.add(key);
+  }
+  return true;
+}
+
+function removeJson(key) {
+  if (!STORAGE_KEYS.includes(key)) return false;
+  memoryStorage.delete(key);
+  if (key === "events") eventRecords = [];
+  memoryOnlyKeys.delete(key);
+  storageTombstones.add(key);
+  try {
+    localStorage.removeItem(key);
+  } catch {
+    // The tombstone prevents stale persistent data from returning in this page.
+  }
+  return true;
+}
+
+function eventKey(event) {
+  try {
+    return JSON.stringify(event);
+  } catch {
+    return "";
+  }
+}
+
+function hydrateEventIds(events) {
+  const keys = events.map(eventKey);
+  const maxOverlap = Math.min(keys.length, eventRecords.length);
+  let overlap = 0;
+  for (let size = maxOverlap; size >= 0; size -= 1) {
+    let matches = true;
+    for (let i = 0; i < size; i += 1) {
+      if (keys[i] !== eventRecords[eventRecords.length - size + i].key) {
+        matches = false;
+        break;
+      }
+    }
+    if (matches) {
+      overlap = size;
+      break;
+    }
+  }
+  const records = [];
+  for (let i = 0; i < events.length; i += 1) {
+    const id = i < overlap ? eventRecords[eventRecords.length - overlap + i].id : ++eventIdCounter;
+    eventIds.set(events[i], id);
+    records.push({ id, key: keys[i] });
+  }
+  eventRecords = records;
+}
+
+function recordProgress(name) {
+  const field = PROGRESS_BY_EVENT[name];
+  if (!field) return;
+  const current = readJson("progress", {});
+  const progress = current && typeof current === "object" && !Array.isArray(current) ? current : {};
+  if (progress[field] === true) return;
+  writeJson("progress", { ...progress, [field]: true });
 }
 
 function getConsent() {
@@ -104,7 +211,9 @@ function currentSegment() {
 }
 
 function track(name, details = {}) {
-  if (!EVENT_NAMES.has(name) || !getConsent().analytics) return;
+  if (!EVENT_NAMES.has(name)) return;
+  recordProgress(name);
+  if (!getConsent().analytics) return;
   const event = {
     name,
     anonymous_id: anonymousId(),
@@ -214,6 +323,7 @@ async function renderInterestStats(interest) {
 }
 let flushInFlight = false;
 let flushScheduled = false;
+let flushRequested = false;
 
 export function send_events(events) {
   const batch = buildEventBatch(events);
@@ -228,7 +338,11 @@ export function send_events(events) {
     keepalive: true
   }).then(async (response) => {
     if (response.status >= 200 && response.status < 300) {
-      return { accepted: batch.length, status: response.status };
+      return {
+        accepted: batch.length,
+        sentEvents: events.filter((event) => buildEventBatch([event]).length > 0),
+        status: response.status
+      };
     }
     const error = new Error(`events_rejected_${response.status}`);
     error.status = response.status;
@@ -237,7 +351,11 @@ export function send_events(events) {
 }
 
 function scheduleFlush() {
-  if (flushScheduled || flushInFlight) return;
+  if (flushInFlight) {
+    flushRequested = true;
+    return;
+  }
+  if (flushScheduled) return;
   flushScheduled = true;
   queueMicrotask(() => {
     flushScheduled = false;
@@ -248,19 +366,32 @@ function scheduleFlush() {
 async function flushEvents() {
   if (flushInFlight) return;
   if (typeof navigator !== "undefined" && navigator.onLine === false) return;
+  if (!getConsent().analytics) return;
   const events = readJson("events", []);
   if (!Array.isArray(events) || events.length === 0) return;
+  const snapshot = events.slice();
   flushInFlight = true;
+  let drain = false;
   try {
-    const result = await send_events(events);
+    const result = await send_events(snapshot);
     if (result && typeof result.accepted === "number" && result.accepted > 0) {
       const remaining = readJson("events", []);
-      const next = Array.isArray(remaining) ? remaining.slice(result.accepted) : [];
+      const sentIds = new Set((result.sentEvents ?? []).map((event) => eventIds.get(event)));
+      const next = Array.isArray(remaining)
+        ? remaining.filter((event) => !sentIds.has(eventIds.get(event)))
+        : [];
       writeJson("events", next);
+      drain = next.length > 0;
     }
   } catch {
   } finally {
     flushInFlight = false;
+    const shouldContinue = drain && flushRequested;
+    flushRequested = false;
+    // Success drains events appended during the request. Failure waits for a
+    // later trigger/online event instead of retrying in a tight loop.
+    if (shouldContinue && getConsent().analytics &&
+        (typeof navigator === "undefined" || navigator.onLine !== false)) scheduleFlush();
   }
 }
 
@@ -594,15 +725,27 @@ function renderDashboard() {
   const eligibleEl = document.querySelector("#dash-eligible");
   if (eligibleEl) eligibleEl.textContent = Array.isArray(segments) && segments.length > 0 ? segments.join("、") : "なし";
   const names = new Set(eventList.map((event) => event?.name).filter(Boolean));
+  const storedProgress = readJson("progress", {});
+  const progress = storedProgress && typeof storedProgress === "object" && !Array.isArray(storedProgress)
+    ? { ...storedProgress }
+    : {};
+  for (const name of names) {
+    const field = PROGRESS_BY_EVENT[name];
+    if (field) progress[field] = true;
+  }
+  if (JSON.stringify(progress) !== JSON.stringify(storedProgress)) writeJson("progress", progress);
   const diagEl = document.querySelector("#dash-diagnostic");
-  if (diagEl) diagEl.textContent = names.has("diagnostic_completed") ? "完了" : names.has("diagnostic_started") ? "開始済み" : "未実施";
+  const diagnosisResult = readJson("diagnosis_result", null);
+  if (diagEl) diagEl.textContent = progress.diagnostic_completed || typeof diagnosisResult?.current_phase === "number"
+    ? "完了"
+    : progress.diagnostic_started ? "開始済み" : "未実施";
   const compEl = document.querySelector("#dash-comparison");
   if (compEl) {
-    const state = names.has("comparison_template_completed")
+    const state = progress.comparison_completed
       ? "完了"
-      : names.has("comparison_template_started")
+      : progress.comparison_started
         ? "作成中"
-        : names.has("comparison_template_viewed")
+        : progress.comparison_viewed
           ? "閲覧済み"
           : "未利用";
     compEl.textContent = state;
@@ -610,9 +753,9 @@ function renderDashboard() {
   const materialsEl = document.querySelector("#dash-materials");
   if (materialsEl) {
     const materials = [];
-    if (names.has("frontier_article_read_75")) materials.push("フロンティア記事");
-    if (names.has("org_pdf_downloaded")) materials.push("組織向けガイド");
-    if (names.has("comparison_template_downloaded")) materials.push("比較テンプレート");
+    if (progress.frontier_article_read) materials.push("フロンティア記事");
+    if (progress.org_pdf_downloaded) materials.push("組織向けガイド");
+    if (progress.comparison_downloaded) materials.push("比較テンプレート");
     materialsEl.textContent = materials.length > 0 ? materials.join("、") : "なし";
   }
   const eventCountEl = document.querySelector("#dash-event-count");
@@ -680,7 +823,7 @@ function saveConsent(analytics) {
       track("shared_result_viewed", { asset_id: "shared_result", cta_id: `r_P${sharedResultPhaseThisView}` });
     }
   } else {
-    localStorage.removeItem("events");
+    removeJson("events");
   }
 }
 
@@ -902,7 +1045,7 @@ if (document.querySelector("#apply-form")) {
 }
 
 const restoredInterest = readJson("declared_interest", null);
-if (getInterestRoute(restoredInterest)) renderRoute(restoredInterest, false);
+if (!campaign.articlePage && getInterestRoute(restoredInterest)) renderRoute(restoredInterest, false);
 if (document.querySelector("#share-free-text")) {
   document.querySelectorAll("input[name=share-template]").forEach((radio) => {
     radio.addEventListener("change", () => {
@@ -919,3 +1062,5 @@ initializeSharedResult();
 initializeConsent();
 initializeReadingEvents();
 renderDashboard();
+
+export { readJson, writeJson, removeJson, flushEvents, renderDashboard, saveConsent, track };
