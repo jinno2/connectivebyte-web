@@ -15,7 +15,7 @@ from types import SimpleNamespace
 source = ${JSON.stringify(repoRoot)}
 module_path = ${JSON.stringify(outreach)}
 work = tempfile.mkdtemp(prefix='cb-publish-test-')
-shutil.copytree(source, work, dirs_exist_ok=True, ignore=shutil.ignore_patterns('.git', '.serena', 'node_modules', 'app-behavior.test.js', 'outreach-publish.test.js', 'x-discover-post.test.js'))
+shutil.copytree(source, work, dirs_exist_ok=True, ignore=shutil.ignore_patterns('.git', '.serena', 'node_modules', 'worktrees', 'app-behavior.test.js', 'outreach-publish.test.js', 'x-discover-post.test.js'))
 subprocess.run(['git', 'init', '-q'], cwd=work, check=True)
 subprocess.run(['git', 'config', 'user.email', 'test@example.invalid'], cwd=work, check=True)
 subprocess.run(['git', 'config', 'user.name', 'test'], cwd=work, check=True)
