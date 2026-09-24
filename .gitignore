@@ -7,3 +7,7 @@ __pycache__/
 .env.*
 !.env.example
 _site/
+
+# Automation infrastructure (tas_autopilot harness state, not for the public tree)
+/.audit/
+/worktrees/
