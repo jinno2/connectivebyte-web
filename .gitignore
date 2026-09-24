@@ -11,3 +11,6 @@ _site/
 # auto-added by instructions/10_storage/100_audit_storage_policy.md
 .audit/development_direction.yml
 
+# Automation infrastructure (tas_autopilot harness state, not for the public tree)
+/.audit/
+/worktrees/
