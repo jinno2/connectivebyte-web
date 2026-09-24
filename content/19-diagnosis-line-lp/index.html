@@ -321,5 +321,48 @@ AIによる下書きを人間が全項目検証して作成します(検証記�
     <p class="privacy-note">© 2026 ConnectiveByte</p>
   </div>
 </footer>
+<script>
+/* 到達計測 (2026-09-25 t0004): 本ページの到達数・購入導線click数を既存events backend
+   (api.connectivebyte.com/events = D1・saas-infra管理) へ送る。識別子は sessionStorage
+   のみ(タブ閉鎖で消滅)・cookie不使用・PIIなし・referrerはhostnameのみ。
+   Brain記事からのlinkは rel=noreferrer のため referrer_host には現れない(= Brain経由は
+   "(none)" に集約される。UTM付与は記事編集=再審査が必要なため未実施)。 */
+(function(){
+  if (location.hostname !== "lab.connectivebyte.com") { return; }
+  var sid = "none";
+  try {
+    sid = sessionStorage.getItem("cb_d1_sid");
+    if (!sid) {
+      sid = "s" + Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
+      sessionStorage.setItem("cb_d1_sid", sid);
+    }
+  } catch (e) { /* storage blocked → sid="none" のまま計測のみ継続 */ }
+  function send(name, cta) {
+    try {
+      var host = "";
+      try { host = new URL(document.referrer).hostname; } catch (e) {}
+      fetch("https://api.connectivebyte.com/events", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ events: [{
+          name: name, source_id: "d1_lp", campaign_id: "static",
+          asset_id: "19-diagnosis-line-lp", segment: "unselected",
+          channel: "web", cta_id: cta || "none",
+          occurred_at: new Date().toISOString(),
+          session_id: sid, referrer_host: host || "(none)"
+        }] }),
+        keepalive: true
+      }).catch(function() {});
+    } catch (e) { /* 計測失敗はページに影響させない */ }
+  }
+  send("d1_lp_viewed");
+  document.querySelectorAll(".cart-slot a.cart-link").forEach(function(a) {
+    a.addEventListener("click", function() {
+      var slot = a.closest(".cart-slot");
+      send("d1_lp_cart_click", slot ? slot.id : "unknown");
+    });
+  });
+})();
+</script>
 </body>
 </html>
