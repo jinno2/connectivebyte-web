@@ -59,7 +59,7 @@ EOF
 ## 実測 (2026-09-15・版管理の初回full cycle完了時点)
 
 - pipeline_version = `c82e1c4c96fa` (初回cycle時点・当時はscripts/木tree hash) —
-  **現行 = `6b11a3f976cd`** (.py限定・版定義節参照)
+  **現行 = `31c857f21c9c`** (.py限定・版定義節参照・2026-10-03再実測)
 - 監査: posted 14 / out_of_window 43 / rejected 2 / **current 5** /
   STALE 0 / placeholder 0 — 版印は生存5行すべて `c82e1c4c96fa` で単一versionに収束
 - 初回cycleの証跡: ①09:17 cronが新規3件を版印付きで起草+stale 2行を自動再生成
@@ -77,6 +77,11 @@ EOF
   2件・テストpin 1件) で版は `99f88ba074c1` → `a476ac13d71d`、続く文言統合
   refactor (`_stale_msg` helper) で `6b11a3f976cd` — いずれも生成系実装 (.py)
   の変更なので正当。docs-only commitでは版不変を継続実証
+- ⑦2026-09-22の強化batch (6c03447/e13cb94/e98f4e9/c7ad45c — `outreach.py`/
+  `post.py`/`twitter_text_regex.py` の公開・計測・X字数まわりのhardening) で
+  版は `6b11a3f976cd` → `31c857f21c9c` (.py変更なので正当・台帳の「現行」は
+  このbatch後も更新漏れになっていた — 2026-10-03に再実測して本節で同期)。
+  生存行は翌朝collectの`regen_stale` (limit 3/回) が自動で現行版へ揃える
 - 以後、文書変更 (本台帳の更新・scripts下READMEの更新を含む) では版は不変 —
   scripts/下の.py (codeとpromptの実体) が変わったときだけ版が動く。本節の
   更新commitで版が変わらないことがそのまま実証になる
