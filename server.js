@@ -5,7 +5,6 @@ import { extname, join, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const port = Number.parseInt(process.env.PORT ?? "4173", 10);
-const root = process.cwd();
 const types = Object.freeze({
   ".css": "text/css; charset=utf-8",
   ".html": "text/html; charset=utf-8",
@@ -158,6 +157,7 @@ function validateEvent(event) {
 }
 
 export function createRequestHandler(options = {}) {
+  const root = options.root ?? process.cwd();
   const dataDir = options.dataDir ?? root;
   const eventsFile = join(dataDir, "events.jsonl");
   const rateBuckets = new Map();

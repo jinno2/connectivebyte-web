@@ -201,6 +201,42 @@ test("静的ファイル配信は維持される", async () => {
   }
 });
 
+test("ネストした存在しないパスも404.htmlをサイト体裁で応答する", async () => {
+  // 404.htmlはアセット参照を絶対パス (/styles.css等) で書いているため、
+  // どの深さのURLで応答してもリンクが壊れない。Pages本番と同じ挙動を
+  // 深いパスとindex.htmlを持たないディレクトリURLの両方で機械検査する。
+  const ctx = await startServer();
+  try {
+    for (const path of ["/deep/nested/missing", "/missing-dir/"]) {
+      const res = await fetch(`${ctx.base}${path}`);
+      assert.equal(res.status, 404, path);
+      assert.equal(res.headers.get("content-type"), "text/html; charset=utf-8", path);
+      assert.equal(res.headers.get("x-content-type-options"), "nosniff", path);
+      assert.match(res.headers.get("content-security-policy") ?? "", /default-src 'self'/, path);
+      const body = await res.text();
+      assert.match(body, /<html lang="ja">/, path);
+      assert.match(body, /お探しのページ/, path);
+      assert.match(body, /href="\/styles\.css"/, path);
+    }
+  } finally {
+    await ctx.cleanup();
+  }
+});
+
+test("404.htmlが無い環境では平文のNot foundへフォールバックする", async () => {
+  const bareRoot = await mkdtemp(join(tmpdir(), "cb-root-"));
+  const ctx = await startServer({ root: bareRoot });
+  try {
+    const res = await fetch(`${ctx.base}/missing`);
+    assert.equal(res.status, 404);
+    assert.equal(res.headers.get("content-type"), "text/plain; charset=utf-8");
+    assert.equal(await res.text(), "Not found");
+  } finally {
+    await ctx.cleanup();
+    await rm(bareRoot, { recursive: true, force: true });
+  }
+});
+
 test("ディレクトリURLはPages配信と同じ挙動をする (スラッシュ無しは301・付きはindex.html)", async () => {
   // sitemap.xmlはディレクトリ形式のURLを掲載する。Pages本番はスラッシュ無しの
   // ディレクトリURLをスラッシュ付きへ301リダイレクトし、付きのURLでindex.htmlを
