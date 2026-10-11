@@ -6,12 +6,18 @@
 // 欠損が実測されたため、ブログ専用だった走査を全公開ページへ拡張した。
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFile, readdir } from "node:fs/promises";
+import { readFile, readdir, stat } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { idSet, resolveFragmentTarget, resolvePlainTarget } from "./published-anchors.js";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+
+// deploy_pages.yml の cp 行と同じ配信ルートファイル（下の同期テストが一致を検査する）
+const ROOT_FILES = new Set([
+  "index.html", "styles.css", "app.js", "logic.js", "share.js",
+  "twitter-text-regex.js", "favicon.svg", "sitemap.xml", "robots.txt",
+]);
 
 // deploy_pages.yml の Prepare publish tree と同じ配信対象 (HTMLのみ)
 async function publishedHtmlFiles() {
@@ -100,12 +106,21 @@ test("plainリンク飛び先の解決規則は外部スキームを除外し、
   assert.equal(resolvePlainTarget(base, "sub/page.html"), "content/18-blog/quetab-ai-game-builder/sub/page.html");
 });
 
+test("ROOT_FILESはdeploy_pages.ymlのcp行と同調し、全ファイルがリポジトリに実在する", async () => {
+  const workflow = await readFile(path.join(repoRoot, ".github/workflows/deploy_pages.yml"), "utf8");
+  const cpLine = workflow.match(/^\s*cp (?!-r)(.+) _site\/\s*$/m);
+  assert.ok(cpLine, "deploy_pages.yml のルートファイルcp行が見つからない");
+  assert.deepEqual(
+    new Set(cpLine[1].trim().split(/\s+/)),
+    ROOT_FILES,
+    "ROOT_FILESはdeploy_pages.ymlのcp行と一致しない（インベントリが配信設定から乖離している）",
+  );
+  for (const name of ROOT_FILES) {
+    await assert.doesNotReject(stat(path.join(repoRoot, name)), `ルートファイル ${name} がリポジトリに存在しない`);
+  }
+});
+
 test("公開ページのplainリンク (href=\"path\") は飛び先ページまたは配信資産として存在する", async () => {
-  // deploy_pages.yml の cp 行と同じ配信ルートファイル
-  const ROOT_FILES = new Set([
-    "index.html", "styles.css", "app.js", "logic.js", "share.js",
-    "twitter-text-regex.js", "favicon.svg", "sitemap.xml", "robots.txt",
-  ]);
   const publishedFiles = new Set(ROOT_FILES);
   async function walk(dir) {
     for (const e of await readdir(dir, { withFileTypes: true })) {
