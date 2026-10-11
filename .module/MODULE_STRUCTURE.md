@@ -10,7 +10,7 @@
 
 ```text
 .
-├── .github/workflows/ci.yml
+├── .woodpecker.yml
 ├── .module/*.md
 ├── test/logic.test.js
 ├── app.js
