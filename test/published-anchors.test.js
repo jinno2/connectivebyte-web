@@ -9,6 +9,7 @@ import assert from "node:assert/strict";
 import { readFile, readdir } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
+import { idSet, resolveFragmentTarget } from "./published-anchors.js";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -24,10 +25,6 @@ async function publishedHtmlFiles() {
   }
   await walk(path.join(repoRoot, "content"));
   return files;
-}
-
-function idSet(html) {
-  return new Set([...html.matchAll(/\bid="([^"]+)"/g)].map((m) => m[1]));
 }
 
 test("公開ページのページ内アンカー (href=\"#x\") は同一ページの実在idに到達する", async () => {
@@ -55,12 +52,8 @@ test("公開ページから他ページへのフラグメント付きリンク (
     const base = path.posix.dirname(rel);
     for (const m of html.matchAll(/href="([^"#][^"#]*)#([^"]+)"/g)) {
       const [, href, frag] = m;
-      if (/^(https?:|mailto:|\/\/)/.test(href)) continue;
-      const filePart = href.split("?", 1)[0];
-      let target = path.posix.normalize(path.posix.join(base, filePart));
-      if (target.endsWith("/")) target = target.slice(0, -1);
-      if (target === "." || target === "") target = "index.html";
-      else if (!target.endsWith(".html")) target += "/index.html";
+      const target = resolveFragmentTarget(base, href);
+      if (target === null) continue;
       assert.ok(pages.has(target), `${rel}: href="${href}#${frag}" の飛び先ページ (${target}) が配信対象に存在しない`);
       assert.ok(
         idSet(pages.get(target)).has(frag),
@@ -68,4 +61,21 @@ test("公開ページから他ページへのフラグメント付きリンク (
       );
     }
   }
+});
+
+test("フラグメント飛び先の解決規則は外部スキームを除外し、クエリ除去・ディレクトリURLをindex.htmlへ正規化する", () => {
+  const base = "content/18-blog/quetab-ai-game-builder";
+  assert.equal(resolveFragmentTarget(base, "https://example.com/p.html"), null);
+  assert.equal(resolveFragmentTarget(base, "mailto:hello@example.com"), null);
+  assert.equal(resolveFragmentTarget(base, "//cdn.example.com/p.html"), null);
+  assert.equal(
+    resolveFragmentTarget(base, "../../?utm_source=content_page&utm_campaign=x"),
+    "content/index.html",
+  );
+  assert.equal(resolveFragmentTarget(base, "../../"), "content/index.html");
+  assert.equal(resolveFragmentTarget(base, ".."), "content/18-blog/index.html");
+  assert.equal(resolveFragmentTarget(base, "."), "content/18-blog/quetab-ai-game-builder/index.html");
+  assert.equal(resolveFragmentTarget(base, "./"), "content/18-blog/quetab-ai-game-builder/index.html");
+  assert.equal(resolveFragmentTarget(base, "sub/page.html"), "content/18-blog/quetab-ai-game-builder/sub/page.html");
+  assert.equal(resolveFragmentTarget("", "other/index.html"), "other/index.html");
 });
