@@ -153,20 +153,58 @@ test("17-org-pdf 完成PDF artifactは存在しLP・原稿page両面から配線
 });
 
 
+function parseCssRules(css) {
+  // @media等のネストを辿る簡易パーサ (コメント除去後、スタイル規則のみ集める)。
+  const rules = [];
+  let i = 0;
+  while (i < css.length) {
+    const open = css.indexOf("{", i);
+    if (open === -1) break;
+    const prelude = css.slice(i, open).trim();
+    let depth = 1;
+    let close = open;
+    while (close < css.length - 1 && depth > 0) {
+      close++;
+      if (css[close] === "{") depth++;
+      else if (css[close] === "}") depth--;
+    }
+    const body = css.slice(open + 1, close);
+    if (prelude.startsWith("@")) {
+      if (/^@(media|supports)\b/.test(prelude)) rules.push(...parseCssRules(body));
+    } else if (prelude) {
+      rules.push({ selectors: prelude.split(",").map((s) => s.replace(/\s+/g, " ").trim()), body });
+    }
+    i = close + 1;
+  }
+  return rules;
+}
+
 test("outline:none を付けた入力欄にはfocus-visibleの可視フォーカス規則が対で存在する", async () => {
   // L1点検 (2026-10-11): 枠なしinputにoutline:noneだけ付けると、キーボードで
-  // 記入位置が分からなくなる。outline:noneを使う各セレクタは、同じstyles.css内の
-  // 対応する :focus-visible 規則で可視フォーカスを復帰させていることを機械検査する。
-  const css = await readFile(path.join(repoRoot, "styles.css"), "utf8");
-  const noneRules = [...css.matchAll(/([^{}]+)\{[^}]*outline:\s*none[^}]*\}/g)].map((m) => m[1]);
+  // 記入位置が分からなくなる。outline:noneを使う各セレクタについて
+  // (1) 複合セレクタ全体が一致する :focus-visible 規則が存在する
+  //     (最後の複合だけの部分一致では、無関係なformのinput規則で誤魔化せるため)
+  // (2) その規則がoutline:none以外の可視outlineを宣言している
+  // ことを機械検査する。
+  const css = (await readFile(path.join(repoRoot, "styles.css"), "utf8")).replace(/\/\*[\s\S]*?\*\//g, "");
+  const rules = parseCssRules(css);
+  const focusRules = rules.flatMap((r) =>
+    r.selectors.filter((s) => s.includes(":focus-visible")).map((s) => ({ selector: s, body: r.body }))
+  );
+  const noneRules = rules.filter((r) => /outline:\s*none\b/.test(r.body));
   assert.ok(noneRules.length > 0, "outline:none の規則が見つからない (ガード対象が変化)");
   for (const rule of noneRules) {
-    for (const part of rule.split(",")) {
-      const selector = part.trim();
-      const compounds = selector.split(/[\s>]+/);
-      const last = compounds[compounds.length - 1];
-      assert.ok(css.includes(`${last}:focus-visible`),
-        `outline:none の ${selector} に対応する ${last}:focus-visible の可視フォーカス規則が無い`);
+    for (const selector of rule.selectors) {
+      // 末尾の複合セレクタに :focus-visible を付した完全一致で探す (結合子は原形保持)
+      const parts = selector.split(/([\s>+~]+)/);
+      const last = parts.pop();
+      const expected = [...parts, `${last}:focus-visible`].join("").replace(/\s+/g, " ").trim();
+      const hit = focusRules.find((f) => f.selector === expected);
+      assert.ok(hit, `outline:none の ${selector} に対応する ${expected} の可視フォーカス規則が無い`);
+      const outlines = hit.body.split(";").map((d) => d.split(":"))
+        .filter((p) => p.length === 2 && p[0].trim() === "outline").map((p) => p[1].trim());
+      assert.ok(outlines.some((v) => v !== "none"),
+        `${expected} は可視outline (none以外) を宣言していない`);
     }
   }
 });
