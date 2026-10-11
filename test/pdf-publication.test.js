@@ -162,6 +162,37 @@ test("qpdfの一時出力JSONが上限を超えたら拒否し一時領域を削
   assert.deepEqual(await readdir(temp), []);
 });
 
+test("qpdfの一時出力JSONが上限ちょうどならサイズ上限で拒否しない", async (t) => {
+  const dir = await directory(t);
+  const bin = path.join(dir, "bin");
+  const temp = path.join(dir, "tmp");
+  await mkdir(bin);
+  await mkdir(temp);
+  const document = JSON.stringify({
+    version: 2,
+    qpdf: [{ jsonversion: 2 }, {
+      trailer: { value: { "/Root": "1 0 R" } },
+      "obj:1 0 R": { value: { "/Type": "/Catalog", "/Pages": "2 0 R" } },
+      "obj:2 0 R": { value: { "/Type": "/Pages" } },
+    }],
+    encrypt: { encrypted: false },
+    acroform: { hasacroform: false },
+    attachments: {},
+  });
+  // JSONは末尾の空白を許すため、余白でちょうど上限幅まで膨らませる。
+  await writeFile(path.join(bin, "qpdf"), `#!${process.execPath}\nimport { writeFile } from "node:fs/promises";\nconst doc = ${JSON.stringify(document)};\nawait writeFile(process.argv.at(-1), doc + " ".repeat(32 * 1024 * 1024 - doc.length));\n`, { mode: 0o755 });
+  await writeFile(path.join(bin, "pdfimages"), `#!${process.execPath}\n`, { mode: 0o755 });
+  await writeFile(path.join(bin, "pdftotext"), `#!${process.execPath}\nprocess.stdout.write("Public body\\f");\n`, { mode: 0o755 });
+  await writeFile(path.join(bin, "pdfinfo"), `#!${process.execPath}\n`, { mode: 0o755 });
+  const file = await fixture(t, {});
+  const helper = new URL("./pdf-publication.js", import.meta.url).href;
+  const probe = `import { scanFile } from ${JSON.stringify(helper)}; await scanFile(process.argv[1]);`;
+  const env = { ...process.env, PATH: bin, TMPDIR: temp };
+
+  execFileSync(process.execPath, ["--input-type=module", "-e", probe, file], { env, stdio: "pipe" });
+  assert.deepEqual(await readdir(temp), []);
+});
+
 test("公開成果物には未追跡ファイルとtest配下も含める", async (t) => {
   const dir = await directory(t);
   await mkdir(path.join(dir, "test"));
