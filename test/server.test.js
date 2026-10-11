@@ -190,6 +190,80 @@ test("静的ファイル配信は維持される", async () => {
     assert.match(text, /ConnectiveByte/);
     const res404 = await fetch(`${ctx.base}/does-not-exist.xyz`);
     assert.equal(res404.status, 404);
+    // Pages本番と同じく、404応答の本文はルートの404.html (日本語のサイト体裁)。
+    assert.equal(res404.headers.get("content-type"), "text/html; charset=utf-8");
+    const body404 = await res404.text();
+    assert.match(body404, /<html lang="ja">/);
+    assert.match(body404, /お探しのページ/);
+    assert.match(body404, /href="\/"/);
+  } finally {
+    await ctx.cleanup();
+  }
+});
+
+test("ネストした存在しないパスも404.htmlをサイト体裁で応答する", async () => {
+  // 404.htmlはアセット参照を絶対パス (/styles.css等) で書いているため、
+  // どの深さのURLで応答してもリンクが壊れない。Pages本番と同じ挙動を
+  // 深いパスとindex.htmlを持たないディレクトリURLの両方で機械検査する。
+  const ctx = await startServer();
+  try {
+    for (const path of ["/deep/nested/missing", "/missing-dir/"]) {
+      const res = await fetch(`${ctx.base}${path}`);
+      assert.equal(res.status, 404, path);
+      assert.equal(res.headers.get("content-type"), "text/html; charset=utf-8", path);
+      assert.equal(res.headers.get("x-content-type-options"), "nosniff", path);
+      assert.match(res.headers.get("content-security-policy") ?? "", /default-src 'self'/, path);
+      const body = await res.text();
+      assert.match(body, /<html lang="ja">/, path);
+      assert.match(body, /お探しのページ/, path);
+      assert.match(body, /href="\/styles\.css"/, path);
+    }
+  } finally {
+    await ctx.cleanup();
+  }
+});
+
+test("404.htmlが無い環境では平文のNot foundへフォールバックする", async () => {
+  const bareRoot = await mkdtemp(join(tmpdir(), "cb-root-"));
+  const ctx = await startServer({ root: bareRoot });
+  try {
+    const res = await fetch(`${ctx.base}/missing`);
+    assert.equal(res.status, 404);
+    assert.equal(res.headers.get("content-type"), "text/plain; charset=utf-8");
+    assert.equal(await res.text(), "Not found");
+  } finally {
+    await ctx.cleanup();
+    await rm(bareRoot, { recursive: true, force: true });
+  }
+});
+
+test("ディレクトリURLはPages配信と同じ挙動をする (スラッシュ無しは301・付きはindex.html)", async () => {
+  // sitemap.xmlはディレクトリ形式のURLを掲載する。Pages本番はスラッシュ無しの
+  // ディレクトリURLをスラッシュ付きへ301リダイレクトし、付きのURLでindex.htmlを
+  // 応答する。スラッシュ無しのままindex.htmlを返すと ../article.css 等の
+  // 相対リンクの基準がずれて壊れるため、301動作ごと本番parityとして機械検査する。
+  const ctx = await startServer();
+  try {
+    const slashed = await fetch(`${ctx.base}/content/18-blog/quetab-ai-game-builder/`);
+    assert.equal(slashed.status, 200);
+    assert.equal(slashed.headers.get("content-type"), "text/html; charset=utf-8");
+    assert.match(await slashed.text(), /quetab\.com\/games 検証レポート/);
+
+    const bare = await fetch(`${ctx.base}/content/02-entry-read`, { redirect: "manual" });
+    assert.equal(bare.status, 301);
+    assert.equal(bare.headers.get("location"), "/content/02-entry-read/");
+    const followed = await fetch(`${ctx.base}/content/02-entry-read`);
+    assert.equal(followed.status, 200);
+    assert.match(await followed.text(), /上がってくる床は、乗れば足場になる/);
+
+    const bareWithQuery = await fetch(`${ctx.base}/content/02-entry-read?utm_source=x`, { redirect: "manual" });
+    assert.equal(bareWithQuery.status, 301);
+    assert.equal(bareWithQuery.headers.get("location"), "/content/02-entry-read/?utm_source=x");
+
+    const noIndex = await fetch(`${ctx.base}/content/18-blog/`);
+    assert.equal(noIndex.status, 404);
+    const bareNoIndex = await fetch(`${ctx.base}/content/18-blog`, { redirect: "manual" });
+    assert.equal(bareNoIndex.status, 301);
   } finally {
     await ctx.cleanup();
   }
