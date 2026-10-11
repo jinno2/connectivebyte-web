@@ -362,6 +362,44 @@ test("レベル表の全表示で宣言済みlevel_table_read_100を一度だけ
   }
 });
 
+test("レベル表が部分的にしか見えていない間はlevel_table_read_100を送らない", async () => {
+  const storage = new FakeStorage();
+  const calls = [];
+  setup({
+    storage,
+    elements: { "#level-table": Object.assign(element(), { id: "level-table" }) },
+    fetchImpl: async (_url, options) => {
+      calls.push(JSON.parse(options.body));
+      return { status: 202 };
+    }
+  });
+  const observers = [];
+  const previousObserver = globalThis.IntersectionObserver;
+  globalThis.IntersectionObserver = class {
+    constructor(callback) { this.callback = callback; this.targets = []; observers.push(this); }
+    observe(target) { this.targets.push(target); }
+  };
+  try {
+    const app = await loadApp("level-table-partial");
+    app.writeJson("consent", { analytics: true, email: false, decided: true });
+    const tableObserver = observers.find((observer) => observer.targets.some((target) => target.id === "level-table"));
+    assert.ok(tableObserver, "level-tableが監視対象になっている");
+    // viewportより高いテーブルではintersectionRatioが1に届かないため、部分表示は未達として扱う。
+    const partial = { isIntersecting: true, intersectionRatio: 0.6, target: tableObserver.targets[0] };
+    tableObserver.callback([partial]);
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(calls.length, 0, "部分表示では送信しない");
+
+    tableObserver.callback([partial, { isIntersecting: true, intersectionRatio: 1, target: tableObserver.targets[0] }]);
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(calls.length, 1, "部分表示を経由した後も全表示で一度だけ送る");
+    assert.equal(calls[0][0].name, "level_table_read_100");
+    assert.equal(calls[0][0].cta_id, "level_table_scroll");
+  } finally {
+    globalThis.IntersectionObserver = previousObserver;
+  }
+});
+
 test("同意拒否はconsent保存失敗でも待機イベントを破棄し、復旧後に旧イベントを送らない", async () => {
   const storage = new FakeStorage({
     consent: { analytics: true, email: false, decided: true },
