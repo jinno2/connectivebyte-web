@@ -149,6 +149,16 @@ test("LP #apply 申込formは /apply endpoint・同意checkbox・PII分離文言
   assert.equal(lp.includes("東京AIソリューションズ"), false);
 });
 
+test("LPはapp.jsの読了計測が監視するid=level-tableを実 markupに備える", async () => {
+  // app.jsは #level-table をIntersectionObserverで監視してlevel_table_read_100を
+  // 送る。実LPにidが無いと監視対象が null で発火しないが、動作テストは要素を
+  // 注入するため通ってしまう (実markupとテストfixtureの乖離を実測した回帰防止)。
+  const lp = await readFile(path.join(repoRoot, "index.html"), "utf8");
+  assert.match(lp, /id="level-table"/);
+  const app = await readFile(path.join(repoRoot, "app.js"), "utf8");
+  assert.match(app, /querySelector\("#level-table"\)/);
+});
+
 test("17-org-pdf 完成PDF artifactは存在しLP・原稿page両面から配線される", async () => {
   // 2026-09-10 残課題#4 (r4 F8): 記入式様式の完成PDF不在を閉じる。生成源は
   // scripts/build-org-pdf.mjs・commit対象は生成済みPDF。app.js内組み立てPDF
