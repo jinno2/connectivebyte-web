@@ -170,6 +170,31 @@ test("17-org-pdf 完成PDF artifactは存在しLP・原稿page両面から配線
 });
 
 
+test("LPの検証レポートカードから、公開中の全検証レポート記事へ到達できる", async () => {
+  // VERIFICATION NOTEカードのリンクを「最新1本へ差し替える」運用で旧記事が
+  // 孤立した実測がある (quetab: カード新設時の飛び先だったがozbrain公開時の
+  // 差し替えでサイト内導線から到達不能化)。sitemap掲載 (=index許可の公開頁)
+  // のうちタイトルで検証レポートと自認する記事は、LPから到達できることを
+  // 機械検査する。測定方法系など別カテゴリの記事は対象外 (誤った約束をしない)。
+  const [lp, sitemap] = await Promise.all([
+    readFile(path.join(repoRoot, "index.html"), "utf8"),
+    readFile(path.join(repoRoot, "sitemap.xml"), "utf8")
+  ]);
+  const blogPaths = [...sitemap.matchAll(/<loc>https:\/\/lab\.connectivebyte\.com(\/content\/18-blog\/[^<]+\/)<\/loc>/g)]
+    .map((m) => m[1]);
+  assert.ok(blogPaths.length > 0, "sitemapに18-blog記事が無い");
+  let reports = 0;
+  for (const locPath of blogPaths) {
+    const html = await readFile(path.join(repoRoot, locPath, "index.html"), "utf8");
+    const title = html.match(/<title>([^<]+)<\/title>/)?.[1] ?? "";
+    if (!title.includes("検証レポート")) continue;
+    reports += 1;
+    assert.ok(lp.includes(`href="${locPath.slice(1)}index.html"`),
+      `LPから検証レポート記事へ到達できない: ${locPath} — VERIFICATION NOTEカードへリンクを追加すること`);
+  }
+  assert.ok(reports > 0, "検証レポートと自認する記事が無い (テストの前提が崩れた)");
+});
+
 test("Pages は同じjobでテストと配信木検査に合格してから公開する", async () => {
   const workflow = await readFile(path.join(repoRoot, ".github/workflows/deploy_pages.yml"), "utf8");
   const steps = ["run: npm test", "name: Prepare publish tree", "PUBLICATION_ROOT: _site",
