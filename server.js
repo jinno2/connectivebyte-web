@@ -5,7 +5,6 @@ import { extname, join, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const port = Number.parseInt(process.env.PORT ?? "4173", 10);
-const root = process.cwd();
 const types = Object.freeze({
   ".css": "text/css; charset=utf-8",
   ".html": "text/html; charset=utf-8",
@@ -91,6 +90,8 @@ const MAX_EVENTS_PER_WINDOW = 30;
 const RATE_WINDOW_MS = 60_000;
 const MAX_BODY_BYTES = 256 * 1024;
 
+const CSP_HEADER = "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'";
+
 // /api/subscribe — 本番 (api.connectivebyte.com/subscribe・Worker+D1) と同じ検証を
 // ローカルでも通すための写し。dev serverは保存しない (202を返すだけ)。
 const EMAIL_PATTERN = /^[^\s@,;:"'<>()[\]\\]{1,64}@[^\s@.]+(\.[^\s@.]+)+$/;
@@ -156,6 +157,7 @@ function validateEvent(event) {
 }
 
 export function createRequestHandler(options = {}) {
+  const root = options.root ?? process.cwd();
   const dataDir = options.dataDir ?? root;
   const eventsFile = join(dataDir, "events.jsonl");
   const rateBuckets = new Map();
@@ -384,16 +386,42 @@ export function createRequestHandler(options = {}) {
     }
     try {
       const file = await stat(filePath);
-      if (!file.isFile()) throw new Error("Not a file");
+      // GitHub Pagesと同じく、ディレクトリURLは中のindex.htmlを応答する
+      // (sitemap.xmlはディレクトリ形式のURLを掲載。ローカル確認手順とのparity)。
+      // スラッシュ無しのディレクトリURLはPages同様スラッシュ付きへ301リダイレクト
+      // する (直接返すと ../article.css 等の相対リンクの基準がずれて壊れる)。
+      let servePath = filePath;
+      if (file.isDirectory()) {
+        if (!url.pathname.endsWith("/")) {
+          response.writeHead(301, { Location: `${url.pathname}/${url.search}` }).end();
+          return;
+        }
+        servePath = join(filePath, "index.html");
+      }
+      if (!(await stat(servePath)).isFile()) throw new Error("Not a file");
       response.writeHead(200, {
-        "Content-Type": types[extname(filePath)] ?? "application/octet-stream",
+        "Content-Type": types[extname(servePath)] ?? "application/octet-stream",
         "X-Content-Type-Options": "nosniff",
         "Referrer-Policy": "strict-origin-when-cross-origin",
-        "Content-Security-Policy": "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'"
+        "Content-Security-Policy": CSP_HEADER
       });
-      createReadStream(filePath).pipe(response);
+      createReadStream(servePath).pipe(response);
     } catch {
-      response.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" }).end("Not found");
+      // GitHub Pagesと同じく、存在しないパスはルートの404.htmlを404ステータスで
+      // 応答する (Pagesは404.htmlをカスタムnot-foundページとして配信する)。
+      // 404.htmlが無い環境では平文へフォールバックする。
+      try {
+        const notFoundPage = await readFile(join(root, "404.html"));
+        response.writeHead(404, {
+          "Content-Type": "text/html; charset=utf-8",
+          "X-Content-Type-Options": "nosniff",
+          "Referrer-Policy": "strict-origin-when-cross-origin",
+          "Content-Security-Policy": CSP_HEADER
+        });
+        response.end(notFoundPage);
+      } catch {
+        response.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" }).end("Not found");
+      }
     }
   };
 }
