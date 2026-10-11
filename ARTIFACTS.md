@@ -59,7 +59,7 @@ EOF
 ## 実測 (2026-09-15・版管理の初回full cycle完了時点)
 
 - pipeline_version = `c82e1c4c96fa` (初回cycle時点・当時はscripts/木tree hash) —
-  **現行 = `31c857f21c9c`** (.py限定・版定義節参照・2026-10-03再実測)
+  **現行 = `cefc4d2e5fb4`** (.py限定・版定義節参照・2026-10-11再実測)
 - 監査: posted 14 / out_of_window 43 / rejected 2 / **current 5** /
   STALE 0 / placeholder 0 — 版印は生存5行すべて `c82e1c4c96fa` で単一versionに収束
 - 初回cycleの証跡: ①09:17 cronが新規3件を版印付きで起草+stale 2行を自動再生成
@@ -82,6 +82,11 @@ EOF
   版は `6b11a3f976cd` → `31c857f21c9c` (.py変更なので正当・台帳の「現行」は
   このbatch後も更新漏れになっていた — 2026-10-03に再実測して本節で同期)。
   生存行は翌朝collectの`regen_stale` (limit 3/回) が自動で現行版へ揃える
+- ⑧robots.txt新設 (sitemap宣言行・Pages配信木へ追加) に伴い、`outreach.py`の
+  `PUBLISH_ROOT_FILES` へ robots.txt を足した (記事公開の隔離ツリーをPages配信木と
+  同等に保つ parity 修正・2026-10-11)。版は `31c857f21c9c` → `cefc4d2e5fb4`
+  (.py変更なので正当)。生成系の起草・再検査logicには変更なし — 生存行の
+  `polish_version`/`gen_version` 判定は不変
 - 以後、文書変更 (本台帳の更新・scripts下READMEの更新を含む) では版は不変 —
   scripts/下の.py (codeとpromptの実体) が変わったときだけ版が動く。本節の
   更新commitで版が変わらないことがそのまま実証になる
