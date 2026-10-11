@@ -16,3 +16,21 @@ export function resolveFragmentTarget(base, href) {
   else if (!target.endsWith(".html")) target += "/index.html";
   return target;
 }
+
+// plainリンク (フラグメント無しhref) の飛び先。ページは resolveFragmentTarget と
+// 同正規化、資産参照 (.html 以外の拡張子) はサイトルート相対の実ファイルパスの
+// まま返す。ルート絶対パス (/favicon.svg 等) はサイトルート基準で解決する。
+export function resolvePlainTarget(base, href) {
+  if (/^(https?:|mailto:|tel:|\/\/)/.test(href)) return null;
+  const filePart = href.split(/[?#]/, 1)[0];
+  if (filePart === "") return null;
+  const joined = filePart.startsWith("/") ? filePart : path.posix.join(base, filePart);
+  let target = path.posix.normalize(joined);
+  if (target.startsWith("/")) target = target.slice(1);
+  if (target.endsWith("/")) target = target.slice(0, -1);
+  if (target === "." || target === "") target = "index.html";
+  const ext = path.posix.extname(target);
+  if (ext && ext !== ".html") return target;
+  if (!target.endsWith(".html")) target += "/index.html";
+  return target;
+}
