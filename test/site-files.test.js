@@ -183,14 +183,19 @@ test("LPの検証レポートカードから、公開中の全検証レポート
   const blogPaths = [...sitemap.matchAll(/<loc>https:\/\/lab\.connectivebyte\.com(\/content\/18-blog\/[^<]+\/)<\/loc>/g)]
     .map((m) => m[1]);
   assert.ok(blogPaths.length > 0, "sitemapに18-blog記事が無い");
+  // 判定はVERIFICATION NOTEカード内部に限定する (カード外の他導線では
+  // 「カードから到達できる」という約束を検査したことにならない)。
+  const card = lp.match(/<article[^>]*id="verification-note"[\s\S]*?<\/article>/)?.[0] ?? "";
+  assert.ok(card.length > 0, "LPにVERIFICATION NOTEカード (id=verification-note) が無い");
   let reports = 0;
   for (const locPath of blogPaths) {
     const html = await readFile(path.join(repoRoot, locPath, "index.html"), "utf8");
     const title = html.match(/<title>([^<]+)<\/title>/)?.[1] ?? "";
     if (!title.includes("検証レポート")) continue;
     reports += 1;
-    assert.ok(lp.includes(`href="${locPath.slice(1)}index.html"`),
-      `LPから検証レポート記事へ到達できない: ${locPath} — VERIFICATION NOTEカードへリンクを追加すること`);
+    // hrefは / 有無・index.html 有無・絶対URLを同一目的地として許容する
+    assert.match(card, new RegExp(`href="[^"]*${locPath.slice(1)}(index\\.html)?"`),
+      `VERIFICATION NOTEカードから検証レポート記事へ到達できない: ${locPath} — カードへリンクを追加すること`);
   }
   assert.ok(reports > 0, "検証レポートと自認する記事が無い (テストの前提が崩れた)");
 });
