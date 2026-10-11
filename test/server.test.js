@@ -195,6 +195,20 @@ test("静的ファイル配信は維持される", async () => {
   }
 });
 
+test("robots.txt はtext/plainで配信されSitemap行を含む (Pages配信とのparity)", async () => {
+  // server.jsのMIME mapに .txt が無いとローカル配信がoctet-streamになり
+  // Pages本番と食い違う。発見経路の中身も一緒に機械検査する。
+  const ctx = await startServer();
+  try {
+    const res = await fetch(`${ctx.base}/robots.txt`);
+    assert.equal(res.status, 200);
+    assert.equal(res.headers.get("content-type"), "text/plain; charset=utf-8");
+    assert.match(await res.text(), /^Sitemap: https:\/\/lab\.connectivebyte\.com\/sitemap\.xml$/m);
+  } finally {
+    await ctx.cleanup();
+  }
+});
+
 test("events.jsonl は静的配信から保護され403になる", async () => {
   const ctx = await startServer();
   try {

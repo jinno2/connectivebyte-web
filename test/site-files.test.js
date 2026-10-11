@@ -46,7 +46,8 @@ test("robots.txt はsitemap.xmlと同一hostのSitemap行を宣言し、Disallow
     readFile(path.join(repoRoot, "sitemap.xml"), "utf8")
   ]);
   const host = new URL(sitemap.match(/<loc>([^<]+)<\/loc>/)[1]).host;
-  assert.match(robots, new RegExp(`^Sitemap: https://${host}/sitemap\\.xml$`, "m"),
+  const hostPattern = host.replace(/[.]/g, "\\.");
+  assert.match(robots, new RegExp(`^Sitemap: https://${hostPattern}/sitemap\\.xml$`, "m"),
     `Sitemap行がsitemap.xmlのhost (${host}) と不一致`);
   assert.doesNotMatch(robots, /^\s*Disallow:/m,
     "Disallow は noindex を無効化しうる — meta robots運用の範囲で対応すること");
