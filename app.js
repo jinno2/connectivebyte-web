@@ -870,6 +870,21 @@ function initializeReadingEvents() {
   }, { threshold: [0.75] });
   const frontier = document.querySelector("#frontier");
   if (frontier) observer.observe(frontier);
+
+  // 仕様に宣言済みだったlevel_table_read_100の配線。frontierと同じ読了計測だが
+  // 全表示が条件なので閾値のみ1にする。
+  const levelTable = document.querySelector("#level-table");
+  if (levelTable) {
+    const fullObserver = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (entry.isIntersecting && entry.intersectionRatio >= 1 && !observed.has(entry.target.id)) {
+          observed.add(entry.target.id);
+          track("level_table_read_100", { asset_id: "level_table", cta_id: "level_table_scroll" });
+        }
+      });
+    }, { threshold: [1] });
+    fullObserver.observe(levelTable);
+  }
 }
 
 document.addEventListener("click", (event) => {

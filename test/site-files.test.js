@@ -65,6 +65,23 @@ test("favicon.svg は本店brand色 (ink背景・lime/cyan円環) で存在す�
   assert.match(article, /<link rel="icon" href="\/favicon\.svg" type="image\/svg\+xml">/);
 });
 
+test("LP はOG基本metaを備え、title/descriptionの公開文字列と一致する", async () => {
+  // シェアループの着地点 (?r=/utm付きURL) であるLPだけがOG規約から漏れていた。
+  // og:url は共有URLのcard canonical化に使う。新規主張はしない (既存文字列の再掲)。
+  const [html, sitemap] = await Promise.all([
+    readFile(path.join(repoRoot, "index.html"), "utf8"),
+    readFile(path.join(repoRoot, "sitemap.xml"), "utf8")
+  ]);
+  const title = html.match(/<title>([^<]+)<\/title>/)[1];
+  const description = html.match(/<meta name="description" content="([^"]*)">/)[1];
+  const meta = (prop) => html.match(new RegExp(`<meta property="${prop}" content="([^"]*)">`))?.[1];
+  assert.equal(meta("og:title"), title);
+  assert.equal(meta("og:description"), description);
+  assert.equal(meta("og:type"), "website");
+  const siteUrl = new URL(sitemap.match(/<loc>([^<]+)<\/loc>/)[1]);
+  assert.equal(meta("og:url"), `${siteUrl.origin}/`);
+});
+
 test("sitemap.xml はインデックス許可ページのみを掲載する (noindex資産を含まない)", async () => {
   const sitemap = await readFile(path.join(repoRoot, "sitemap.xml"), "utf8");
   const locs = [...sitemap.matchAll(/<loc>([^<]+)<\/loc>/g)].map((m) => m[1]);
