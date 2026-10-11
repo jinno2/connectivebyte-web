@@ -360,6 +360,43 @@ test("同意拒否はconsent保存失敗でも待機イベントを破棄し、�
   assert.ok(calls.flat().every((event) => event.cta_id !== "probe_1"), "再同意後に拒否前のイベントを送らない");
 });
 
+test("未回答で送信後に残りを回答して再送信すると、同一画面の注記が消える", async () => {
+  const outputIds = [
+    "#diagnostic-output", "#diagnostic-level", "#diagnostic-actions",
+    "#diagnostic-comparison-link", "#diagnostic-answer-note",
+    "#feedback-block", "#feedback-branch",
+    "#share-block", "#share-url-input", "#share-preview", "#share-free-text", "#share-card-img"
+  ];
+  const elements = Object.fromEntries(outputIds.map((id) => [id, element()]));
+  const radios = [
+    { dataset: { questionId: "Q0" }, value: "はい" }
+  ];
+  const context = setup({
+    storage: new FakeStorage({ declared_interest: "D" }),
+    elements,
+    allElements: { "#diagnostic-questions input[type=radio]:checked": radios }
+  });
+  await loadApp("diagnosis-note-resubmit");
+  const submit = () => context.documentListeners.get("click")({
+    target: { closest(selector) { return selector === "[data-action]" ? { dataset: { action: "submit-diagnosis" } } : null; } }
+  });
+
+  submit();
+  const note = elements["#diagnostic-answer-note"];
+  assert.equal(note.hidden, false, "1回目（未回答あり）は注記を表示");
+  assert.ok(note.textContent.includes("回答 1/3"), `1回目の注記に回答数 (${note.textContent})`);
+
+  radios.push(
+    { dataset: { questionId: "Q1" }, value: "トライ中（取り組み中）" },
+    { dataset: { questionId: "Q2" }, value: "いいえ" }
+  );
+  submit();
+  assert.equal(elements["#diagnostic-output"].hidden, false, "再送信後も出力は表示");
+  assert.equal(note.hidden, true, "全問回答後の再送信で注記を隠す");
+  assert.equal(note.textContent, "", "再送信後の注記テキストは空");
+  assert.notEqual(elements["#diagnostic-level"].textContent, "", "再送信後もレベル表示を更新");
+});
+
 test("診断出力は未回答の非該当扱いを明示し、全問回答時は注記しない", async () => {
   const scenarios = [
     { label: "none", radios: [], expected: "回答 0/3" },
