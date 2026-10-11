@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, writeFile, rm, symlink, mkdir, readFile } from "node:fs/promises";
+import { mkdtemp, writeFile, rm, symlink, mkdir, readFile, readdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
@@ -109,6 +109,22 @@ test("PDFツールの未導入と終了コード0の警告も検査失敗にす�
   assert.throws(() => execFileSync(process.execPath, ["--input-type=module", "-e", probe, file], { env, stdio: "pipe" }), /ENOENT/);
   await writeFile(path.join(dir, "qpdf"), `#!${process.execPath}\nprocess.stderr.write("Syntax Error: synthetic warning");\n`, { mode: 0o755 });
   assert.throws(() => execFileSync(process.execPath, ["--input-type=module", "-e", probe, file], { env, stdio: "pipe" }), /synthetic warning/);
+});
+
+test("qpdfのJSON出力が上限を超えたら拒否し一時出力を削除する", async (t) => {
+  const dir = await directory(t);
+  const bin = path.join(dir, "bin");
+  const temp = path.join(dir, "tmp");
+  await mkdir(bin);
+  await mkdir(temp);
+  await writeFile(path.join(bin, "qpdf"), `#!${process.execPath}\nconst chunk = Buffer.alloc(1024 * 1024, 0x20);\nlet remaining = 33 * 1024 * 1024;\nfunction write() {\n  while (remaining > 0) {\n    const part = chunk.subarray(0, Math.min(chunk.length, remaining));\n    remaining -= part.length;\n    if (!process.stdout.write(part)) { process.stdout.once("drain", write); return; }\n  }\n}\nwrite();\n`, { mode: 0o755 });
+  const file = await fixture(t);
+  const helper = new URL("./pdf-publication.js", import.meta.url).href;
+  const probe = `import { scanFile } from ${JSON.stringify(helper)}; await scanFile(process.argv[1]);`;
+  const env = { ...process.env, PATH: bin, TMPDIR: temp };
+
+  assert.throws(() => execFileSync(process.execPath, ["--input-type=module", "-e", probe, file], { env, stdio: "pipe" }), /qpdf JSON検査サイズ上限超過/);
+  assert.deepEqual(await readdir(temp), []);
 });
 
 test("公開成果物には未追跡ファイルとtest配下も含める", async (t) => {
