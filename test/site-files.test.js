@@ -31,9 +31,25 @@ test("deploy workflow は favicon.svg と sitemap.xml を配信木に含める",
   const yml = await readFile(path.join(repoRoot, ".github/workflows/deploy_pages.yml"), "utf8");
   const cpLine = yml.split("\n").find((l) => l.includes("cp index.html"));
   assert.ok(cpLine, "publish treeのcp行が見つからない");
-  for (const file of ["favicon.svg", "sitemap.xml", "app.js", "logic.js", "share.js", "twitter-text-regex.js"]) {
+  for (const file of ["favicon.svg", "sitemap.xml", "robots.txt", "app.js", "logic.js", "share.js", "twitter-text-regex.js"]) {
     assert.ok(cpLine.includes(file), `配信木に ${file} が無い: ${cpLine.trim()}`);
   }
+});
+
+test("robots.txt はsitemap.xmlと同一hostのSitemap行を宣言し、Disallowでnoindexを無効化しない", async () => {
+  // sitemap の標準発見経路は /robots.txt。sitemap.xml だけ置いても
+  // 検索エンジンは規約上たどらないため、宣言行の一致を機械検査する。
+  // noindex は meta robots が正本で、これはクロール前提 — Disallow を足すと
+  // meta が読めず noindex が無効化されうるので、規約上 Disallow は書かない。
+  const [robots, sitemap] = await Promise.all([
+    readFile(path.join(repoRoot, "robots.txt"), "utf8"),
+    readFile(path.join(repoRoot, "sitemap.xml"), "utf8")
+  ]);
+  const host = new URL(sitemap.match(/<loc>([^<]+)<\/loc>/)[1]).host;
+  assert.match(robots, new RegExp(`^Sitemap: https://${host}/sitemap\\.xml$`, "m"),
+    `Sitemap行がsitemap.xmlのhost (${host}) と不一致`);
+  assert.doesNotMatch(robots, /^\s*Disallow:/m,
+    "Disallow は noindex を無効化しうる — meta robots運用の範囲で対応すること");
 });
 
 test("favicon.svg は本店brand色 (ink背景・lime/cyan円環) で存在する", async () => {
