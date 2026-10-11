@@ -16,3 +16,21 @@ export function resolveFragmentTarget(base, href) {
   else if (!target.endsWith(".html")) target += "/index.html";
   return target;
 }
+
+// フラグメント無しページ間リンク (href="path") の検査候補を [href, 飛び先] で返す。
+// script/style内の実行時生成href、フラグメント付き、アセット拡張子、外部スキームは除外する。
+export function pageLinkCandidates(doc, base) {
+  const body = doc
+    .replace(/<script\b[\s\S]*?<\/script>/gi, "")
+    .replace(/<style\b[\s\S]*?<\/style>/gi, "");
+  const found = [];
+  for (const m of body.matchAll(/href="([^"]+)"/g)) {
+    const href = m[1];
+    if (href.includes("#")) continue; // フラグメント付きはアンカーテストが検査する
+    if (/\.(css|js|png|svg|xml|txt|pdf|webmanifest|ico)$/i.test(href.split("?")[0])) continue;
+    const target = resolveFragmentTarget(base, href);
+    if (target === null) continue; // 外部スキーム
+    found.push([href, target]);
+  }
+  return found;
+}
