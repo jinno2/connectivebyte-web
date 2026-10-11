@@ -36,17 +36,19 @@ function element(dataset = {}) {
     addEventListener() {},
     append() {},
     appendChild() {},
-    replaceChildren() {}
+    replaceChildren() {},
+    getContext() { return null; }
   };
 }
 
-function setup({ path = "/", search = "", storage, elements = {}, fetchImpl } = {}) {
+function setup({ path = "/", search = "", storage, elements = {}, allElements = {}, fetchImpl } = {}) {
   const windowListeners = new Map();
   const documentListeners = new Map();
   const map = new Map(Object.entries(elements));
+  const allMap = new Map(Object.entries(allElements));
   const document = {
     querySelector(selector) { return map.get(selector) ?? null; },
-    querySelectorAll() { return []; },
+    querySelectorAll(selector) { return allMap.get(selector) ?? []; },
     createElement() { return element(); },
     createTextNode(text) { return { textContent: text }; },
     addEventListener(type, callback) { documentListeners.set(type, callback); },
@@ -356,4 +358,50 @@ test("同意拒否はconsent保存失敗でも待機イベントを破棄し、�
   app.saveConsent(true);
   await new Promise((resolve) => setImmediate(resolve));
   assert.ok(calls.flat().every((event) => event.cta_id !== "probe_1"), "再同意後に拒否前のイベントを送らない");
+});
+
+test("診断出力は未回答の非該当扱いを明示し、全問回答時は注記しない", async () => {
+  const scenarios = [
+    { label: "none", radios: [], expected: "回答 0/3" },
+    { label: "partial", radios: [{ dataset: { questionId: "Q0" }, value: "はい" }], expected: "回答 1/3" },
+    { label: "full", radios: [
+      { dataset: { questionId: "Q0" }, value: "はい" },
+      { dataset: { questionId: "Q1" }, value: "トライ中（取り組み中）" },
+      { dataset: { questionId: "Q2" }, value: "いいえ" }
+    ], expected: null },
+    { label: "detailed-partial", detailed: true, radios: Array.from({ length: 11 }, (_, i) => ({
+      dataset: { questionId: `D${i}` }, value: "いいえ"
+    })), expected: "回答 11/12" }
+  ];
+  const outputIds = [
+    "#diagnostic-output", "#diagnostic-level", "#diagnostic-actions",
+    "#diagnostic-comparison-link", "#diagnostic-answer-note",
+    "#feedback-block", "#feedback-branch",
+    "#share-block", "#share-url-input", "#share-preview", "#share-free-text", "#share-card-img"
+  ];
+  for (const scenario of scenarios) {
+    const elements = Object.fromEntries(outputIds.map((id) => [id, element()]));
+    const context = setup({
+      storage: new FakeStorage({
+        declared_interest: "D",
+        ...(scenario.detailed ? { newsletter_registered: { email_registered: true } } : {})
+      }),
+      elements,
+      allElements: { "#diagnostic-questions input[type=radio]:checked": scenario.radios }
+    });
+    await loadApp(`diagnosis-note-${scenario.label}`);
+    context.documentListeners.get("click")({
+      target: { closest(selector) { return selector === "[data-action]" ? { dataset: { action: "submit-diagnosis" } } : null; } }
+    });
+    assert.equal(elements["#diagnostic-output"].hidden, false, `${scenario.label}: 出力を表示`);
+    const note = elements["#diagnostic-answer-note"];
+    if (scenario.expected === null) {
+      assert.equal(note.hidden, true, `${scenario.label}: 全問回答時は注記しない`);
+      assert.equal(note.textContent, "", `${scenario.label}: 全問回答時の注記は空`);
+    } else {
+      assert.equal(note.hidden, false, `${scenario.label}: 未回答時は注記を表示`);
+      assert.ok(note.textContent.includes(scenario.expected), `${scenario.label}: 回答数を明示 (${note.textContent})`);
+      assert.ok(note.textContent.includes("いいえ／わからない"), `${scenario.label}: 未回答の扱いを明示`);
+    }
+  }
 });

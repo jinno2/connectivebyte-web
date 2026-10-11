@@ -531,6 +531,16 @@ function submitDiagnosis() {
     output.hidden = false;
     const levelEl = document.querySelector("#diagnostic-level");
     if (levelEl) levelEl.textContent = result.current_phase_label;
+    // 未回答は「いいえ／わからない」と同じ非該当扱いで判定される (logic.js)。
+    // 判定意味論は変えず、未回答時だけその扱いを出力に明示する。
+    const noteEl = document.querySelector("#diagnostic-answer-note");
+    if (noteEl) {
+      const questionIds = new Set(questions.map((question) => question.id));
+      const answeredCount = new Set(behaviors.map((entry) => entry.id).filter((id) => questionIds.has(id))).size;
+      const complete = answeredCount >= questions.length;
+      noteEl.textContent = complete ? "" : `回答していない質問は「いいえ／わからない」と同じ扱いで判定しました（回答 ${answeredCount}/${questions.length}）。`;
+      noteEl.hidden = complete;
+    }
     const actionsEl = document.querySelector("#diagnostic-actions");
     if (actionsEl) actionsEl.innerHTML = "";
     if (actionsEl) result.next_hints.forEach((action) => {
