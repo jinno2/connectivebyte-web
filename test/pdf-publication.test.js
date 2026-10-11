@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, writeFile, rm, symlink, mkdir, readFile } from "node:fs/promises";
+import { mkdtemp, writeFile, rm, symlink, mkdir, readFile, readdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
@@ -109,6 +109,57 @@ test("PDFツールの未導入と終了コード0の警告も検査失敗にす�
   assert.throws(() => execFileSync(process.execPath, ["--input-type=module", "-e", probe, file], { env, stdio: "pipe" }), /ENOENT/);
   await writeFile(path.join(dir, "qpdf"), `#!${process.execPath}\nprocess.stderr.write("Syntax Error: synthetic warning");\n`, { mode: 0o755 });
   assert.throws(() => execFileSync(process.execPath, ["--input-type=module", "-e", probe, file], { env, stdio: "pipe" }), /synthetic warning/);
+});
+
+test("qpdf JSONは一時出力ファイルから読み込み、成功・失敗後に一時領域を削除する", async (t) => {
+  const dir = await directory(t);
+  const bin = path.join(dir, "bin");
+  const temp = path.join(dir, "tmp");
+  await mkdir(bin);
+  await mkdir(temp);
+  const document = JSON.stringify({
+    version: 2,
+    qpdf: [{ jsonversion: 2 }, {
+      trailer: { value: { "/Root": "1 0 R" } },
+      "obj:1 0 R": { value: { "/Type": "/Catalog", "/Pages": "2 0 R" } },
+      "obj:2 0 R": { value: { "/Type": "/Pages" } },
+    }],
+    encrypt: { encrypted: false },
+    acroform: { hasacroform: false },
+    attachments: {},
+  });
+  await writeFile(path.join(bin, "qpdf"), `#!${process.execPath}\nimport { writeFile } from "node:fs/promises";\nconst args = process.argv.slice(2);\nif (args[0] !== "--json" || args[1] !== "--json-stream-data=none" || !args.at(-1).startsWith(process.env.TMPDIR)) process.exit(9);\nif (process.env.QPDF_NO_OUTPUT !== "1") await writeFile(args.at(-1), ${JSON.stringify(document)});\n`, { mode: 0o755 });
+  await writeFile(path.join(bin, "pdfimages"), `#!${process.execPath}\n`, { mode: 0o755 });
+  await writeFile(path.join(bin, "pdftotext"), `#!${process.execPath}\nprocess.stdout.write("Public body\\f");\n`, { mode: 0o755 });
+  await writeFile(path.join(bin, "pdfinfo"), `#!${process.execPath}\n`, { mode: 0o755 });
+  const file = await fixture(t, {});
+  const helper = new URL("./pdf-publication.js", import.meta.url).href;
+  const probe = `import { scanFile } from ${JSON.stringify(helper)}; await scanFile(process.argv[1]);`;
+  const env = { ...process.env, PATH: bin, TMPDIR: temp };
+
+  execFileSync(process.execPath, ["--input-type=module", "-e", probe, file], { env, stdio: "pipe" });
+  assert.deepEqual(await readdir(temp), [], "成功時にqpdfの一時出力を削除する");
+
+  assert.throws(() => execFileSync(process.execPath, ["--input-type=module", "-e", probe, file], {
+    env: { ...env, QPDF_NO_OUTPUT: "1" }, stdio: "pipe",
+  }), /ENOENT/);
+  assert.deepEqual(await readdir(temp), [], "出力読取り失敗時も一時領域を削除する");
+});
+
+test("qpdfの一時出力JSONが上限を超えたら拒否し一時領域を削除する", async (t) => {
+  const dir = await directory(t);
+  const bin = path.join(dir, "bin");
+  const temp = path.join(dir, "tmp");
+  await mkdir(bin);
+  await mkdir(temp);
+  await writeFile(path.join(bin, "qpdf"), `#!${process.execPath}\nimport { writeFile } from "node:fs/promises";\nawait writeFile(process.argv.at(-1), " ".repeat(1024 * 1024).repeat(33));\n`, { mode: 0o755 });
+  const file = await fixture(t, {});
+  const helper = new URL("./pdf-publication.js", import.meta.url).href;
+  const probe = `import { scanFile } from ${JSON.stringify(helper)}; await scanFile(process.argv[1]);`;
+  const env = { ...process.env, PATH: bin, TMPDIR: temp };
+
+  assert.throws(() => execFileSync(process.execPath, ["--input-type=module", "-e", probe, file], { env, stdio: "pipe" }), /qpdf JSON検査サイズ上限超過/);
+  assert.deepEqual(await readdir(temp), []);
 });
 
 test("公開成果物には未追跡ファイルとtest配下も含める", async (t) => {
