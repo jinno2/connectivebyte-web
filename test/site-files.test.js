@@ -153,6 +153,25 @@ test("17-org-pdf 完成PDF artifactは存在しLP・原稿page両面から配線
 });
 
 
+test("outline:none を付けた入力欄にはfocus-visibleの可視フォーカス規則が対で存在する", async () => {
+  // L1点検 (2026-10-11): 枠なしinputにoutline:noneだけ付けると、キーボードで
+  // 記入位置が分からなくなる。outline:noneを使う各セレクタは、同じstyles.css内の
+  // 対応する :focus-visible 規則で可視フォーカスを復帰させていることを機械検査する。
+  const css = await readFile(path.join(repoRoot, "styles.css"), "utf8");
+  const noneRules = [...css.matchAll(/([^{}]+)\{[^}]*outline:\s*none[^}]*\}/g)].map((m) => m[1]);
+  assert.ok(noneRules.length > 0, "outline:none の規則が見つからない (ガード対象が変化)");
+  for (const rule of noneRules) {
+    for (const part of rule.split(",")) {
+      const selector = part.trim();
+      const compounds = selector.split(/[\s>]+/);
+      const last = compounds[compounds.length - 1];
+      assert.ok(css.includes(`${last}:focus-visible`),
+        `outline:none の ${selector} に対応する ${last}:focus-visible の可視フォーカス規則が無い`);
+    }
+  }
+});
+
+
 test("Pages は同じjobでテストと配信木検査に合格してから公開する", async () => {
   const workflow = await readFile(path.join(repoRoot, ".github/workflows/deploy_pages.yml"), "utf8");
   const steps = ["run: npm test", "name: Prepare publish tree", "PUBLICATION_ROOT: _site",
