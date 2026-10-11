@@ -209,6 +209,36 @@ test("LPの検証レポートカードから、公開中の全検証レポート
   assert.ok(reports > 0, "検証レポートと自認する記事が無い (テストの前提が崩れた)");
 });
 
+test("LPのFRONTIER NOTEカードから、検証レポート以外の公開ブログ記事へ到達できる", async () => {
+  // sitemap掲載の18-blog記事のうち検証レポートと自認しない記事 (測定方法系など)
+  // の導線担い手はFRONTIER NOTEカードである。subscription-cap-flip-scanが
+  // sitemap掲載のままサイト内導線から孤立した実測があり (quetab孤立と同じ
+  // 失敗様式)、上の検証レポートカードの守備と対にして、公開ブログ記事が
+  // どちらかのカードから到達できることを機械検査する。
+  const [lp, sitemap] = await Promise.all([
+    readFile(path.join(repoRoot, "index.html"), "utf8"),
+    readFile(path.join(repoRoot, "sitemap.xml"), "utf8")
+  ]);
+  const blogPaths = [...sitemap.matchAll(/<loc>https:\/\/lab\.connectivebyte\.com(\/content\/18-blog\/[^<]+\/)<\/loc>/g)]
+    .map((m) => m[1]);
+  assert.ok(blogPaths.length > 0, "sitemapに18-blog記事が無い");
+  // 判定はFRONTIER NOTEカード内部に限定する (カード外の他導線では
+  // 「カードから到達できる」という約束を検査したことにならない)。
+  const card = lp.match(/<article[^>]*id="frontier"[\s\S]*?<\/article>/)?.[0] ?? "";
+  assert.ok(card.length > 0, "LPにFRONTIER NOTEカード (id=frontier) が無い");
+  let others = 0;
+  for (const locPath of blogPaths) {
+    const html = await readFile(path.join(repoRoot, locPath, "index.html"), "utf8");
+    const title = html.match(/<title>([^<]+)<\/title>/)?.[1] ?? "";
+    if (title.includes("検証レポート")) continue;
+    others += 1;
+    // hrefは / 有無・index.html 有無・絶対URLを同一目的地として許容する
+    assert.match(card, new RegExp(`href="[^"]*${locPath.slice(1)}(index\\.html)?"`),
+      `FRONTIER NOTEカードから記事へ到達できない: ${locPath} — カードへリンクを追加すること`);
+  }
+  assert.ok(others > 0, "検証レポート以外の18-blog記事が無い (テストの前提が崩れた)");
+});
+
 test("Pages は同じjobでテストと配信木検査に合格してから公開する", async () => {
   const workflow = await readFile(path.join(repoRoot, ".github/workflows/deploy_pages.yml"), "utf8");
   const steps = ["run: npm test", "name: Prepare publish tree", "PUBLICATION_ROOT: _site",
