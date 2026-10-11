@@ -384,14 +384,17 @@ export function createRequestHandler(options = {}) {
     }
     try {
       const file = await stat(filePath);
-      if (!file.isFile()) throw new Error("Not a file");
+      // GitHub Pagesと同じく、ディレクトリURLは中のindex.htmlを応答する
+      // (sitemap.xmlはディレクトリ形式のURLを掲載。ローカル確認手順とのparity)
+      const servePath = file.isDirectory() ? join(filePath, "index.html") : filePath;
+      if (!(await stat(servePath)).isFile()) throw new Error("Not a file");
       response.writeHead(200, {
-        "Content-Type": types[extname(filePath)] ?? "application/octet-stream",
+        "Content-Type": types[extname(servePath)] ?? "application/octet-stream",
         "X-Content-Type-Options": "nosniff",
         "Referrer-Policy": "strict-origin-when-cross-origin",
         "Content-Security-Policy": "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'"
       });
-      createReadStream(filePath).pipe(response);
+      createReadStream(servePath).pipe(response);
     } catch {
       response.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" }).end("Not found");
     }

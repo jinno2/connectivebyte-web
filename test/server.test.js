@@ -195,6 +195,25 @@ test("静的ファイル配信は維持される", async () => {
   }
 });
 
+test("ディレクトリURLは中のindex.htmlを配信する (sitemap掲載形式・Pages配信とのparity)", async () => {
+  // sitemap.xmlはディレクトリ形式のURLを掲載し、Pages本番は中のindex.htmlを
+  // 応答する。ローカルserverが404だとREADMEの「リンク先まで確認」手順が
+  // 本番と食い違うため、両形式ともindex.htmlで応答することを機械検査する。
+  const ctx = await startServer();
+  try {
+    const slashed = await fetch(`${ctx.base}/content/18-blog/quetab-ai-game-builder/`);
+    assert.equal(slashed.status, 200);
+    assert.match(await slashed.text(), /quetab\.com\/games 検証レポート/);
+    const bare = await fetch(`${ctx.base}/content/02-entry-read`);
+    assert.equal(bare.status, 200);
+    assert.match(await bare.text(), /上がってくる床は、乗れば足場になる/);
+    const noIndex = await fetch(`${ctx.base}/content/18-blog/`);
+    assert.equal(noIndex.status, 404);
+  } finally {
+    await ctx.cleanup();
+  }
+});
+
 test("robots.txt はtext/plainで配信されSitemap行を含む (Pages配信とのparity)", async () => {
   // server.jsのMIME mapに .txt が無いとローカル配信がoctet-streamになり
   // Pages本番と食い違う。発見経路の中身も一緒に機械検査する。
