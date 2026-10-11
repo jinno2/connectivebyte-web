@@ -190,6 +190,12 @@ test("静的ファイル配信は維持される", async () => {
     assert.match(text, /ConnectiveByte/);
     const res404 = await fetch(`${ctx.base}/does-not-exist.xyz`);
     assert.equal(res404.status, 404);
+    // Pages本番と同じく、404応答の本文はルートの404.html (日本語のサイト体裁)。
+    assert.equal(res404.headers.get("content-type"), "text/html; charset=utf-8");
+    const body404 = await res404.text();
+    assert.match(body404, /<html lang="ja">/);
+    assert.match(body404, /お探しのページ/);
+    assert.match(body404, /href="\/"/);
   } finally {
     await ctx.cleanup();
   }

@@ -91,6 +91,8 @@ const MAX_EVENTS_PER_WINDOW = 30;
 const RATE_WINDOW_MS = 60_000;
 const MAX_BODY_BYTES = 256 * 1024;
 
+const CSP_HEADER = "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'";
+
 // /api/subscribe — 本番 (api.connectivebyte.com/subscribe・Worker+D1) と同じ検証を
 // ローカルでも通すための写し。dev serverは保存しない (202を返すだけ)。
 const EMAIL_PATTERN = /^[^\s@,;:"'<>()[\]\\]{1,64}@[^\s@.]+(\.[^\s@.]+)+$/;
@@ -401,11 +403,25 @@ export function createRequestHandler(options = {}) {
         "Content-Type": types[extname(servePath)] ?? "application/octet-stream",
         "X-Content-Type-Options": "nosniff",
         "Referrer-Policy": "strict-origin-when-cross-origin",
-        "Content-Security-Policy": "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'"
+        "Content-Security-Policy": CSP_HEADER
       });
       createReadStream(servePath).pipe(response);
     } catch {
-      response.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" }).end("Not found");
+      // GitHub Pagesと同じく、存在しないパスはルートの404.htmlを404ステータスで
+      // 応答する (Pagesは404.htmlをカスタムnot-foundページとして配信する)。
+      // 404.htmlが無い環境では平文へフォールバックする。
+      try {
+        const notFoundPage = await readFile(join(root, "404.html"));
+        response.writeHead(404, {
+          "Content-Type": "text/html; charset=utf-8",
+          "X-Content-Type-Options": "nosniff",
+          "Referrer-Policy": "strict-origin-when-cross-origin",
+          "Content-Security-Policy": CSP_HEADER
+        });
+        response.end(notFoundPage);
+      } catch {
+        response.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" }).end("Not found");
+      }
     }
   };
 }
