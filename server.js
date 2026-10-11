@@ -385,8 +385,17 @@ export function createRequestHandler(options = {}) {
     try {
       const file = await stat(filePath);
       // GitHub Pagesと同じく、ディレクトリURLは中のindex.htmlを応答する
-      // (sitemap.xmlはディレクトリ形式のURLを掲載。ローカル確認手順とのparity)
-      const servePath = file.isDirectory() ? join(filePath, "index.html") : filePath;
+      // (sitemap.xmlはディレクトリ形式のURLを掲載。ローカル確認手順とのparity)。
+      // スラッシュ無しのディレクトリURLはPages同様スラッシュ付きへ301リダイレクト
+      // する (直接返すと ../article.css 等の相対リンクの基準がずれて壊れる)。
+      let servePath = filePath;
+      if (file.isDirectory()) {
+        if (!url.pathname.endsWith("/")) {
+          response.writeHead(301, { Location: `${url.pathname}/${url.search}` }).end();
+          return;
+        }
+        servePath = join(filePath, "index.html");
+      }
       if (!(await stat(servePath)).isFile()) throw new Error("Not a file");
       response.writeHead(200, {
         "Content-Type": types[extname(servePath)] ?? "application/octet-stream",

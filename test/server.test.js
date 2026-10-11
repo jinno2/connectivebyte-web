@@ -195,20 +195,33 @@ test("静的ファイル配信は維持される", async () => {
   }
 });
 
-test("ディレクトリURLは中のindex.htmlを配信する (sitemap掲載形式・Pages配信とのparity)", async () => {
-  // sitemap.xmlはディレクトリ形式のURLを掲載し、Pages本番は中のindex.htmlを
-  // 応答する。ローカルserverが404だとREADMEの「リンク先まで確認」手順が
-  // 本番と食い違うため、両形式ともindex.htmlで応答することを機械検査する。
+test("ディレクトリURLはPages配信と同じ挙動をする (スラッシュ無しは301・付きはindex.html)", async () => {
+  // sitemap.xmlはディレクトリ形式のURLを掲載する。Pages本番はスラッシュ無しの
+  // ディレクトリURLをスラッシュ付きへ301リダイレクトし、付きのURLでindex.htmlを
+  // 応答する。スラッシュ無しのままindex.htmlを返すと ../article.css 等の
+  // 相対リンクの基準がずれて壊れるため、301動作ごと本番parityとして機械検査する。
   const ctx = await startServer();
   try {
     const slashed = await fetch(`${ctx.base}/content/18-blog/quetab-ai-game-builder/`);
     assert.equal(slashed.status, 200);
+    assert.equal(slashed.headers.get("content-type"), "text/html; charset=utf-8");
     assert.match(await slashed.text(), /quetab\.com\/games 検証レポート/);
-    const bare = await fetch(`${ctx.base}/content/02-entry-read`);
-    assert.equal(bare.status, 200);
-    assert.match(await bare.text(), /上がってくる床は、乗れば足場になる/);
+
+    const bare = await fetch(`${ctx.base}/content/02-entry-read`, { redirect: "manual" });
+    assert.equal(bare.status, 301);
+    assert.equal(bare.headers.get("location"), "/content/02-entry-read/");
+    const followed = await fetch(`${ctx.base}/content/02-entry-read`);
+    assert.equal(followed.status, 200);
+    assert.match(await followed.text(), /上がってくる床は、乗れば足場になる/);
+
+    const bareWithQuery = await fetch(`${ctx.base}/content/02-entry-read?utm_source=x`, { redirect: "manual" });
+    assert.equal(bareWithQuery.status, 301);
+    assert.equal(bareWithQuery.headers.get("location"), "/content/02-entry-read/?utm_source=x");
+
     const noIndex = await fetch(`${ctx.base}/content/18-blog/`);
     assert.equal(noIndex.status, 404);
+    const bareNoIndex = await fetch(`${ctx.base}/content/18-blog`, { redirect: "manual" });
+    assert.equal(bareNoIndex.status, 301);
   } finally {
     await ctx.cleanup();
   }
