@@ -1,6 +1,6 @@
 // PDF検査の失敗・未対応形式は公開を止める。通常ファイルの検査範囲は従来どおり。
 import { execFile } from "node:child_process";
-import { lstat, mkdtemp, readFile, readdir, rm } from "node:fs/promises";
+import { lstat, mkdtemp, readFile, readdir, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -26,6 +26,7 @@ async function qpdfJson(file) {
       env: { ...process.env, LC_ALL: "C" },
     });
     if (stderr.trim()) throw new Error(`qpdf: ${stderr.trim()}`);
+    if ((await stat(output)).size > MAX_BYTES) throw new Error("qpdf JSON検査サイズ上限超過");
     return await readFile(output, "utf8");
   } finally {
     await rm(directory, { recursive: true, force: true });
