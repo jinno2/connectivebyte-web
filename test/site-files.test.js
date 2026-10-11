@@ -212,3 +212,16 @@ test("Pages は同じjobでテストと配信木検査に合格してから公�
   }
   assert.doesNotMatch(workflow, /continue-on-error:|if:\s*\$?\{?\{?\s*always\(/);
 });
+
+test("下線型入力欄はキーボードフォーカス時の可視表示を持つ", async () => {
+  // email-row の input と #apply-note は outline:none でUAフォーカス環を消しており、
+  // 強調が無いと登録・申込導線でフォーカス位置が見えない (L1 キーボード操作点検)。
+  // :focus-within / :focus-visible での下線強調を機械検査する。
+  const css = await readFile(path.join(repoRoot, "styles.css"), "utf8");
+  const focusRule = (selector) => {
+    const re = new RegExp(`${selector}[^{]*\\{[^}]*border-bottom-color`);
+    assert.match(css, re, `${selector} のフォーカス時の下線強調が無い`);
+  };
+  focusRule("\\.email-row:focus-within");
+  focusRule("#apply-note:focus-visible");
+});
