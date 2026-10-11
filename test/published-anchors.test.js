@@ -11,7 +11,7 @@ import assert from "node:assert/strict";
 import { readFile, readdir } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
-import { idSet, resolveFragmentTarget } from "./published-anchors.js";
+import { idSet, pageLinkCandidates, resolveFragmentTarget } from "./published-anchors.js";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -72,20 +72,39 @@ test("公開ページのフラグメント無しページ間リンク (href=\"pa
   for (const file of files) {
     const rel = path.relative(repoRoot, file).split(path.sep).join("/");
     const html = await readFile(file, "utf8");
-    // script/style内のJSテンプレート (例: ' + href + ') は実行時生成の値なので除外
-    const doc = html
-      .replace(/<script\b[\s\S]*?<\/script>/gi, "")
-      .replace(/<style\b[\s\S]*?<\/style>/gi, "");
-    const base = path.posix.dirname(rel);
-    for (const m of doc.matchAll(/href="([^"]+)"/g)) {
-      const href = m[1];
-      if (href.includes("#")) continue; // フラグメント付きは上の2テストが検査する
-      if (/\.(css|js|png|svg|xml|txt|pdf|webmanifest|ico)$/i.test(href.split("?")[0])) continue;
-      const target = resolveFragmentTarget(base, href);
-      if (target === null) continue; // 外部スキーム
+    for (const [href, target] of pageLinkCandidates(html, path.posix.dirname(rel))) {
       assert.ok(pages.has(target), `${rel}: href="${href}" の飛び先ページ (${target}) が配信対象に存在しない`);
     }
   }
+});
+
+test("フラグメント無しリンク検査はscript/style内・アセット・外部を除外し、壊れたページ間リンクのみ検出対象に上げる", () => {
+  const pages = new Set(["index.html", "content/index.html"]);
+  const doc = [
+    "<!doctype html><html><head>",
+    '<link rel="stylesheet" href="styles.css">',
+    '<style>a::before { content: "href=\\"style-fake.html\\"" }</style>',
+    '<script>el.innerHTML = "<a href=\'js-fake.html\'>" + label + "</a>";</script>',
+    "</head><body>",
+    '<a href="content/">entry</a>',
+    '<a href="content#top">fragment</a>',
+    '<a href="logo.svg">asset</a>',
+    '<a href="https://example.com/">external</a>',
+    '<a href="missing.html">broken</a>',
+    "</body></html>",
+  ].join("");
+  const candidates = pageLinkCandidates(doc, "");
+  assert.deepEqual(candidates, [
+    ["content/", "content/index.html"],
+    ["missing.html", "missing.html"],
+  ]);
+  assert.ok(
+    candidates.some(([, target]) => !pages.has(target)),
+    "壊れたリンクの飛び先は配信対象集合に無いはず (ガードがfailする状態)",
+  );
+  assert.deepEqual(pageLinkCandidates('<a href="../../">up</a>', "content/18-blog/x"), [
+    ["../../", "content/index.html"],
+  ]);
 });
 
 test("フラグメント飛び先の解決規則は外部スキームを除外し、クエリ除去・ディレクトリURLをindex.htmlへ正規化する", () => {
