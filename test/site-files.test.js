@@ -214,14 +214,17 @@ test("Pages は同じjobでテストと配信木検査に合格してから公�
 });
 
 test("下線型入力欄はキーボードフォーカス時の可視表示を持つ", async () => {
-  // email-row の input と #apply-note は outline:none でUAフォーカス環を消しており、
-  // 強調が無いと登録・申込導線でフォーカス位置が見えない (L1 キーボード操作点検)。
-  // :focus-within / :focus-visible での下線強調を機械検査する。
+  // outline:none でフォーカス環を消している下線型入力欄の、フォーカス時の下線強調 (色+影) を機械検査する。
   const css = await readFile(path.join(repoRoot, "styles.css"), "utf8");
-  const focusRule = (selector) => {
-    const re = new RegExp(`${selector}[^{]*\\{[^}]*border-bottom-color`);
-    assert.match(css, re, `${selector} のフォーカス時の下線強調が無い`);
+  const focusRule = (selector, except = "") => {
+    // 境界一致で探す (前方のクラス/ID連結を排除、後方の識別子文字を排除) — 部分一致では綴り崩れを検出できない
+    const body = css.match(new RegExp(`(?<![\\w.#-])${except}${selector}(?![\\w-])[^{]*\\{([^}]*)`))?.[1];
+    assert.ok(body, `${selector} のフォーカス規則が無い`);
+    assert.match(body, /border-bottom-color/, `${selector} のフォーカス時の下線色変化が無い`);
+    assert.match(body, /box-shadow/, `${selector} のフォーカス時の影が無い`);
   };
-  focusRule("\\.email-row:focus-within");
+  focusRule("\\.email-row:focus-within", "(?<!#apply-form )");
+  // #apply-form .email-row は基底下線をIDセレクタで再定義するため、グループから落ちると適用フォームだけ強調が消える
+  focusRule("#apply-form \\.email-row:focus-within");
   focusRule("#apply-note:focus-visible");
 });
