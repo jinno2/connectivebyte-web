@@ -1,6 +1,7 @@
 // PDF検査の失敗・未対応形式は公開を止める。通常ファイルの検査範囲は従来どおり。
-import { execFile } from "node:child_process";
-import { lstat, readFile, readdir } from "node:fs/promises";
+import { execFile, spawn } from "node:child_process";
+import { lstat, mkdtemp, open, readFile, readdir, rm, stat } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 
@@ -14,6 +15,37 @@ async function run(tool, args) {
   });
   if (stderr.trim()) throw new Error(`${tool}: ${stderr.trim()}`);
   return stdout;
+}
+
+async function qpdfJson(file) {
+  const directory = await mkdtemp(path.join(tmpdir(), "publication-qpdf-"));
+  const outputPath = path.join(directory, "document.json");
+  try {
+    const output = await open(outputPath, "w");
+    try {
+      await new Promise((resolve, reject) => {
+        const child = spawn("qpdf", ["--json", "--json-stream-data=none", file], {
+          env: { ...process.env, LC_ALL: "C" },
+          stdio: ["ignore", output.fd, "pipe"],
+        });
+        let stderr = "";
+        child.stderr.setEncoding("utf8");
+        child.stderr.on("data", (chunk) => { stderr += chunk; });
+        child.once("error", reject);
+        child.once("close", (code) => {
+          if (code !== 0 || stderr.trim()) {
+            reject(new Error(stderr.trim() || `qpdf exited with status ${code}`));
+          } else resolve();
+        });
+      });
+    } finally {
+      await output.close();
+    }
+    if ((await stat(outputPath)).size > MAX_BYTES) throw new Error("qpdf JSON検査サイズ上限超過");
+    return JSON.parse(await readFile(outputPath, "utf8"));
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
 }
 
 async function regularPath(file, directory = false) {
@@ -94,7 +126,7 @@ export async function scanFile(file) {
   const raw = bytes.toString("latin1");
   if (!raw.startsWith("%PDF-") || (raw.match(/startxref/g) || []).length !== 1 ||
       !/%%EOF\s*$/.test(raw)) throw new Error(`不正・線形化・増分更新されたPDF: ${file}`);
-  const document = JSON.parse(await run("qpdf", ["--json", "--json-stream-data=none", absolute]));
+  const document = await qpdfJson(absolute);
   if (document.version !== 2 || document.qpdf?.[0]?.jsonversion !== 2 || !document.qpdf?.[1] ||
       document.encrypt?.encrypted !== false || document.acroform?.hasacroform !== false ||
       !document.attachments || Object.keys(document.attachments).length) {
