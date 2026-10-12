@@ -514,3 +514,47 @@ test("全問回答済みの診断は従来どおり完了し、状態表示は�
   assert.equal(elements["#diagnostic-status"].textContent, "", "完了時は状態表示を空にする");
   assert.equal(app.readJson("diagnosis_result", null)?.current_phase, 2);
 });
+
+test("比較テンプレートへのアンカーCTAは着地時にworkflowを開き、カードボタンと同じ挙動になる", async () => {
+  const storage = new FakeStorage({ consent: { analytics: true, email: true, decided: true } });
+  const focusCalls = [];
+  const workflow = element();
+  workflow.querySelectorAll = () => [];
+  const theme = element();
+  theme.focus = () => focusCalls.push("theme");
+  const elements = {
+    "#comparison-workflow": workflow,
+    "#comparison-theme": theme
+  };
+  const calls = [];
+  const { documentListeners } = setup({
+    storage,
+    elements,
+    fetchImpl: async (_url, options) => {
+      calls.push(JSON.parse(options.body));
+      return { status: 202 };
+    }
+  });
+  await loadApp("comparison-anchor-cta");
+  const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
+  const trackedNames = () => calls.flat().map((batched) => batched.name);
+
+  const anchorTarget = {
+    closest: (selector) => selector === 'a[href="#comparison"]' ? { dataset: {} } : null
+  };
+  documentListeners.get("click")({ target: anchorTarget });
+  await flush();
+  assert.equal(workflow.hidden, false, "アンカーCTAの着地でworkflowを開く");
+  assert.deepEqual(focusCalls, ["theme"], "テーマ入力欄へフォーカスする");
+  assert.ok(trackedNames().includes("comparison_template_viewed"), "開いたことをカードボタンと同じイベントで計測する");
+
+  const actionTarget = {
+    closest: (selector) => selector === "[data-action]"
+      ? { dataset: { action: "open-comparison" } }
+      : null
+  };
+  documentListeners.get("click")({ target: actionTarget });
+  await flush();
+  assert.equal(workflow.hidden, false, "カード内ボタンでもworkflowを開く");
+  assert.deepEqual(focusCalls, ["theme", "theme"], "ボタン経由でもテーマ入力欄へフォーカスする");
+});
