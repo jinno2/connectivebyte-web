@@ -5,7 +5,8 @@
 // noindex と sitemap の矛盾 (検索エンジンへの混線) になる。
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFile, readdir } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
+import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { createHash } from "node:crypto";
@@ -97,22 +98,20 @@ test("sitemap.xml はインデックス許可ページのみを掲載する (noi
     assert.doesNotMatch(html, /<meta name="robots" content="noindex">/, `noindex頁がsitemap掲載: ${loc}`);
   }
 
-  // 逆方向: content配下の index,follow ページでsitemap未掲載があれば検出
-  const contentDir = path.join(repoRoot, "content");
-  const dirs = await readdir(contentDir, { withFileTypes: true });
-  for (const d of dirs) {
-    if (!d.isDirectory()) continue;
-    const htmlPath = path.join(contentDir, d.name, "index.html");
-    let html;
-    try {
-      html = await readFile(htmlPath, "utf8");
-    } catch {
-      continue;
-    }
+  // 逆方向: content配下の index,follow ページでsitemap未掲載があれば検出。
+  // 18-blog/<slug>/ のような2階層も対象にする (記事追加時の掲載漏れがここで起きる)。
+  // 対象はgit追跡済みfileのみ — 未追跡の作業中page (隔離publish tree fixture等) は
+  // 公開対象でないため sitemap 規律の外。
+  const tracked = execFileSync("git", ["ls-files", "-z", "content"], { cwd: repoRoot, encoding: "utf8" })
+    .split("\0").filter((f) => f.endsWith("/index.html"));
+  assert.ok(tracked.length > 0, "content配下に追跡済みindex.htmlが無い (テストの前提が崩れた)");
+  for (const relPage of tracked) {
+    const html = await readFile(path.join(repoRoot, relPage), "utf8");
+    const relDir = path.posix.dirname(relPage);
     const indexed = !/<meta name="robots" content="noindex">/.test(html);
-    const listed = locs.some((u) => u.includes(`/content/${d.name}/`));
+    const listed = locs.some((u) => u.includes(`/${relDir}/`));
     if (indexed && !listed) {
-      assert.fail(`index,follow のページがsitemap未掲載: content/${d.name}/ — sitemap.xml を更新すること`);
+      assert.fail(`index,follow のページがsitemap未掲載: ${relDir}/ — sitemap.xml を更新すること`);
     }
   }
 });
@@ -255,6 +254,79 @@ test("LPの検証レポートカードから、公開中の全検証レポート
       `VERIFICATION NOTEカードから検証レポート記事へ到達できない: ${locPath} — カードへリンクを追加すること`);
   }
   assert.ok(reports > 0, "検証レポートと自認する記事が無い (テストの前提が崩れた)");
+});
+
+// hrefを「サイト内到達」の対象pathへ正規化する。到達とみなさないものは null:
+// 外部サイトへの絶対URL、解決不能なhref、そしてリンク元ページ自身への自己参照
+// (og:url・canonical・自分の記事内の自己リンクは導線ではない)。
+function inboundTarget(raw, pageRel, siteHost) {
+  if (/^https?:\/\//.test(raw) && !raw.includes(siteHost)) return null;
+  const dir = path.posix.dirname(pageRel);
+  const base = `https://${siteHost}/${dir === "." ? "" : `${dir}/`}`;
+  let pathname;
+  try {
+    pathname = new URL(raw, base).pathname;
+  } catch {
+    return null;
+  }
+  const target = pathname.endsWith("/index.html") ? pathname.slice(0, -"index.html".length) : pathname;
+  if (pageRel === path.posix.join(target.slice(1), "index.html")) return null;
+  return target;
+}
+
+test("sitemap掲載の18-blog記事はサイト内どこかから到達できる (孤児記事の検知)", async () => {
+  // 検証レポートカードの到達性テストはタイトル自認 (検証レポート) の記事に限定
+  // しており、測定方法系など別カテゴリは対象外だった。sitemap掲載 (=index許可の
+  // 公開頁) なのにサイト内どこからもリンクされない孤児記事は検索流入しか経路が
+  // なく、L2 (内容と導線の整合) から漏れる。カテゴリを問わず、18-blog掲載記事は
+  // 記事自身以外の追跡済みページから少なくとも1本リンクされることを機械検査する
+  // (og:url・canonical など自己参照は到達とはみなさない)。
+  // hostはsitemapの <loc> から導出する (ドメイン移行時にテストだけ壊れない)。
+  const sitemap = await readFile(path.join(repoRoot, "sitemap.xml"), "utf8");
+  const locs = [...sitemap.matchAll(/<loc>([^<]+)<\/loc>/g)].map((m) => new URL(m[1]));
+  const siteHost = locs[0]?.host ?? "";
+  const blogPaths = locs.filter((u) => /^\/content\/18-blog\/.+\/$/.test(u.pathname)).map((u) => u.pathname);
+  assert.ok(blogPaths.length > 0, "sitemapに18-blog記事が無い");
+  const tracked = execFileSync("git", ["ls-files", "-z"], { cwd: repoRoot, encoding: "utf8" })
+    .split("\0").filter((f) => f.endsWith(".html"));
+  assert.ok(tracked.length > 0, "追跡済みhtmlが無い (テストの前提が崩れた)");
+  const inbound = new Map(blogPaths.map((p) => [p, 0]));
+  for (const rel of tracked) {
+    const html = await readFile(path.join(repoRoot, rel), "utf8");
+    for (const m of html.matchAll(/href="([^"]+)"/g)) {
+      const target = inboundTarget(m[1], rel, siteHost);
+      if (target !== null && inbound.has(target)) {
+        inbound.set(target, inbound.get(target) + 1);
+      }
+    }
+  }
+  for (const [locPath, count] of inbound) {
+    assert.ok(count > 0, `孤児記事 (サイト内リンク0本): ${locPath} — 導線のあるページへリンクを追加すること`);
+  }
+});
+
+test("孤児検知のリンク解決: 外部URL・自己参照・不正なhrefは到達とみなさない", () => {
+  const host = "lab.connectivebyte.com";
+  const article = "content/18-blog/ozbrain-ja-knowledge/index.html";
+  assert.equal(inboundTarget("https://example.com/content/18-blog/x/", article, host), null,
+    "他hostへの絶対URLは到達ではない");
+  assert.equal(inboundTarget("https://api.connectivebyte.com/stats", article, host), null,
+    "同一ドメインの別subdomainは到達ではない");
+  assert.equal(inboundTarget("index.html", article, host), null, "自分自身へのリンクは到達ではない");
+  assert.equal(inboundTarget("#apply", article, host), null, "同一ページ内アンカーは到達ではない");
+  assert.equal(inboundTarget("https://lab.connectivebyte.com/content/18-blog/ozbrain-ja-knowledge/", article, host), null,
+    "絶対URLでも自分自身なら到達ではない");
+});
+
+test("孤児検知のリンク解決: 相対・絶対・index.html付きは同一目的地に正規化される", () => {
+  const host = "lab.connectivebyte.com";
+  const article = "content/18-blog/ozbrain-ja-knowledge/index.html";
+  const lp = "index.html";
+  assert.equal(inboundTarget("content/18-blog/cap-scan/index.html", lp, host), "/content/18-blog/cap-scan/");
+  assert.equal(inboundTarget("/content/18-blog/cap-scan/index.html", lp, host), "/content/18-blog/cap-scan/");
+  assert.equal(inboundTarget("https://lab.connectivebyte.com/content/18-blog/cap-scan/", lp, host), "/content/18-blog/cap-scan/");
+  // 記事本文からの相対リンク (../) は記事位置基準で解決する
+  assert.equal(inboundTarget("../cap-scan/", article, host), "/content/18-blog/cap-scan/");
 });
 
 test("Pages は同じjobでテストと配信木検査に合格してから公開する", async () => {
