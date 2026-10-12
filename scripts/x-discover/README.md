@@ -21,6 +21,10 @@ post.py は未承認draftも自動投稿する(要記入プレースホルダー
 単調warn付き・禁止語17語はfail-closedでskip/拒否)。
 ```
 
+2026-10-12再実測: このhostのcrontab・systemd timerに上記発火は不在
+(`~/.local/share/cb-fleet/` にqueue・logも無い)。上記時刻は設計値であり、
+発火の実態と移転・再開時の更新指示は [../../AUTOMATION.md](../../AUTOMATION.md) が正本。
+
 ## 品質レベル定義と現在地 (2026-09-14)
 
 各gateが**どの階層を担保するか**の定義。誤字脱字などのQ0は議論対象外 —
