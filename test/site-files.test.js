@@ -93,26 +93,32 @@ test("LP はOG基本metaを備え、title/descriptionの公開文字列と一致
   assert.equal(meta("og:url"), `${siteUrl.origin}/`);
 });
 
-test("LP の og:image は絶対URLで、配信木内の実在PNG寸法と宣言が一致する", async () => {
+test("LP の og:image は絶対URLで、原本HTML・PNG実寸・meta宣言の寸法が一致する", async () => {
   // X・リンク共有cardの画像。meta content のURLは href/src のlink検査対象外で、
-  // 配信木漏れは favicon.svg と同じlive 404になる — ここで機械検査する。
-  // alt は新規主張ではなく公開descriptionの再掲。寸法はPNG IHDR実測と突き合わせる。
-  const [html, sitemap, yml, png] = await Promise.all([
+  // 配信木漏れは favicon.svg と同じlive 404になる — 配信木包含は直前のdeploy workflow
+  // 検査が同じcp行で担保するため、ここでは寸法の三点照合に絞る。
+  // PNGはscripts/og-image-1200x630.htmlをPlaywrightで撮影した再生成物 — 原本のcanvas
+  // 宣言・IHDR実測・LP meta宣言・URL内の寸法表記が揃わないsilent driftを機械検査する。
+  const [html, sitemap, src, png] = await Promise.all([
     readFile(path.join(repoRoot, "index.html"), "utf8"),
     readFile(path.join(repoRoot, "sitemap.xml"), "utf8"),
-    readFile(path.join(repoRoot, ".github/workflows/deploy_pages.yml"), "utf8"),
+    readFile(path.join(repoRoot, "scripts/og-image-1200x630.html"), "utf8"),
     readFile(path.join(repoRoot, "og-image-1200x630.png"))
   ]);
   const meta = (prop) => html.match(new RegExp(`<meta property="${prop}" content="([^"]*)">`))?.[1];
   const siteUrl = new URL(sitemap.match(/<loc>([^<]+)<\/loc>/)[1]);
   assert.equal(meta("og:image"), `${siteUrl.origin}/og-image-1200x630.png`);
+  const canvas = src.match(/html, body \{ width: (\d+)px; height: (\d+)px;/);
+  assert.ok(canvas, "scripts/og-image-1200x630.html に html,body のcanvas寸法宣言が無い");
+  assert.equal(png.readUInt32BE(16), Number(canvas[1]), "PNG IHDR幅 != 原本HTML宣言幅");
+  assert.equal(png.readUInt32BE(20), Number(canvas[2]), "PNG IHDR高さ != 原本HTML宣言高さ");
   assert.equal(meta("og:image:width"), String(png.readUInt32BE(16)), "og:image:width != PNG IHDR幅");
   assert.equal(meta("og:image:height"), String(png.readUInt32BE(20)), "og:image:height != PNG IHDR高さ");
+  assert.equal(new URL(meta("og:image")).pathname,
+    `/og-image-${png.readUInt32BE(16)}x${png.readUInt32BE(20)}.png`, "URLの寸法表記がPNG実寸と不一致");
   const description = html.match(/<meta name="description" content="([^"]*)">/)[1];
   assert.equal(meta("og:image:alt"), description);
   assert.equal(html.match(/<meta name="twitter:card" content="([^"]*)">/)?.[1], "summary_large_image");
-  const cpLine = yml.split("\n").find((l) => l.includes("cp index.html"));
-  assert.ok(cpLine?.includes("og-image-1200x630.png"), `配信木に og-image が無い: ${cpLine?.trim()}`);
 });
 
 test("sitemap.xml はインデックス許可ページのみを掲載する (noindex資産を含まない)", async () => {
