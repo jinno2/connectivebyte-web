@@ -5,7 +5,8 @@
 // noindex と sitemap の矛盾 (検索エンジンへの混線) になる。
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFile, readdir } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
+import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { createHash } from "node:crypto";
@@ -97,22 +98,20 @@ test("sitemap.xml はインデックス許可ページのみを掲載する (noi
     assert.doesNotMatch(html, /<meta name="robots" content="noindex">/, `noindex頁がsitemap掲載: ${loc}`);
   }
 
-  // 逆方向: content配下の index,follow ページでsitemap未掲載があれば検出
-  const contentDir = path.join(repoRoot, "content");
-  const dirs = await readdir(contentDir, { withFileTypes: true });
-  for (const d of dirs) {
-    if (!d.isDirectory()) continue;
-    const htmlPath = path.join(contentDir, d.name, "index.html");
-    let html;
-    try {
-      html = await readFile(htmlPath, "utf8");
-    } catch {
-      continue;
-    }
+  // 逆方向: content配下の index,follow ページでsitemap未掲載があれば検出。
+  // 18-blog/<slug>/ のような2階層も対象にする (記事追加時の掲載漏れがここで起きる)。
+  // 対象はgit追跡済みfileのみ — 未追跡の作業中page (隔離publish tree fixture等) は
+  // 公開対象でないため sitemap 規律の外。
+  const tracked = execFileSync("git", ["ls-files", "-z", "content"], { cwd: repoRoot, encoding: "utf8" })
+    .split("\0").filter((f) => f.endsWith("/index.html"));
+  assert.ok(tracked.length > 0, "content配下に追跡済みindex.htmlが無い (テストの前提が崩れた)");
+  for (const relPage of tracked) {
+    const html = await readFile(path.join(repoRoot, relPage), "utf8");
+    const relDir = path.posix.dirname(relPage);
     const indexed = !/<meta name="robots" content="noindex">/.test(html);
-    const listed = locs.some((u) => u.includes(`/content/${d.name}/`));
+    const listed = locs.some((u) => u.includes(`/${relDir}/`));
     if (indexed && !listed) {
-      assert.fail(`index,follow のページがsitemap未掲載: content/${d.name}/ — sitemap.xml を更新すること`);
+      assert.fail(`index,follow のページがsitemap未掲載: ${relDir}/ — sitemap.xml を更新すること`);
     }
   }
 });
