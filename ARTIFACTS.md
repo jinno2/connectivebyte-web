@@ -108,6 +108,12 @@ EOF
   一致させた docs修正 (2026-10-12)。版は `d098ab53249c` → `f7a355559ee1`
   (.py変更なので正当 — docstringのみで生成系logicは無変更)。生存行の
   `polish_version`/`gen_version` 判定は不変
+- ⑬⑫と同種の放置を構造防止する素材源docs↔実装整合guard
+  (`test/x-discover-sources.test.js`) 新設 — GENRES.md素材源v0行とcollect.py
+  docstring冒頭に列挙した素材源の収集関数 (collect_*) 実装をtest段階で保証。
+  Reddit再記載で赤になることを実測確認 (2026-10-12・test stage)。版は不変
+  (test/*.jsと本台帳は版対象外 — このcommitでも現行 `f7a355559ee1` が
+  動かないことが下の「以後」節の実証になる)
 - 以後、文書変更 (本台帳の更新・scripts下READMEの更新を含む) では版は不変 —
   scripts/下の.py (codeとpromptの実体) が変わったときだけ版が動く。本節の
   更新commitで版が変わらないことがそのまま実証になる
