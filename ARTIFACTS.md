@@ -59,7 +59,7 @@ EOF
 ## 実測 (2026-09-15・版管理の初回full cycle完了時点)
 
 - pipeline_version = `c82e1c4c96fa` (初回cycle時点・当時はscripts/木tree hash) —
-  **現行 = `d098ab53249c`** (.py限定・版定義節参照・2026-10-12再実測)
+  **現行 = `b912a5a8d954`** (.py限定・版定義節参照・2026-10-12再実測)
 - 監査: posted 14 / out_of_window 43 / rejected 2 / **current 5** /
   STALE 0 / placeholder 0 — 版印は生存5行すべて `c82e1c4c96fa` で単一versionに収束
 - 初回cycleの証跡: ①09:17 cronが新規3件を版印付きで起草+stale 2行を自動再生成
@@ -103,6 +103,11 @@ EOF
   実yaml読みが即FileNotFoundErrorで赤になる — 姉妹repoを持つhostでも
   ⑩と同種の回帰を検知できる (2026-10-12・test stage)。版は
   `5a42158b803a` → `d098ab53249c` (.py変更なので正当)。生成系logicは無変更
+- ⑫LPのog:image新設 (絶対URL指定・`og-image-1200x630.png`) に伴い、配信木
+  (deploy workflowのcp行・`test/publish-tree.test.js`のROOT_FILES) と
+  `outreach.py`の`PUBLISH_ROOT_FILES`へ同PNGを足した (⑧⑨と同じ隔離ツリー
+  parity修正・2026-10-12)。版は `d098ab53249c` → `b912a5a8d954` (.py変更なので
+  正当)。生成系の起草・再検査logicには変更なし
 - 以後、文書変更 (本台帳の更新・scripts下READMEの更新を含む) では版は不変 —
   scripts/下の.py (codeとpromptの実体) が変わったときだけ版が動く。本節の
   更新commitで版が変わらないことがそのまま実証になる

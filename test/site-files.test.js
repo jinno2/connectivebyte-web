@@ -6,6 +6,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+import { existsSync, readdirSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
@@ -14,7 +15,16 @@ import { createHash } from "node:crypto";
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 test("配信ページの本文bytesと承認metadataのhashが一致する", async () => {
-  for (const asset of ["01-canonical", "02-entry-read", "15-diagnostic-lp", "17-org-pdf"]) {
+  // 対象は固定listではなく「metadata.jsonを持つ配信ページ」を content/ から自動
+  // 発見する。02-history・01-tracker-page が旧固定listから漏れ、表示用
+  // content_hash commentの陳腐化が検出されない実績があった — 以後の配信ページ
+  // 追加も自動で対象化され、本文・承認metadata・表示commentの3者一致を強制する。
+  const contentDir = path.join(repoRoot, "content");
+  const assets = readdirSync(contentDir, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory() && existsSync(path.join(contentDir, entry.name, "metadata.json")))
+    .map((entry) => entry.name);
+  assert.ok(assets.length >= 4, `配信ページの発見が過少 (${assets.length}件) — テストの前提が崩れた`);
+  for (const asset of assets) {
     const dir = path.join(repoRoot, "content", asset);
     const html = await readFile(path.join(dir, "index.html"), "utf8");
     const metadata = JSON.parse(await readFile(path.join(dir, "metadata.json"), "utf8"));
@@ -32,7 +42,7 @@ test("deploy workflow は favicon.svg と sitemap.xml を配信木に含める",
   const yml = await readFile(path.join(repoRoot, ".github/workflows/deploy_pages.yml"), "utf8");
   const cpLine = yml.split("\n").find((l) => l.includes("cp index.html"));
   assert.ok(cpLine, "publish treeのcp行が見つからない");
-  for (const file of ["favicon.svg", "sitemap.xml", "robots.txt", "app.js", "logic.js", "share.js", "twitter-text-regex.js", "404.html"]) {
+  for (const file of ["favicon.svg", "sitemap.xml", "robots.txt", "app.js", "logic.js", "share.js", "twitter-text-regex.js", "404.html", "og-image-1200x630.png"]) {
     assert.ok(cpLine.includes(file), `配信木に ${file} が無い: ${cpLine.trim()}`);
   }
 });
@@ -81,6 +91,34 @@ test("LP はOG基本metaを備え、title/descriptionの公開文字列と一致
   assert.equal(meta("og:type"), "website");
   const siteUrl = new URL(sitemap.match(/<loc>([^<]+)<\/loc>/)[1]);
   assert.equal(meta("og:url"), `${siteUrl.origin}/`);
+});
+
+test("LP の og:image は絶対URLで、原本HTML・PNG実寸・meta宣言の寸法が一致する", async () => {
+  // X・リンク共有cardの画像。meta content のURLは href/src のlink検査対象外で、
+  // 配信木漏れは favicon.svg と同じlive 404になる — 配信木包含は直前のdeploy workflow
+  // 検査が同じcp行で担保するため、ここでは寸法の三点照合に絞る。
+  // PNGはscripts/og-image-1200x630.htmlをPlaywrightで撮影した再生成物 — 原本のcanvas
+  // 宣言・IHDR実測・LP meta宣言・URL内の寸法表記が揃わないsilent driftを機械検査する。
+  const [html, sitemap, src, png] = await Promise.all([
+    readFile(path.join(repoRoot, "index.html"), "utf8"),
+    readFile(path.join(repoRoot, "sitemap.xml"), "utf8"),
+    readFile(path.join(repoRoot, "scripts/og-image-1200x630.html"), "utf8"),
+    readFile(path.join(repoRoot, "og-image-1200x630.png"))
+  ]);
+  const meta = (prop) => html.match(new RegExp(`<meta property="${prop}" content="([^"]*)">`))?.[1];
+  const siteUrl = new URL(sitemap.match(/<loc>([^<]+)<\/loc>/)[1]);
+  assert.equal(meta("og:image"), `${siteUrl.origin}/og-image-1200x630.png`);
+  const canvas = src.match(/html, body \{ width: (\d+)px; height: (\d+)px;/);
+  assert.ok(canvas, "scripts/og-image-1200x630.html に html,body のcanvas寸法宣言が無い");
+  assert.equal(png.readUInt32BE(16), Number(canvas[1]), "PNG IHDR幅 != 原本HTML宣言幅");
+  assert.equal(png.readUInt32BE(20), Number(canvas[2]), "PNG IHDR高さ != 原本HTML宣言高さ");
+  assert.equal(meta("og:image:width"), String(png.readUInt32BE(16)), "og:image:width != PNG IHDR幅");
+  assert.equal(meta("og:image:height"), String(png.readUInt32BE(20)), "og:image:height != PNG IHDR高さ");
+  assert.equal(new URL(meta("og:image")).pathname,
+    `/og-image-${png.readUInt32BE(16)}x${png.readUInt32BE(20)}.png`, "URLの寸法表記がPNG実寸と不一致");
+  const description = html.match(/<meta name="description" content="([^"]*)">/)[1];
+  assert.equal(meta("og:image:alt"), description);
+  assert.equal(html.match(/<meta name="twitter:card" content="([^"]*)">/)?.[1], "summary_large_image");
 });
 
 test("sitemap.xml はインデックス許可ページのみを掲載する (noindex資産を含まない)", async () => {
@@ -389,6 +427,64 @@ test("孤児検知のリンク解決: 相対・絶対・index.html付きは同�
   assert.equal(inboundTarget("https://lab.connectivebyte.com/content/18-blog/cap-scan/", lp, host), "/content/18-blog/cap-scan/");
   // 記事本文からの相対リンク (../) は記事位置基準で解決する
   assert.equal(inboundTarget("../cap-scan/", article, host), "/content/18-blog/cap-scan/");
+});
+
+test("全配信ページの相対リンク (href/src) は解決先の実在資産へ向かう (リンク切れの機械検査)", async () => {
+  // 孤児検知はsitemap記事へのinbound到達のみを見るため、張った側のリンク先が
+  // 実在するか (typo・改名・削除済みpathへのリンク) は別問題になる。L2「誤った
+  // 約束やリンク切れを減らす」の直接ガードとして、git追跡の全HTMLが張る href/src
+  // を各ページ位置から解決し、site内実在 (repo root基準) へ向かうことを検査する。
+  // 外部URL・アンカー・scheme付き (mailto/data:) と inline script が組み立てる
+  // 式断片 (引用符・連結を含む値) は対象外。
+  //
+  // 実在判定はworktreeの実在 (existsSync) ではなくgit追跡path集合との文字列照合で
+  // 行う。公開treeは追跡対象から構成されるため追跡外ローカル文件 (build成果物等)
+  // へのリンクを実在扱いで通す面がなくなり、さらに大小文字違いのpathがhost FSの
+  // 大小文字非依存 (macOS等) で偽陽性になる面も排除される (GitHub Pagesは大小文字
+  // 区別で404になる)。末尾"/"付きのtargetはdir宛て、付きなしはfile許容のdirとして
+  // 追跡dir集合 (追跡fileの祖先) と照合する。
+  const lsFiles = execFileSync("git", ["ls-files", "-z"], { cwd: repoRoot, encoding: "utf8" })
+    .split("\0").filter(Boolean);
+  const tracked = lsFiles.filter((f) => f.endsWith(".html"));
+  assert.ok(tracked.length >= 10, `追跡済みhtmlが過少 (${tracked.length}件) — テストの前提が崩れた`);
+  const trackedPaths = new Set(lsFiles);
+  const trackedDirs = new Set(["."]);
+  for (const f of lsFiles) {
+    for (let d = path.posix.dirname(f); d !== "."; d = path.posix.dirname(d)) trackedDirs.add(d);
+  }
+  const broken = [];
+  const straySkips = [];
+  let checked = 0;
+  for (const rel of tracked) {
+    const html = await readFile(path.join(repoRoot, rel), "utf8");
+    // 単一引用符属性にも対応 — 引用符styleの変更で検査対象が静かに消える偽陰性を防ぐ
+    for (const [, dq, sq] of html.matchAll(/(?:href|src)=(?:"([^"]+)"|'([^']+)')/g)) {
+      const ref = dq ?? sq;
+      if (/^(?:https?:)?\/\//.test(ref) || /^[a-z][a-z0-9+.-]*:/i.test(ref) || ref.startsWith("#")) continue;
+      if (ref.includes("'") || ref.includes(" + ")) {
+        // inline JSの式断片はskipするが、既知のtemplate形状 (' + ident + ') 以外の
+        // skipは検査の穴として即fail — skip判定の腐敗が静かにpassを作るのを防ぐ
+        if (!/^' \+ [A-Za-z_$][\w$]* \+ '$/.test(ref)) straySkips.push(`${rel}: ${ref}`);
+        continue;
+      }
+      const target = ref.split("#")[0].split("?")[0];
+      if (!target) continue;
+      const wantsDir = target.endsWith("/");
+      const base = target.replace(/\/+$/, "") || ".";
+      checked += 1;
+      const resolved = path.posix.normalize(
+        base.startsWith("/") ? base.slice(1) : path.posix.join(path.posix.dirname(rel), base)
+      );
+      const reachable = wantsDir
+        ? trackedDirs.has(resolved)
+        : trackedPaths.has(resolved) || trackedDirs.has(resolved);
+      if (!reachable) broken.push(`${rel}: ${ref} → ${resolved}`);
+    }
+  }
+  assert.deepEqual(straySkips, [], `skip判定の想定外逸脱 (${straySkips.length}件) — inline JS断片以外が静かに検査から漏れている:\n${straySkips.join("\n")}`);
+  // 抽出regexの腐敗 (0件一致で無意味にpassする偽陰性) の下限ガード。実在は103本。
+  assert.ok(checked >= 80, `検査対象リンクが過少 (${checked}本) — 抽出の前提が崩れた`);
+  assert.deepEqual(broken, [], `リンク切れ (${broken.length}本):\n${broken.join("\n")}`);
 });
 
 test("Pages は同じjobでテストと配信木検査に合格してから公開する", async () => {
