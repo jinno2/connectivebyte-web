@@ -8,7 +8,8 @@ import path from "node:path";
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const ROOT_FILES = [
   "index.html", "styles.css", "app.js", "logic.js", "share.js",
-  "twitter-text-regex.js", "favicon.svg", "sitemap.xml", "robots.txt", "404.html"
+  "twitter-text-regex.js", "favicon.svg", "sitemap.xml", "robots.txt", "404.html",
+  "og-image-1200x630.png"
 ];
 const MODULE_SCRIPT = /<script\b([^>]*)>/gi;
 const ATTRIBUTE = /([\w:-]+)\s*=\s*["']([^"']+)["']/gi;
