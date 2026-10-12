@@ -199,6 +199,44 @@ test("LPの検証レポートカードから、公開中の全検証レポート
   assert.ok(reports > 0, "検証レポートと自認する記事が無い (テストの前提が崩れた)");
 });
 
+test("sitemap掲載の18-blog記事はサイト内どこかから到達できる (孤児記事の検知)", async () => {
+  // 検証レポートカードの到達性テストはタイトル自認 (検証レポート) の記事に限定
+  // しており、測定方法系など別カテゴリは対象外だった。sitemap掲載 (=index許可の
+  // 公開頁) なのにサイト内どこからもリンクされない孤児記事は検索流入しか経路が
+  // なく、L2 (内容と導線の整合) から漏れる。カテゴリを問わず、18-blog掲載記事は
+  // 記事自身以外の追跡済みページから少なくとも1本リンクされることを機械検査する
+  // (og:url・canonical など自己参照は到達とはみなさない)。
+  const sitemap = await readFile(path.join(repoRoot, "sitemap.xml"), "utf8");
+  const blogPaths = [...sitemap.matchAll(/<loc>https:\/\/lab\.connectivebyte\.com(\/content\/18-blog\/[^<]+\/)<\/loc>/g)]
+    .map((m) => m[1]);
+  assert.ok(blogPaths.length > 0, "sitemapに18-blog記事が無い");
+  const tracked = execFileSync("git", ["ls-files", "-z"], { cwd: repoRoot, encoding: "utf8" })
+    .split("\0").filter((f) => f.endsWith(".html"));
+  assert.ok(tracked.length > 0, "追跡済みhtmlが無い (テストの前提が崩れた)");
+  const inbound = new Map(blogPaths.map((p) => [p, 0]));
+  for (const rel of tracked) {
+    const html = await readFile(path.join(repoRoot, rel), "utf8");
+    const base = `https://lab.connectivebyte.com/${path.posix.dirname(rel) === "." ? "" : `${path.posix.dirname(rel)}/`}`;
+    for (const m of html.matchAll(/href="([^"]+)"/g)) {
+      const raw = m[1];
+      if (/^https?:\/\//.test(raw) && !raw.includes("lab.connectivebyte.com")) continue;
+      let target;
+      try {
+        target = new URL(raw, base).pathname;
+      } catch {
+        continue;
+      }
+      if (target.endsWith("/index.html")) target = target.slice(0, -"index.html".length);
+      if (inbound.has(target) && rel !== path.posix.join(target.slice(1), "index.html")) {
+        inbound.set(target, inbound.get(target) + 1);
+      }
+    }
+  }
+  for (const [locPath, count] of inbound) {
+    assert.ok(count > 0, `孤児記事 (サイト内リンク0本): ${locPath} — 導線のあるページへリンクを追加すること`);
+  }
+});
+
 test("Pages は同じjobでテストと配信木検査に合格してから公開する", async () => {
   const workflow = await readFile(path.join(repoRoot, ".github/workflows/deploy_pages.yml"), "utf8");
   const steps = ["run: npm test", "name: Prepare publish tree", "PUBLICATION_ROOT: _site",
