@@ -38,7 +38,11 @@ const EVENT_TYPES = Object.freeze(new Set([
   "x_intent_opened",
   "result_card_created",
   "feedback_submitted",
-  "apply_submitted"
+  "apply_submitted",
+  // 19-diagnosis-line-lp の inline script が本番 events backend へ直接送る
+  // 匿名2イベント (app.js track() 経由ではないため logic.js EVENT_TYPES には無い)。
+  "d1_lp_viewed",
+  "d1_lp_cart_click"
 ]));
 
 const REQUIRED_FIELDS = Object.freeze([

@@ -26,6 +26,18 @@ test("server.js EVENT_TYPES copy accepts every client event", () => {
   }
 });
 
+test("19-diagnosis-line-lp inline events are accepted by the server.js Worker copy", () => {
+  // LP の inline script は app.js track() を経由せず本番 events backend へ直接送るため
+  // logic.js EVENT_TYPES には現れない。写しである server.js は実Worker同様に受理する。
+  const lpSource = readFileSync(fileURLToPath(new URL("../content/19-diagnosis-line-lp/index.html", import.meta.url)), "utf8");
+  const names = [...lpSource.matchAll(/\bsend\("([a-z_0-9]+)"/g)].map((m) => m[1]);
+  assert.ok(names.length >= 2, "d1 LP inline send() calls not found");
+  const serverTypes = extractEventSet(serverSource, "EVENT_TYPES");
+  for (const name of names) {
+    assert.ok(serverTypes.has(name), `server.js rejects ${name}`);
+  }
+});
+
 test("share-loop events use the plan §19 canonical names", () => {
   for (const name of [
     "shared_result_viewed",
