@@ -408,25 +408,52 @@ test("全配信ページの相対リンク (href/src) は解決先の実在資�
   // を各ページ位置から解決し、site内実在 (repo root基準) へ向かうことを検査する。
   // 外部URL・アンカー・scheme付き (mailto/data:) と inline script が組み立てる
   // 式断片 (引用符・連結を含む値) は対象外。
-  const tracked = execFileSync("git", ["ls-files", "-z"], { cwd: repoRoot, encoding: "utf8" })
-    .split("\0").filter((f) => f.endsWith(".html"));
+  //
+  // 実在判定はworktreeの実在 (existsSync) ではなくgit追跡path集合との文字列照合で
+  // 行う。公開treeは追跡対象から構成されるため追跡外ローカル文件 (build成果物等)
+  // へのリンクを実在扱いで通す面がなくなり、さらに大小文字違いのpathがhost FSの
+  // 大小文字非依存 (macOS等) で偽陽性になる面も排除される (GitHub Pagesは大小文字
+  // 区別で404になる)。末尾"/"付きのtargetはdir宛て、付きなしはfile許容のdirとして
+  // 追跡dir集合 (追跡fileの祖先) と照合する。
+  const lsFiles = execFileSync("git", ["ls-files", "-z"], { cwd: repoRoot, encoding: "utf8" })
+    .split("\0").filter(Boolean);
+  const tracked = lsFiles.filter((f) => f.endsWith(".html"));
   assert.ok(tracked.length >= 10, `追跡済みhtmlが過少 (${tracked.length}件) — テストの前提が崩れた`);
+  const trackedPaths = new Set(lsFiles);
+  const trackedDirs = new Set(["."]);
+  for (const f of lsFiles) {
+    for (let d = path.posix.dirname(f); d !== "."; d = path.posix.dirname(d)) trackedDirs.add(d);
+  }
   const broken = [];
+  const straySkips = [];
   let checked = 0;
   for (const rel of tracked) {
     const html = await readFile(path.join(repoRoot, rel), "utf8");
-    for (const [, ref] of html.matchAll(/(?:href|src)="([^"]+)"/g)) {
+    // 単一引用符属性にも対応 — 引用符styleの変更で検査対象が静かに消える偽陰性を防ぐ
+    for (const [, dq, sq] of html.matchAll(/(?:href|src)=(?:"([^"]+)"|'([^']+)')/g)) {
+      const ref = dq ?? sq;
       if (/^(?:https?:)?\/\//.test(ref) || /^[a-z][a-z0-9+.-]*:/i.test(ref) || ref.startsWith("#")) continue;
-      if (ref.includes("'") || ref.includes(" + ")) continue; // inline JSの式断片
+      if (ref.includes("'") || ref.includes(" + ")) {
+        // inline JSの式断片はskipするが、既知のtemplate形状 (' + ident + ') 以外の
+        // skipは検査の穴として即fail — skip判定の腐敗が静かにpassを作るのを防ぐ
+        if (!/^' \+ [A-Za-z_$][\w$]* \+ '$/.test(ref)) straySkips.push(`${rel}: ${ref}`);
+        continue;
+      }
       const target = ref.split("#")[0].split("?")[0];
       if (!target) continue;
+      const wantsDir = target.endsWith("/");
+      const base = target.replace(/\/+$/, "") || ".";
       checked += 1;
       const resolved = path.posix.normalize(
-        target.startsWith("/") ? target.slice(1) : path.posix.join(path.posix.dirname(rel), target)
+        base.startsWith("/") ? base.slice(1) : path.posix.join(path.posix.dirname(rel), base)
       );
-      if (!existsSync(path.join(repoRoot, resolved))) broken.push(`${rel}: ${ref} → ${resolved}`);
+      const reachable = wantsDir
+        ? trackedDirs.has(resolved)
+        : trackedPaths.has(resolved) || trackedDirs.has(resolved);
+      if (!reachable) broken.push(`${rel}: ${ref} → ${resolved}`);
     }
   }
+  assert.deepEqual(straySkips, [], `skip判定の想定外逸脱 (${straySkips.length}件) — inline JS断片以外が静かに検査から漏れている:\n${straySkips.join("\n")}`);
   // 抽出regexの腐敗 (0件一致で無意味にpassする偽陰性) の下限ガード。実在は103本。
   assert.ok(checked >= 80, `検査対象リンクが過少 (${checked}本) — 抽出の前提が崩れた`);
   assert.deepEqual(broken, [], `リンク切れ (${broken.length}本):\n${broken.join("\n")}`);
