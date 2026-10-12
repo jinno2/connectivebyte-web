@@ -187,6 +187,18 @@ test("LP #apply 申込formは /apply endpoint・同意checkbox・PII分離文言
   assert.equal(lp.includes("東京AIソリューションズ"), false);
 });
 
+test("両formのメール入力は server契約の254字上限 (maxlength) を備える", async () => {
+  // server.js validateSubscription/validateApplication (本番Workerの写し) は
+  // email > 254字を invalid_email (400) で拒否する。maxlengthが無い入力欄では
+  // 長すぎるアドレスが checkValidity を通って送信され、UIが「通信状況を確認…」と
+  // 誤った失敗理由を表示する (apply側はmaxlength済み・newsletter側のみ漏れ)。
+  const lp = await readFile(path.join(repoRoot, "index.html"), "utf8");
+  assert.match(lp, /id="apply-email" name="email" type="email"[^>]*maxlength="254"/,
+    "申込メール入力の maxlength=254 が無い");
+  assert.match(lp, /id="email" name="email" type="email"[^>]*maxlength="254"/,
+    "newsletterメール入力の maxlength=254 が無い");
+});
+
 // html文字列から id 属性値を実DOMのidとして抽出する (属性順・クォート形式に依存
 // しない)。data-asset-id 等 "id" を含む属性名の値を実idと誤認しないため、空白
 // (または文頭) に続く id 属性のみを数える — 部分一致を許すと参照先idが実DOMに
