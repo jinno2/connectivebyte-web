@@ -555,8 +555,10 @@ test("form入力欄はキーボードフォーカス表示を保持する (outli
   // 代替表示の実在 (下限ガード): .choice + 入力欄3セレクタの :focus-visible outline。
   const focusOutlines = [...css.matchAll(/:focus-visible[^{]*\{[^}]*outline:\s*\d/g)].length;
   assert.ok(focusOutlines >= 4, `:focus-visible outline規則が過少 (${focusOutlines}本) — 検査の前提が崩れた`);
-  // 入力欄3セレクタは個別に特定する — `.email-row input` は #apply-form 側に部分一致するため、
-  // 汎用regexのままでは片方の削除＋無関係ルール追加を黙認してしまう。
+  // 4本は個別に特定する — 集計下限だけでは「.choiceの削除＋別の新規ルールで数を
+  // 穴埋め」や `.email-row input` の #apply-form 側部分一致を黙認してしまう。
+  assert.match(css, /\.choice:focus-visible[^{}]*\{[^}]*outline:/,
+    ".choiceの :focus-visible 代替が無い");
   assert.match(css, /^\.email-row input:focus-visible \{[^}]*var\(--cyan\)/m,
     "newsletterメール入力の :focus-visible 代替が無い");
   assert.match(css, /#apply-form \.email-row input:focus-visible[^{]*\{[^}]*outline:/,
