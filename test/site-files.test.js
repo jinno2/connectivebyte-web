@@ -541,6 +541,32 @@ test("全配信ページの相対リンク (href/src) は解決先の実在資�
   assert.deepEqual(broken, [], `リンク切れ (${broken.length}本):\n${broken.join("\n")}`);
 });
 
+test("form入力欄はキーボードフォーカス表示を保持する (outline無効化の禁止と :focus-visible 代替の実在)", async () => {
+  // newsletter/apply両formのメール入力と #apply-note が outline:none で既定の
+  // フォーカスringを消しており、キーボード利用者に入力欄のフォーカス位置が
+  // 見えない実測 (WCAG 2.4.7 Focus Visible) への回帰防止。ボタン類
+  // (.button-primary/.choice) は当初から :focus-visible を備える一方で入力欄だけ
+  // 漏れていた。outline無効化は :focus-visible 代替とセットでのみ許容 —
+  // 現行では input/textarea からの outline 無効化は全廃済み。将来正当な需要が
+  // できた場合は代替表示と一緒に本ガードを見直すこと。
+  const css = await readFile(path.join(repoRoot, "styles.css"), "utf8");
+  assert.doesNotMatch(css, /outline:\s*(?:none|0(?:px)?)\b/,
+    "styles.css に outline無効化 (none/0) が復活 — フォーカス表示を消す場合は :focus-visible 代替とセットにし本ガードを見直すこと");
+  // 代替表示の実在 (下限ガード): .choice + 入力欄3セレクタの :focus-visible outline。
+  const focusOutlines = [...css.matchAll(/:focus-visible[^{]*\{[^}]*outline:\s*\d/g)].length;
+  assert.ok(focusOutlines >= 4, `:focus-visible outline規則が過少 (${focusOutlines}本) — 検査の前提が崩れた`);
+  // 4本は個別に特定する — 集計下限だけでは「.choiceの削除＋別の新規ルールで数を
+  // 穴埋め」や `.email-row input` の #apply-form 側部分一致を黙認してしまう。
+  assert.match(css, /\.choice:focus-visible[^{}]*\{[^}]*outline:/,
+    ".choiceの :focus-visible 代替が無い");
+  assert.match(css, /^\.email-row input:focus-visible \{[^}]*var\(--cyan\)/m,
+    "newsletterメール入力の :focus-visible 代替が無い");
+  assert.match(css, /#apply-form \.email-row input:focus-visible[^{]*\{[^}]*outline:/,
+    "申込メール入力の :focus-visible 代替が無い");
+  assert.match(css, /#apply-note:focus-visible[^{]*\{[^}]*outline:/,
+    "申込noteの :focus-visible 代替が無い");
+});
+
 test("Pages は同じjobでテストと配信木検査に合格してから公開する", async () => {
   const workflow = await readFile(path.join(repoRoot, ".github/workflows/deploy_pages.yml"), "utf8");
   const steps = ["run: npm test", "name: Prepare publish tree", "PUBLICATION_ROOT: _site",
