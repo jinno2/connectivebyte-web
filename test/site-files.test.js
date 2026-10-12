@@ -170,6 +170,103 @@ test("app.js が querySelector で参照する全 id は index.html の実DOMに
   assert.deepEqual(missing, [], `app.js が参照するidが index.html の実DOMに無い: ${missing.join(", ")}`);
 });
 
+// 1頁分のHTMLから「inline scriptが参照するidのうち、静的DOMに存在しないもの」を
+// 突き出す (次testの走査本体。実頁の検査と合成fixtureによる規則の単位検査を同じ
+// 規則に乗せるため関数に切った — inboundTarget と同じ構成)。
+// 規則: 参照はinline script本文の getElementById/#id (src付き外部script本文は
+// 対象外)。DOM側のidはinline script本文を除いて数え (script内の view.id = "..." を
+// 実DOMのidと誤認しない)、空白 (または文頭) に続く id 属性のみを数える —
+// data-id 等 "id" を含む属性名に部分一致すると静的id欠落の偽陰性になる。
+// script後段のid移転 (02-history: pre.removeAttribute→view.id) でも先頭lookupは
+// 静的DOMを探すため、最初の.id付与が最初の参照より前のidのみ動的idとして静的
+// 実在要求から除外する (生成後に参照するid・app.jsのfeedback-note型は対象外) —
+// 実行順を静的近似した規則。
+function inlineScriptIdAudit(html) {
+  // src付き外部scriptは対象外。頁内の全inline script本文を連結して抽出する
+  const scripts = [...html.matchAll(/<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/g)]
+    .map((m) => m[1]).join("\n");
+  const refs = new Map(); // id -> 最初の参照位置
+  for (const m of scripts.matchAll(/getElementById\(\s*["']([\w-]+)["']\s*\)/g)) {
+    if (!refs.has(m[1])) refs.set(m[1], m.index);
+  }
+  // selectorは引用符の種類を問わず本文全体を取り、属性selector [..] 内の # は
+  // id参照ではないため除いてから数える (引用符混在で抽出自体が落ちないように)
+  for (const m of scripts.matchAll(/querySelector(?:All)?\(\s*(["'])(.*?)\1\s*\)/g)) {
+    for (const idm of m[2].replace(/\[[^\]]*\]/g, "").matchAll(/#([\w-]+)/g)) {
+      if (!refs.has(idm[1])) refs.set(idm[1], m.index);
+    }
+  }
+  const dynamicIds = new Map(); // id -> 最初の .id 付与位置
+  for (const m of scripts.matchAll(/\.id\s*=\s*["']([\w-]+)["']/g)) {
+    if (!dynamicIds.has(m[1])) dynamicIds.set(m[1], m.index);
+  }
+  const htmlNoScript = html.replace(/<script(?![^>]*\bsrc=)[^>]*>[\s\S]*?<\/script>/g, "");
+  const htmlIds = new Set([...htmlNoScript.matchAll(/(?:^|\s)id\s*=\s*["']([\w-]+)["']/g)].map((m) => m[1]));
+  const missing = [...refs].filter(([id, refPos]) =>
+    !htmlIds.has(id) && !(dynamicIds.get(id) !== undefined && dynamicIds.get(id) < refPos))
+    .map(([id]) => id);
+  return { hasRefs: refs.size > 0, missing };
+}
+
+test("各頁のinline scriptが参照するidはその頁の実DOMに存在する", async () => {
+  // level_table_read_100 未発火事故 (4d1dcae) と同じ失敗modeの頁内版: 各頁の
+  // inline scriptは自身のDOMへ getElementById/#id で配線し、idが無くても例外ではなく
+  // 沈黙の早期returnに落ちる (asset-bodyのrich render等)。上のapp.js↔index.html
+  // ガードはLPのみのため、追跡済み全HTMLのinline script参照へ同一規律を拡張する
+  // (02-history の asset-body は hash検査の対象list外で、id欠落しても既存testが
+  // 緑のまま沈黙劣化する)。将来の頁追加も自動で対象化。
+  // 抽出本体は inlineScriptIdAudit (直上) — 規則の単位検査は下の2testが担う。
+  const tracked = execFileSync("git", ["ls-files", "-z"], { cwd: repoRoot, encoding: "utf8" })
+    .split("\0").filter((f) => f.endsWith(".html"));
+  assert.ok(tracked.length > 0, "追跡済みhtmlが無い (テストの前提が崩れた)");
+  const pagesWithRefs = new Set();
+  for (const rel of tracked) {
+    const html = await readFile(path.join(repoRoot, rel), "utf8");
+    const { hasRefs, missing } = inlineScriptIdAudit(html);
+    if (hasRefs) pagesWithRefs.add(rel);
+    assert.deepEqual(missing, [], `${rel}: inline scriptが参照するidが頁DOMに無い: ${missing.join(", ")}`);
+  }
+  // 抽出regexの腐敗 (0件一致で無意味にpassする偽陰性) のガード。このガードを
+  // 生んだ実2頁 (02-history: hash検査対象外のasset-body沈黙劣化, 01-tracker-page:
+  // 第2のinline送信側) が常に抽出対象にいることを頁名で固定する。頁数の下限だと
+  // 頁削除・縮退時に「抽出が過少」という誤解を招くため、対象頁で示す。
+  for (const known of ["content/01-tracker-page/index.html", "content/02-history/index.html"]) {
+    assert.ok(pagesWithRefs.has(known),
+      `${known} からid参照が抽出できなくなった — 抽出regexの腐敗、または頁の削除・改名 (ガード対象を見直すこと)`);
+  }
+});
+
+test("inline id監査の規則: 静的欠落・data-id偽装・後段id移転を検出する", () => {
+  // 実装stageの検証で実証された偽陰性 (data-id="..." が \bid= に部分一致し、静的
+  // id欠落を見逃す) を含む規則を合成fixtureで固定する。実頁のmutation検証と
+  // 同一の失敗modeをここで再現する。
+  const page = (dom, script) => `<html><body>${dom}<script>${script}</script></body></html>`;
+  // 参照idが頁DOMに無い → 検出
+  assert.deepEqual(inlineScriptIdAudit(page("", 'document.getElementById("box");')).missing, ["box"]);
+  // data-id は id を満たさない (属性名部分一致による偽陰性の回帰固定)
+  assert.deepEqual(
+    inlineScriptIdAudit(page('<div data-id="box"></div>', 'document.getElementById("box");')).missing,
+    ["box"]);
+  // 静的に在れば検出しない
+  assert.deepEqual(inlineScriptIdAudit(page('<div id="box"></div>', 'document.getElementById("box");')).missing, []);
+  // 後段id移転 (02-history型): 先頭lookupが最初の.id付与より前なら静的idを要求
+  assert.deepEqual(inlineScriptIdAudit(page(
+    "", 'var pre = document.getElementById("asset-body"); pre.removeAttribute("id"); view.id = "asset-body";'
+  )).missing, ["asset-body"]);
+});
+
+test("inline id監査の規則: 前段動的id・外部script本文・属性selector内の#は要求しない", () => {
+  const page = (dom, script) => `<html><body>${dom}<script>${script}</script></body></html>`;
+  // .id付与が最初の参照より前のidは動的id — 静的実在を要求しない
+  assert.deepEqual(inlineScriptIdAudit(page("", 'el.id = "gen"; document.getElementById("gen");')).missing, []);
+  // src付きscriptの本文は参照抽出の対象外 (その頁のinline scriptだけが本ガードの対象)
+  const external = `<html><body><script src="x.js">document.getElementById("nope");</script></body></html>`;
+  assert.deepEqual(inlineScriptIdAudit(external), { hasRefs: false, missing: [] });
+  // 属性selector [data-h="#x"] 内の # はid参照ではなく、同selector中の実id参照は数える
+  const mixed = page("", `document.querySelector('[data-h="#x"] #real');`);
+  assert.deepEqual(inlineScriptIdAudit(mixed).missing, ["real"]);
+});
+
 test("17-org-pdf 完成PDF artifactは存在しLP・原稿page両面から配線される", async () => {
   // 2026-09-10 残課題#4 (r4 F8): 記入式様式の完成PDF不在を閉じる。生成源は
   // scripts/build-org-pdf.mjs・commit対象は生成済みPDF。app.js内組み立てPDF
