@@ -379,6 +379,23 @@ test("クロスオリジンからのPOSTは403で拒否する", async () => {
   }
 });
 
+test("クロスオリジンからの /api/subscribe・/api/apply へのPOSTも403で拒否する", async () => {
+  const ctx = await startServer();
+  try {
+    for (const path of ["/api/subscribe", "/api/apply"]) {
+      const res = await fetch(`${ctx.base}${path}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Origin: "https://evil.example.com" },
+        body: JSON.stringify({ email: "org@example.com", consent: true })
+      });
+      assert.equal(res.status, 403, path);
+      assert.equal((await res.json()).error, "cross_origin_denied", path);
+    }
+  } finally {
+    await ctx.cleanup();
+  }
+});
+
 test("manual_collaboration_candidate型を受け付ける", async () => {
   const ctx = await startServer();
   try {

@@ -332,6 +332,16 @@ export function createRequestHandler(options = {}) {
 
     // POST /api/apply — 実施支援 申込 (local dev用の検証のみ写し。保存はしない)。
     if (pathname === "/api/apply" && request.method === "POST") {
+      const origin = request.headers.origin;
+      if (typeof origin === "string" && origin.length > 0) {
+        const requested = new URL(origin);
+        const expectedHost = request.headers.host ?? "";
+        if (requested.host !== expectedHost) {
+          sendJson(response, 403, { error: "cross_origin_denied" });
+          return;
+        }
+        response.setHeader("Access-Control-Allow-Origin", origin);
+      }
       const raw = await readBody(request);
       if (raw === null) {
         sendJson(response, 413, { error: "body_too_large" });
