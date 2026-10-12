@@ -202,7 +202,10 @@ test("app.js が querySelector で参照する全 id は index.html の実DOMに
     for (const [, id] of selector.matchAll(/#([\w-]+)/g)) queriedIds.add(id);
   }
   const dynamicIds = new Set([...app.matchAll(/\.id\s*=\s*["']([\w-]+)["']/g)].map((m) => m[1]));
-  const htmlIds = new Set([...lp.matchAll(/\bid\s*=\s*["']([\w-]+)["']/g)].map((m) => m[1]));
+  // data-asset-id 等 "id" を含む属性名の値を実idと誤認しない (誤認すると参照先idが
+  // 実DOMに無くても過大受容で静かにpassする) — 空白/文頭続きのid属性のみ数える。
+  // inline id監査 (下) と同一の抽出規則。
+  const htmlIds = new Set([...lp.matchAll(/(?:^|\s)id\s*=\s*["']([\w-]+)["']/g)].map((m) => m[1]));
   // 抽出regexの腐敗 (0件一致で無意味にpassする偽陰性) のガード。実在は55id。
   assert.ok(queriedIds.size >= 50, `app.js のid参照の抽出が過少: ${queriedIds.size}件`);
   const missing = [...queriedIds].filter((id) => !dynamicIds.has(id) && !htmlIds.has(id));
