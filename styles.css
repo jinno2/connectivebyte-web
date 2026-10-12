@@ -105,6 +105,8 @@ em { color: #318f89; font-style: normal; }
 #apply-form .email-row input { min-width: 0; flex: 1; padding: 15px 0; color: var(--ink); background: transparent; border: 0; outline: none; }
 #apply-form .email-row button { border: 0; padding: 0 18px; background: var(--ink); color: var(--lime); cursor: pointer; font-weight: 800; }
 #apply-note { width: 100%; box-sizing: border-box; padding: 12px 0; font: inherit; color: var(--ink); background: transparent; border: 0; border-bottom: 1px solid #9aa5b1; outline: none; resize: vertical; }
+/* outline:noneの枠なし入力欄はfocus可視を自前で用意する (currentColor=dark面では白・light面ではink) */
+.email-row input:focus-visible, #apply-form .email-row input:focus-visible, #apply-note:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
 .apply-context { margin: 18px 0 0; font-size: .78rem; color: #5b6673; }
 #apply-form .check { color: #5b6673; }
 #apply-form .form-status { color: #5b6673; }

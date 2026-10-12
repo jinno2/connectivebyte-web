@@ -1,0 +1,23 @@
+# CI gate は Woodpecker (self-hosted) で実行する。
+# owner原則 ci-runner-selection: owner管理CIの github-hosted ランナーは禁止
+# (Pages への静的配信 workflow のみ例外)。
+when:
+  - event: [pull_request, manual]
+  - event: push
+    branch: master
+clone:
+  - name: git
+    image: woodpeckerci/plugin-git
+    settings:
+      partial: false
+      depth: 0
+      fetch-target-branch: true
+labels:
+  platform: linux/amd64
+steps:
+  - name: test
+    image: node:22
+    pull: true
+    commands:
+      - apt-get update && apt-get install -y --no-install-recommends poppler-utils qpdf
+      - npm test

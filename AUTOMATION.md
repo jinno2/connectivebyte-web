@@ -4,11 +4,11 @@
 
 ## Driver（発火方式）
 
-GitHub Actionsによるイベント駆動。開発確認はローカルCLI。運用中の外部サービスの設定や秘密はこの公開リポへ記載しない。
+イベント駆動。テストgateはWoodpecker (self-hosted)、Pages配信だけGitHub Actions (platform-managed deploy)。開発確認はローカルCLI。運用中の外部サービスの設定や秘密はこの公開リポへ記載しない。
 
 ## Schedule（駆動間隔）
 
-[CI](.github/workflows/ci.yml)はpush/PR。[Pages](.github/workflows/deploy_pages.yml)はmaster pushとworkflow_dispatch。正確な条件はworkflowを参照する。
+[CI](.woodpecker.yml)はpush(master)/PR。[Pages](.github/workflows/deploy_pages.yml)はmaster pushとworkflow_dispatch。正確な条件はworkflowを参照する。
 
 ### ローカルcrontab（実測 2026-09-15）
 
@@ -45,4 +45,4 @@ Pages jobは同じcheckoutの`npm test`と、組立後の`_site/`の公開検査
 
 コミットする全文が公開対象。非公開の定義・運用情報・個人情報を記録しない。公開条件の正本は[AGENTS.md](AGENTS.md)。
 
-_最終更新: 2026-09-15 ／ driver・workflow・委譲先変更時は本ファイルと入口の参照を更新すること。_
+_最終更新: 2026-10-11 ／ driver・workflow・委譲先変更時は本ファイルと入口の参照を更新すること。_
