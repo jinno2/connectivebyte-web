@@ -53,7 +53,7 @@ core投稿のIn-Network到達圏 (P(action)の分母) を広げる。_account=AI
 
 ## 他リポ連携
 
-- 素材源 v0 = HN (Algolia・keyless) + GitHub search (keyless) + Reddit (best-effort)
+- 素材源 v0 = HN (Algolia・keyless) + GitHub search (keyless)
 - 以降 = defuddle providers (GITHUB_TOKEN/QIITA_TOKEN規律・docs/providers.md)・RSS
 - 起草 = litellm proxy (LITELLM_API_KEY環境変数のみ・keyは指紋以外記録しない)
 - 投稿 = site_meiro-a/scripts/x-fleet-post.pyのパターン流用 (CB垢作成後にconfig+state+cron)
