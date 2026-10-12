@@ -40,13 +40,13 @@ function element(dataset = {}) {
   };
 }
 
-function setup({ path = "/", search = "", storage, elements = {}, fetchImpl } = {}) {
+function setup({ path = "/", search = "", storage, elements = {}, selectors = {}, fetchImpl } = {}) {
   const windowListeners = new Map();
   const documentListeners = new Map();
   const map = new Map(Object.entries(elements));
   const document = {
     querySelector(selector) { return map.get(selector) ?? null; },
-    querySelectorAll() { return []; },
+    querySelectorAll(selector) { return selectors[selector] ?? []; },
     createElement() { return element(); },
     createTextNode(text) { return { textContent: text }; },
     addEventListener(type, callback) { documentListeners.set(type, callback); },
@@ -431,4 +431,59 @@ test("同意拒否はconsent保存失敗でも待機イベントを破棄し、�
   app.saveConsent(true);
   await new Promise((resolve) => setImmediate(resolve));
   assert.ok(calls.flat().every((event) => event.cta_id !== "probe_1"), "再同意後に拒否前のイベントを送らない");
+});
+
+test("未回答のまま診断を完了しない — 結果表示・保存・送信せず状態表示する", async () => {
+  const storage = new FakeStorage();
+  const elements = {
+    "#diagnostic-output": element(),
+    "#diagnostic-level": element(),
+    "#diagnostic-status": element()
+  };
+  elements["#diagnostic-output"].hidden = true;
+  const { documentListeners } = setup({ storage, elements });
+  const app = await loadApp("diagnosis-incomplete");
+  const clickTarget = {
+    closest: (selector) => selector === "[data-action]"
+      ? { dataset: { action: "submit-diagnosis" } }
+      : null
+  };
+  documentListeners.get("click")({ target: clickTarget });
+  assert.equal(elements["#diagnostic-output"].hidden, true, "未回答では結果を表示しない");
+  assert.equal(app.readJson("diagnosis_result", null), null, "未回答では判定を保存しない");
+  assert.equal(app.readJson("progress", {}).diagnostic_completed, undefined, "未回答では完了進捗を記録しない");
+  assert.match(elements["#diagnostic-status"].textContent, /未回答/);
+});
+
+test("全問回答済みの診断は従来どおり完了し、状態表示は空に戻る", async () => {
+  const storage = new FakeStorage();
+  const elements = {
+    "#diagnostic-output": element(),
+    "#diagnostic-level": element(),
+    "#diagnostic-actions": element(),
+    "#diagnostic-comparison-link": element(),
+    "#diagnostic-status": element()
+  };
+  const radios = [
+    { dataset: { questionId: "Q0" }, value: "はい" },
+    { dataset: { questionId: "Q1" }, value: "いいえ／わからない" },
+    { dataset: { questionId: "Q2" }, value: "いいえ／わからない" }
+  ];
+  const { documentListeners } = setup({
+    storage,
+    elements,
+    selectors: { "#diagnostic-questions input[type=radio]:checked": radios }
+  });
+  const app = await loadApp("diagnosis-complete");
+  const clickTarget = {
+    closest: (selector) => selector === "[data-action]"
+      ? { dataset: { action: "submit-diagnosis" } }
+      : null
+  };
+  documentListeners.get("click")({ target: clickTarget });
+  assert.equal(elements["#diagnostic-output"].hidden, false, "結果を表示する");
+  assert.equal(elements["#diagnostic-level"].textContent, "AIで試す・扱う段階");
+  assert.equal(elements["#diagnostic-comparison-link"].hidden, false);
+  assert.equal(elements["#diagnostic-status"].textContent, "", "完了時は状態表示を空にする");
+  assert.equal(app.readJson("diagnosis_result", null)?.current_phase, 2);
 });
