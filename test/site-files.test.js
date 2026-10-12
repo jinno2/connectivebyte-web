@@ -6,6 +6,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+import { INTERESTS, getInterestRoute } from "../logic.js";
 import { existsSync, readdirSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
@@ -206,6 +207,21 @@ test("app.js が querySelector で参照する全 id は index.html の実DOMに
   assert.ok(queriedIds.size >= 50, `app.js のid参照の抽出が過少: ${queriedIds.size}件`);
   const missing = [...queriedIds].filter((id) => !dynamicIds.has(id) && !htmlIds.has(id));
   assert.deepEqual(missing, [], `app.js が参照するidが index.html の実DOMに無い: ${missing.join(", ")}`);
+});
+
+test("診断5択の飛び先 (logic.js ROUTES target) は LP の実DOMに存在する (実行時リンク切れの検知)", async () => {
+  // #result-link の href は app.js が実行時に `#${route.target}` へ差し替えるため、
+  // 静的リンク検査 (#先頭は対象外) も querySelector のid監査 (querySelector内の#のみ)
+  // もこの対応を見ない。logic.js 側のtarget改名・LP側のsection改名のどちらでも
+  // 「次へ進む」が例外ではなく沈黙のリンク切れになる — 診断→案内の主導線を機械検査する。
+  // data-asset-id 等 "id" を含む属性名を誤認しないよう空白/文頭続きのid属性のみ数える。
+  const lp = await readFile(path.join(repoRoot, "index.html"), "utf8");
+  const htmlIds = new Set([...lp.matchAll(/(?:^|\s)id\s*=\s*["']([\w-]+)["']/g)].map((m) => m[1]));
+  assert.ok(htmlIds.size >= 40, `LPのid抽出が過少 (${htmlIds.size}件) — 抽出regexの前提が崩れた`);
+  const missing = INTERESTS.map(getInterestRoute)
+    .map((route) => route.target)
+    .filter((target) => !htmlIds.has(target));
+  assert.deepEqual(missing, [], `診断の飛び先がLPの実DOMに無い: ${missing.join(", ")}`);
 });
 
 // 1頁分のHTMLから「inline scriptが参照するidのうち、静的DOMに存在しないもの」を
