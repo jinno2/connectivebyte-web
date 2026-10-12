@@ -895,6 +895,17 @@ function initializeReadingEvents() {
   }
 }
 
+// CTA「比較テンプレートを開く」(#comparisonアンカー経由) も着地時にworkflowを開く —
+// 「開く」と約束した導線を2クリックにしない。カード内ボタン (open-comparison) と
+// 同じ挙動・同じ計測イベントにする。
+function openComparisonWorkflow() {
+  const workflow = document.querySelector("#comparison-workflow");
+  if (!workflow) return;
+  workflow.hidden = false;
+  document.querySelector("#comparison-theme")?.focus();
+  track("comparison_template_viewed", { asset_id: "comparison_template", cta_id: "comparison_open" });
+}
+
 document.addEventListener("click", (event) => {
   const interestButton = event.target.closest("[data-interest]");
   if (interestButton) selectInterest(interestButton.dataset.interest);
@@ -909,12 +920,8 @@ document.addEventListener("click", (event) => {
   }
 
   const action = event.target.closest("[data-action]")?.dataset.action;
-  if (action === "open-comparison") {
-    const workflow = document.querySelector("#comparison-workflow");
-    workflow.hidden = false;
-    document.querySelector("#comparison-theme").focus();
-    track("comparison_template_viewed", { asset_id: "comparison_template", cta_id: "comparison_open" });
-  }
+  if (action === "open-comparison") openComparisonWorkflow();
+  if (!action && event.target.closest('a[href="#comparison"]')) openComparisonWorkflow();
   if (action === "complete-comparison") {
     const theme = document.querySelector("#comparison-theme").value.trim();
     const next = document.querySelector("#comparison-next").value.trim();
