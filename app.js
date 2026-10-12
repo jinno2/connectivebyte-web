@@ -519,6 +519,14 @@ function submitDiagnosis() {
   const declared = readJson("declared_interest", null);
   const questions = activeQuestions();
   const checked = document.querySelectorAll("#diagnostic-questions input[type=radio]:checked");
+  const status = document.querySelector("#diagnostic-status");
+  // 未回答は run_diagnosis で「いいえ」扱いになる — 沈黙の完了表示をせず、
+  // 全問回答を促してから判定する (不明な結果を成功表示しない)。
+  if (checked.length < questions.length) {
+    if (status) status.textContent = "未回答の質問があります。すべての質問に答えを選んでください。";
+    return;
+  }
+  if (status) status.textContent = "";
   const behaviors = Array.from(checked).map((radio) => ({
     id: radio.dataset.questionId,
     answer: radio.value

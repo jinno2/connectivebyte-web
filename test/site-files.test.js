@@ -6,6 +6,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+import { INTERESTS, getInterestRoute } from "../logic.js";
 import { existsSync, readdirSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
@@ -186,6 +187,25 @@ test("LP #apply 申込formは /apply endpoint・同意checkbox・PII分離文言
   assert.equal(lp.includes("東京AIソリューションズ"), false);
 });
 
+// html文字列から id 属性値を実DOMのidとして抽出する (属性順・クォート形式に依存
+// しない)。data-asset-id 等 "id" を含む属性名の値を実idと誤認しないため、空白
+// (または文頭) に続く id 属性のみを数える — 部分一致を許すと参照先idが実DOMに
+// 無くても過大受容で静かにpassする穴になる。app.js↔index.html監査・診断飛び先
+// 検査・inline id監査の3者で同一規則を共有する。
+function collectHtmlIds(html) {
+  return new Set([...html.matchAll(/(?:^|\s)id\s*=\s*["']([\w-]+)["']/g)].map((m) => m[1]));
+}
+
+// 診断5択の飛び先 (logic.js ROUTES target) のうち html の実DOMに存在しないものを
+// 突き出す (実頁の検査と合成fixtureによる規則の単位検査を同じ規則に乗せるため
+// 関数に切った — inlineScriptIdAudit と同じ構成)。
+function missingRouteTargets(html) {
+  const htmlIds = collectHtmlIds(html);
+  return INTERESTS.map(getInterestRoute)
+    .map((route) => route.target)
+    .filter((target) => !htmlIds.has(target));
+}
+
 test("app.js が querySelector で参照する全 id は index.html の実DOMに存在する (モックと実物の配線乖離の検知)", async () => {
   // level_table_read_100 のIntersectionObserverは実HTMLのidを検索する。実DOMに
   // idが無いとモックDOMにidを注入するテストだけ通って本番で発火しないため、
@@ -201,11 +221,46 @@ test("app.js が querySelector で参照する全 id は index.html の実DOMに
     for (const [, id] of selector.matchAll(/#([\w-]+)/g)) queriedIds.add(id);
   }
   const dynamicIds = new Set([...app.matchAll(/\.id\s*=\s*["']([\w-]+)["']/g)].map((m) => m[1]));
-  const htmlIds = new Set([...lp.matchAll(/\bid\s*=\s*["']([\w-]+)["']/g)].map((m) => m[1]));
+  const htmlIds = collectHtmlIds(lp);
   // 抽出regexの腐敗 (0件一致で無意味にpassする偽陰性) のガード。実在は55id。
   assert.ok(queriedIds.size >= 50, `app.js のid参照の抽出が過少: ${queriedIds.size}件`);
   const missing = [...queriedIds].filter((id) => !dynamicIds.has(id) && !htmlIds.has(id));
   assert.deepEqual(missing, [], `app.js が参照するidが index.html の実DOMに無い: ${missing.join(", ")}`);
+});
+
+test("診断5択の飛び先 (logic.js ROUTES target) は LP の実DOMに存在する (実行時リンク切れの検知)", async () => {
+  // #result-link の href は app.js が実行時に `#${route.target}` へ差し替えるため、
+  // 静的リンク検査 (#先頭は対象外) も querySelector のid監査 (querySelector内の#のみ)
+  // もこの対応を見ない。logic.js 側のtarget改名・LP側のsection改名のどちらでも
+  // 「次へ進む」が例外ではなく沈黙のリンク切れになる — 診断→案内の主導線を機械検査する。
+  // 抽出本体は missingRouteTargets (直上) — 規則の単位検査は次testが担う。
+  const lp = await readFile(path.join(repoRoot, "index.html"), "utf8");
+  // 抽出regexの腐敗 (0件一致で無意味にpassする偽陰性) のガード。実在は69id。
+  const htmlIds = collectHtmlIds(lp);
+  assert.ok(htmlIds.size >= 40, `LPのid抽出が過少 (${htmlIds.size}件) — 抽出regexの前提が崩れた`);
+  const missing = missingRouteTargets(lp);
+  assert.deepEqual(missing, [], `診断の飛び先がLPの実DOMに無い: ${missing.join(", ")}`);
+});
+
+test("診断飛び先検査の規則: 飛び先idの消失を検出し、data-asset-idの値を飛び先と認めない", async () => {
+  // 実在の1飛び先を実LP htmlから削った変異で「実際に落ちること」を固定する
+  // (規則の単位検査 — inline id監査の規則testと同じ構成)。data-asset-id 等の値が
+  // id抽出に混入する規則へ退化すると、飛び先の実DOM消失を過大受容で見逃す。
+  const lp = await readFile(path.join(repoRoot, "index.html"), "utf8");
+  const target = INTERESTS.map(getInterestRoute).map((route) => route.target)[0];
+  const idAttr = new RegExp(`(?:^|\\s)id\\s*=\\s*["']${target}["']`);
+  assert.match(lp, idAttr, `前提崩れ: 飛び先 ${target} が実LPに存在しない`);
+  // 飛び先idを実DOMから削ると検出される (沈黙リンク切れの再現)
+  const mutated = lp.replace(idAttr, (m) => m.match(/^\s*/)[0]);
+  assert.deepEqual(missingRouteTargets(mutated), [target],
+    "飛び先idの実DOM消失を検出できていない — 検査の規則が崩れた");
+  // data-asset-id の値は実DOM idではない — 誤認すると消失を見逃す
+  assert.deepEqual(missingRouteTargets(`${mutated}<div data-asset-id="${target}"></div>`), [target],
+    "data-asset-idの値が飛び先として過大受容されている — 抽出規則が崩れた");
+  // 飛び先が全て実DOMに在れば検出しない (誤検出の回帰固定)
+  const minimal = `<html><body>${INTERESTS.map(getInterestRoute)
+    .map((route) => `<section id="${route.target}"></section>`).join("")}</body></html>`;
+  assert.deepEqual(missingRouteTargets(minimal), []);
 });
 
 // 1頁分のHTMLから「inline scriptが参照するidのうち、静的DOMに存在しないもの」を
@@ -213,8 +268,7 @@ test("app.js が querySelector で参照する全 id は index.html の実DOMに
 // 規則に乗せるため関数に切った — inboundTarget と同じ構成)。
 // 規則: 参照はinline script本文の getElementById/#id (src付き外部script本文は
 // 対象外)。DOM側のidはinline script本文を除いて数え (script内の view.id = "..." を
-// 実DOMのidと誤認しない)、空白 (または文頭) に続く id 属性のみを数える —
-// data-id 等 "id" を含む属性名に部分一致すると静的id欠落の偽陰性になる。
+// 実DOMのidと誤認しない)、id抽出は collectHtmlIds の共通規則に寄せる。
 // script後段のid移転 (02-history: pre.removeAttribute→view.id) でも先頭lookupは
 // 静的DOMを探すため、最初の.id付与が最初の参照より前のidのみ動的idとして静的
 // 実在要求から除外する (生成後に参照するid・app.jsのfeedback-note型は対象外) —
@@ -239,7 +293,7 @@ function inlineScriptIdAudit(html) {
     if (!dynamicIds.has(m[1])) dynamicIds.set(m[1], m.index);
   }
   const htmlNoScript = html.replace(/<script(?![^>]*\bsrc=)[^>]*>[\s\S]*?<\/script>/g, "");
-  const htmlIds = new Set([...htmlNoScript.matchAll(/(?:^|\s)id\s*=\s*["']([\w-]+)["']/g)].map((m) => m[1]));
+  const htmlIds = collectHtmlIds(htmlNoScript);
   const missing = [...refs].filter(([id, refPos]) =>
     !htmlIds.has(id) && !(dynamicIds.get(id) !== undefined && dynamicIds.get(id) < refPos))
     .map(([id]) => id);
