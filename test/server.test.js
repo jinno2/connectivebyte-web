@@ -223,6 +223,27 @@ test("ネストした存在しないパスも404.htmlをサイト体裁で応答
   }
 });
 
+test("不正なパーセントエンコーディングのURLは404で応答し、サーバーは落ちない", async () => {
+  // %zz等はdecodeURIComponentがURIErrorになる — 未処理のままではdev serverプロセス
+  // が落ちる (2026-10-13実測)。Pages同等の404へ落とし、その後も同一プロセスで
+  // 正常配信が続くことを連続リクエストで機械検査する。
+  const ctx = await startServer();
+  try {
+    for (const path of ["/%zz", "/deep/%E0%A4%A", "/%E4%BD%95%zz"]) {
+      const res = await fetch(`${ctx.base}${path}`);
+      assert.equal(res.status, 404, path);
+      assert.equal(res.headers.get("content-type"), "text/html; charset=utf-8", path);
+      const body = await res.text();
+      assert.match(body, /<html lang="ja">/, path);
+    }
+    const res = await fetch(`${ctx.base}/index.html`);
+    assert.equal(res.status, 200);
+    assert.match(await res.text(), /ConnectiveByte/);
+  } finally {
+    await ctx.cleanup();
+  }
+});
+
 test("404.htmlが無い環境では平文のNot foundへフォールバックする", async () => {
   const bareRoot = await mkdtemp(join(tmpdir(), "cb-root-"));
   const ctx = await startServer({ root: bareRoot });
