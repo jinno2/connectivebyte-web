@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import datetime as dt
 import json
+import os
 import pathlib
 import shutil
 import sys
@@ -62,6 +63,16 @@ def row(**kw) -> dict:
 
 class GateTest(unittest.TestCase):
     def setUp(self):
+        # 構造保証: PERSONA_YAMLを実在しないpathへ向ける — persona_linesの
+        # patch漏れがあると実yaml読みが即FileNotFoundErrorで赤になる
+        # (2026-10-12のcollect側patch漏れと同種の回帰を、姉妹repoを
+        # 持つhostでも検知できるよう恒久化。restored per-test)
+        _old = os.environ.get('PERSONA_YAML')
+        os.environ['PERSONA_YAML'] = str(HERE / 'nonexistent-persona-guard.yaml')
+        if _old is None:
+            self.addCleanup(os.environ.pop, 'PERSONA_YAML', None)
+        else:
+            self.addCleanup(os.environ.__setitem__, 'PERSONA_YAML', _old)
         tmpmgr = tempfile.TemporaryDirectory()
         self.addCleanup(tmpmgr.cleanup)  # tmpdirも自分で掃除
         self.q = pathlib.Path(tmpmgr.name) / 'q.jsonl'
