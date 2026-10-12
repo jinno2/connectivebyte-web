@@ -91,7 +91,8 @@ em { color: #318f89; font-style: normal; }
 .newsletter-note { margin: 22px 0 0; max-width: 34em; font-size: .92rem; line-height: 1.9; color: #c8d2dd; }
 #newsletter-form { max-width: 540px; }
 .email-row { display: flex; border-bottom: 1px solid #82909f; }
-.email-row input { min-width: 0; flex: 1; padding: 15px 0; color: var(--white); background: transparent; border: 0; outline: none; }
+.email-row input { min-width: 0; flex: 1; padding: 15px 0; color: var(--white); background: transparent; border: 0; }
+.email-row input:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
 .email-row button { border: 0; padding: 0 18px; background: var(--lime); cursor: pointer; font-weight: 800; }
 .check { display: flex; gap: 9px; margin-top: 18px; color: #b7c0ca; font-size: .74rem; }
 .check input { flex: 0 0 auto; margin-top: 5px; }
@@ -102,9 +103,11 @@ em { color: #318f89; font-style: normal; }
 #apply-form { max-width: 540px; }
 #apply-form label[for=apply-email], #apply-form label[for=apply-note] { display: block; margin: 20px 0 6px; font-size: .78rem; color: #5b6673; }
 #apply-form .email-row { display: flex; border-bottom: 1px solid #9aa5b1; }
-#apply-form .email-row input { min-width: 0; flex: 1; padding: 15px 0; color: var(--ink); background: transparent; border: 0; outline: none; }
+#apply-form .email-row input { min-width: 0; flex: 1; padding: 15px 0; color: var(--ink); background: transparent; border: 0; }
+#apply-form .email-row input:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
 #apply-form .email-row button { border: 0; padding: 0 18px; background: var(--ink); color: var(--lime); cursor: pointer; font-weight: 800; }
-#apply-note { width: 100%; box-sizing: border-box; padding: 12px 0; font: inherit; color: var(--ink); background: transparent; border: 0; border-bottom: 1px solid #9aa5b1; outline: none; resize: vertical; }
+#apply-note { width: 100%; box-sizing: border-box; padding: 12px 0; font: inherit; color: var(--ink); background: transparent; border: 0; border-bottom: 1px solid #9aa5b1; resize: vertical; }
+#apply-note:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
 .apply-context { margin: 18px 0 0; font-size: .78rem; color: #5b6673; }
 #apply-form .check { color: #5b6673; }
 #apply-form .form-status { color: #5b6673; }
