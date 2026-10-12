@@ -81,6 +81,8 @@ persona gateはQ3専任、post.pyの機械検査はQ0/Q1の最終防衛線。機
 ## コマンド
 
 ```bash
+python3 test_persona_gate.py      # 恒久テスト46件 (stdlibのみ・host非依存 — 変更時に必ず)
+python3 test_llm_backend.py       # backend選択の恒久テスト3件
 python3 collect.py --dry          # 収集プレビュー (キュー書込なし)
 python3 post.py --dry-run         # 投稿プレビュー (表示のみ)
 python3 review.py                 # draft一覧 (任意steering・推奨=★)
