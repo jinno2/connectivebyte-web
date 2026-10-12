@@ -389,6 +389,38 @@ test("manual_collaboration_candidate型を受け付ける", async () => {
   }
 });
 
+test("19-diagnosis-line-lp の匿名イベントはLP実装と同じpayload形状で202・未知のd1_lp_*は400", async () => {
+  const ctx = await startServer();
+  try {
+    // LP inline script (content/19-diagnosis-line-lp) が本番 events backend へ直接送る
+    // payloadと同じ形。REQUIRED_FIELDS に無い session_id/referrer_host を含むまま
+    // 受理されることで型許可と必須/禁止属性の契約を機能面から固定する。
+    const lpEvent = (name, cta_id) => ({
+      name,
+      source_id: "d1_lp",
+      campaign_id: "static",
+      asset_id: "19-diagnosis-line-lp",
+      segment: "unselected",
+      channel: "web",
+      cta_id,
+      occurred_at: new Date().toISOString(),
+      session_id: "ses-001",
+      referrer_host: "(none)"
+    });
+    const ok = await post(ctx.base, {
+      events: [lpEvent("d1_lp_viewed", "none"), lpEvent("d1_lp_cart_click", "cart-d1")]
+    });
+    assert.equal(ok.status, 202);
+    assert.equal((await ok.json()).accepted, 2);
+
+    const bad = await post(ctx.base, { events: [lpEvent("d1_lp_bogus", "none")] });
+    assert.equal(bad.status, 400);
+    assert.equal((await bad.json()).error, "invalid event type");
+  } finally {
+    await ctx.cleanup();
+  }
+});
+
 test("GET /api/stats は interest_selected をE/D/C/B/A別の閉じた形で集計する", async () => {
   const ctx = await startServer();
   try {
