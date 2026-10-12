@@ -6,6 +6,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
@@ -389,6 +390,37 @@ test("孤児検知のリンク解決: 相対・絶対・index.html付きは同�
   assert.equal(inboundTarget("https://lab.connectivebyte.com/content/18-blog/cap-scan/", lp, host), "/content/18-blog/cap-scan/");
   // 記事本文からの相対リンク (../) は記事位置基準で解決する
   assert.equal(inboundTarget("../cap-scan/", article, host), "/content/18-blog/cap-scan/");
+});
+
+test("全配信ページの相対リンク (href/src) は解決先の実在資産へ向かう (リンク切れの機械検査)", async () => {
+  // 孤児検知はsitemap記事へのinbound到達のみを見るため、張った側のリンク先が
+  // 実在するか (typo・改名・削除済みpathへのリンク) は別問題になる。L2「誤った
+  // 約束やリンク切れを減らす」の直接ガードとして、git追跡の全HTMLが張る href/src
+  // を各ページ位置から解決し、site内実在 (repo root基準) へ向かうことを検査する。
+  // 外部URL・アンカー・scheme付き (mailto/data:) と inline script が組み立てる
+  // 式断片 (引用符・連結を含む値) は対象外。
+  const tracked = execFileSync("git", ["ls-files", "-z"], { cwd: repoRoot, encoding: "utf8" })
+    .split("\0").filter((f) => f.endsWith(".html"));
+  assert.ok(tracked.length >= 10, `追跡済みhtmlが過少 (${tracked.length}件) — テストの前提が崩れた`);
+  const broken = [];
+  let checked = 0;
+  for (const rel of tracked) {
+    const html = await readFile(path.join(repoRoot, rel), "utf8");
+    for (const [, ref] of html.matchAll(/(?:href|src)="([^"]+)"/g)) {
+      if (/^(?:https?:)?\/\//.test(ref) || /^[a-z][a-z0-9+.-]*:/i.test(ref) || ref.startsWith("#")) continue;
+      if (ref.includes("'") || ref.includes(" + ")) continue; // inline JSの式断片
+      const target = ref.split("#")[0].split("?")[0];
+      if (!target) continue;
+      checked += 1;
+      const resolved = path.posix.normalize(
+        target.startsWith("/") ? target.slice(1) : path.posix.join(path.posix.dirname(rel), target)
+      );
+      if (!existsSync(path.join(repoRoot, resolved))) broken.push(`${rel}: ${ref} → ${resolved}`);
+    }
+  }
+  // 抽出regexの腐敗 (0件一致で無意味にpassする偽陰性) の下限ガード。実在は103本。
+  assert.ok(checked >= 80, `検査対象リンクが過少 (${checked}本) — 抽出の前提が崩れた`);
+  assert.deepEqual(broken, [], `リンク切れ (${broken.length}本):\n${broken.join("\n")}`);
 });
 
 test("Pages は同じjobでテストと配信木検査に合格してから公開する", async () => {
