@@ -12,7 +12,7 @@ GitHub Actionsによるイベント駆動。開発確認はローカルCLI。運
 
 ### ローカルcrontab（実測 2026-09-15・2026-10-12再実測で不在）
 
-2026-09-15時点ではGitHub Actions以外に、ローカルcrontabで以下が毎日発火していた。停止（Kill Switch）は`crontab -e`で該当行を削除する。
+2026-09-15時点ではGitHub Actions以外に、ローカルcrontabで以下が毎日発火していた。当時の停止（Kill Switch）は`crontab -e`で該当行を削除する方法だった。
 
 ```
 17 9 * * * cd /home/jinno/connectivebyte-web && /home/jinno/.local/share/mise/installs/python/3.13/bin/python3 scripts/x-discover/collect.py >> /home/jinno/.local/share/cb-fleet/collect.log 2>&1
