@@ -455,6 +455,33 @@ test("未回答のまま診断を完了しない — 結果表示・保存・送
   assert.match(elements["#diagnostic-status"].textContent, /未回答/);
 });
 
+test("一部のみ回答の診断も完了させず、結果を出さず状態表示する", async () => {
+  const storage = new FakeStorage();
+  const elements = {
+    "#diagnostic-output": element(),
+    "#diagnostic-level": element(),
+    "#diagnostic-status": element()
+  };
+  elements["#diagnostic-output"].hidden = true;
+  const radios = [{ dataset: { questionId: "Q0" }, value: "はい" }];
+  const { documentListeners } = setup({
+    storage,
+    elements,
+    selectors: { "#diagnostic-questions input[type=radio]:checked": radios }
+  });
+  const app = await loadApp("diagnosis-partial");
+  const clickTarget = {
+    closest: (selector) => selector === "[data-action]"
+      ? { dataset: { action: "submit-diagnosis" } }
+      : null
+  };
+  documentListeners.get("click")({ target: clickTarget });
+  assert.equal(elements["#diagnostic-output"].hidden, true, "一部回答でも結果を表示しない");
+  assert.equal(app.readJson("diagnosis_result", null), null, "一部回答では判定を保存しない");
+  assert.equal(app.readJson("progress", {}).diagnostic_completed, undefined, "一部回答では完了進捗を記録しない");
+  assert.match(elements["#diagnostic-status"].textContent, /未回答/, "未回答が残っていることを状態表示する");
+});
+
 test("全問回答済みの診断は従来どおり完了し、状態表示は空に戻る", async () => {
   const storage = new FakeStorage();
   const elements = {
