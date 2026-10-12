@@ -170,6 +170,54 @@ test("app.js が querySelector で参照する全 id は index.html の実DOMに
   assert.deepEqual(missing, [], `app.js が参照するidが index.html の実DOMに無い: ${missing.join(", ")}`);
 });
 
+test("各頁のinline scriptが参照するidはその頁の実DOMに存在する", async () => {
+  // level_table_read_100 未発火事故 (4d1dcae) と同じ失敗modeの頁内版: 各頁の
+  // inline scriptは自身のDOMへ getElementById/#id で配線し、idが無くても例外ではなく
+  // 沈黙の早期returnに落ちる (asset-bodyのrich render等)。上のapp.js↔index.html
+  // ガードはLPのみのため、追跡済み全HTMLのinline script参照へ同一規律を拡張する
+  // (02-history の asset-body は hash検査の対象list外で、id欠落しても既存testが
+  // 緑のまま沈黙劣化する)。将来の頁追加も自動で対象化。
+  // 動的idの扱い: script後段でidを移転する頁 (asset-body: pre.removeAttribute→
+  // view.id) でも先頭のlookupは静的DOMを探す。そのため最初の参照が最初の.id付与
+  // より前にあるidは静的実在を要求し、生成後に参照するid (app.jsのfeedback-note型)
+  // は対象外とする — 実行順を静的近似した規則。
+  const tracked = execFileSync("git", ["ls-files", "-z"], { cwd: repoRoot, encoding: "utf8" })
+    .split("\0").filter((f) => f.endsWith(".html"));
+  assert.ok(tracked.length > 0, "追跡済みhtmlが無い (テストの前提が崩れた)");
+  let pagesWithRefs = 0;
+  for (const rel of tracked) {
+    const html = await readFile(path.join(repoRoot, rel), "utf8");
+    // src付き外部scriptは対象外。頁内の全inline script本文を連結して抽出する
+    const scripts = [...html.matchAll(/<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/g)]
+      .map((m) => m[1]).join("\n");
+    const refs = new Map(); // id -> 最初の参照位置
+    for (const m of scripts.matchAll(/getElementById\(\s*["']([\w-]+)["']\s*\)/g)) {
+      if (!refs.has(m[1])) refs.set(m[1], m.index);
+    }
+    for (const m of scripts.matchAll(/querySelector(?:All)?\(\s*["']([^"']*#[^"']*)["']\s*\)/g)) {
+      for (const idm of m[1].matchAll(/#([\w-]+)/g)) {
+        if (!refs.has(idm[1])) refs.set(idm[1], m.index);
+      }
+    }
+    if (refs.size === 0) continue;
+    pagesWithRefs += 1;
+    const dynamicIds = new Map(); // id -> 最初の .id 付与位置
+    for (const m of scripts.matchAll(/\.id\s*=\s*["']([\w-]+)["']/g)) {
+      if (!dynamicIds.has(m[1])) dynamicIds.set(m[1], m.index);
+    }
+    // 頁DOMのidはinline script本文を除いて数える (script内の view.id = "..." を
+    // 実DOMのidと誤認すると、静的id欠落が検知できなくなる)
+    const htmlNoScript = html.replace(/<script(?![^>]*\bsrc=)[^>]*>[\s\S]*?<\/script>/g, "");
+    const htmlIds = new Set([...htmlNoScript.matchAll(/\bid\s*=\s*["']([\w-]+)["']/g)].map((m) => m[1]));
+    const missingIds = [...refs].filter(([id, refPos]) =>
+      !htmlIds.has(id) && !(dynamicIds.get(id) !== undefined && dynamicIds.get(id) < refPos))
+      .map(([id]) => id);
+    assert.deepEqual(missingIds, [], `${rel}: inline scriptが参照するidが頁DOMに無い: ${missingIds.join(", ")}`);
+  }
+  // 抽出regexの腐敗 (0件一致で無意味にpassする偽陰性) のガード。実在は6頁。
+  assert.ok(pagesWithRefs >= 5, `inline scriptのid参照をもつ頁の抽出が過少: ${pagesWithRefs}頁`);
+});
+
 test("17-org-pdf 完成PDF artifactは存在しLP・原稿page両面から配線される", async () => {
   // 2026-09-10 残課題#4 (r4 F8): 記入式様式の完成PDF不在を閉じる。生成源は
   // scripts/build-org-pdf.mjs・commit対象は生成済みPDF。app.js内組み立てPDF
