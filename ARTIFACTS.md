@@ -59,7 +59,7 @@ EOF
 ## 実測 (2026-09-15・版管理の初回full cycle完了時点)
 
 - pipeline_version = `c82e1c4c96fa` (初回cycle時点・当時はscripts/木tree hash) —
-  **現行 = `7d1eae75949c`** (.py限定・版定義節参照・2026-10-11再実測)
+  **現行 = `5a42158b803a`** (.py限定・版定義節参照・2026-10-12再実測)
 - 監査: posted 14 / out_of_window 43 / rejected 2 / **current 5** /
   STALE 0 / placeholder 0 — 版印は生存5行すべて `c82e1c4c96fa` で単一versionに収束
 - 初回cycleの証跡: ①09:17 cronが新規3件を版印付きで起草+stale 2行を自動再生成
@@ -92,6 +92,12 @@ EOF
   `outreach.py`の`PUBLISH_ROOT_FILES`へ404.htmlを足した (⑧と同じ隔離ツリーparity
   修正・2026-10-11)。版は `cefc4d2e5fb4` → `7d1eae75949c` (.py変更なので正当)。
   生成系の起草・再検査logicには変更なし
+- ⑩persona gate恒久テスト (`scripts/x-discover/test_persona_gate.py`) の
+  hermetic化修正 — collect側`persona_lines`のpatch漏れ (姉妹repo無しhostで
+  enrich系3testが赤) と`enrich.main`窓判定の実日付依存 (暦の経過だけで赤) を
+  修正・本体生成系は無変更 (2026-10-12)。版は `7d1eae75949c` → `5a42158b803a`
+  (.py変更なので正当 — テストfileも版対象)。生成系の起草・再検査logicには
+  変更なし — 生存行の`polish_version`/`gen_version` 判定は不変
 - 以後、文書変更 (本台帳の更新・scripts下READMEの更新を含む) では版は不変 —
   scripts/下の.py (codeとpromptの実体) が変わったときだけ版が動く。本節の
   更新commitで版が変わらないことがそのまま実証になる
