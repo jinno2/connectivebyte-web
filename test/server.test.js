@@ -379,6 +379,40 @@ test("クロスオリジンからのPOSTは403で拒否する", async () => {
   }
 });
 
+test("クロスオリジンからの /api/subscribe・/api/apply へのPOSTも403で拒否する", async () => {
+  const ctx = await startServer();
+  try {
+    for (const path of ["/api/subscribe", "/api/apply"]) {
+      const res = await fetch(`${ctx.base}${path}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Origin: "https://evil.example.com" },
+        body: JSON.stringify({ email: "org@example.com", consent: true })
+      });
+      assert.equal(res.status, 403, path);
+      assert.equal((await res.json()).error, "cross_origin_denied", path);
+    }
+  } finally {
+    await ctx.cleanup();
+  }
+});
+
+test("同一Originの /api/apply へのPOSTは許可され Access-Control-Allow-Origin が設定される", async () => {
+  const ctx = await startServer();
+  try {
+    const origin = new URL(ctx.base).origin;
+    const res = await fetch(`${ctx.base}/api/apply`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Origin: origin },
+      body: JSON.stringify({ email: "org@example.com", consent: true })
+    });
+    assert.equal(res.status, 202);
+    assert.equal((await res.json()).accepted, true);
+    assert.equal(res.headers.get("access-control-allow-origin"), origin);
+  } finally {
+    await ctx.cleanup();
+  }
+});
+
 test("manual_collaboration_candidate型を受け付ける", async () => {
   const ctx = await startServer();
   try {
