@@ -148,14 +148,26 @@ test("LP #apply 申込formは /apply endpoint・同意checkbox・PII分離文言
   assert.equal(lp.includes("東京AIソリューションズ"), false);
 });
 
-test("LP レベル表は app.js が監視する #level-table id を持つ (読了計測の配線)", async () => {
+test("app.js が querySelector で参照する全 id は index.html の実DOMに存在する (モックと実物の配線乖離の検知)", async () => {
   // level_table_read_100 のIntersectionObserverは実HTMLのidを検索する。実DOMに
-  // idが無いとテスト (モックDOMにidを注入) だけ通って本番で発火しないため、
-  // 実HTMLと app.js セレクタの対応をここで機械検査する。
-  const lp = await readFile(path.join(repoRoot, "index.html"), "utf8");
-  assert.match(lp, /<div class="level-table" id="level-table"/);
-  const app = await readFile(path.join(repoRoot, "app.js"), "utf8");
-  assert.match(app, /querySelector\("#level-table"\)/);
+  // idが無いとモックDOMにidを注入するテストだけ通って本番で発火しないため、
+  // app.js 内の全 #id 参照を抽出し index.html 側の実在を検査する (属性順・
+  // クォート形式に依存しない)。app.js が動的生成する id (.id = "...") は
+  // 実HTMLに無いのが正常なため除外する。
+  const [app, lp] = await Promise.all([
+    readFile(path.join(repoRoot, "app.js"), "utf8"),
+    readFile(path.join(repoRoot, "index.html"), "utf8")
+  ]);
+  const queriedIds = new Set();
+  for (const [, selector] of app.matchAll(/querySelector(?:All)?\(\s*["']([^"']*[#][^"']*)["']\s*\)/g)) {
+    for (const [, id] of selector.matchAll(/#([\w-]+)/g)) queriedIds.add(id);
+  }
+  const dynamicIds = new Set([...app.matchAll(/\.id\s*=\s*["']([\w-]+)["']/g)].map((m) => m[1]));
+  const htmlIds = new Set([...lp.matchAll(/\bid\s*=\s*["']([\w-]+)["']/g)].map((m) => m[1]));
+  // 抽出regexの腐敗 (0件一致で無意味にpassする偽陰性) のガード。実在は55id。
+  assert.ok(queriedIds.size >= 50, `app.js のid参照の抽出が過少: ${queriedIds.size}件`);
+  const missing = [...queriedIds].filter((id) => !dynamicIds.has(id) && !htmlIds.has(id));
+  assert.deepEqual(missing, [], `app.js が参照するidが index.html の実DOMに無い: ${missing.join(", ")}`);
 });
 
 test("17-org-pdf 完成PDF artifactは存在しLP・原稿page両面から配線される", async () => {
