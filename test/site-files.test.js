@@ -6,7 +6,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { existsSync } from "node:fs";
+import { existsSync, readdirSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
@@ -15,7 +15,16 @@ import { createHash } from "node:crypto";
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 test("配信ページの本文bytesと承認metadataのhashが一致する", async () => {
-  for (const asset of ["01-canonical", "02-entry-read", "15-diagnostic-lp", "17-org-pdf"]) {
+  // 対象は固定listではなく「metadata.jsonを持つ配信ページ」を content/ から自動
+  // 発見する。02-history・01-tracker-page が旧固定listから漏れ、表示用
+  // content_hash commentの陳腐化が検出されない実績があった — 以後の配信ページ
+  // 追加も自動で対象化され、本文・承認metadata・表示commentの3者一致を強制する。
+  const contentDir = path.join(repoRoot, "content");
+  const assets = readdirSync(contentDir, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory() && existsSync(path.join(contentDir, entry.name, "metadata.json")))
+    .map((entry) => entry.name);
+  assert.ok(assets.length >= 4, `配信ページの発見が過少 (${assets.length}件) — テストの前提が崩れた`);
+  for (const asset of assets) {
     const dir = path.join(repoRoot, "content", asset);
     const html = await readFile(path.join(dir, "index.html"), "utf8");
     const metadata = JSON.parse(await readFile(path.join(dir, "metadata.json"), "utf8"));
