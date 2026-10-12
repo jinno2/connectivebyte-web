@@ -550,13 +550,17 @@ test("form入力欄はキーボードフォーカス表示を保持する (outli
   // 現行では input/textarea からの outline 無効化は全廃済み。将来正当な需要が
   // できた場合は代替表示と一緒に本ガードを見直すこと。
   const css = await readFile(path.join(repoRoot, "styles.css"), "utf8");
-  assert.doesNotMatch(css, /outline:\s*none/,
-    "styles.css に outline:none が復活 — フォーカス表示を消す場合は :focus-visible 代替とセットにし本ガードを見直すこと");
+  assert.doesNotMatch(css, /outline:\s*(?:none|0(?:px)?)\b/,
+    "styles.css に outline無効化 (none/0) が復活 — フォーカス表示を消す場合は :focus-visible 代替とセットにし本ガードを見直すこと");
   // 代替表示の実在 (下限ガード): .choice + 入力欄3セレクタの :focus-visible outline。
   const focusOutlines = [...css.matchAll(/:focus-visible[^{]*\{[^}]*outline:\s*\d/g)].length;
   assert.ok(focusOutlines >= 4, `:focus-visible outline規則が過少 (${focusOutlines}本) — 検査の前提が崩れた`);
-  assert.match(css, /\.email-row input:focus-visible[^{]*\{[^}]*outline:/,
-    "メール入力の :focus-visible 代替が無い");
+  // 入力欄3セレクタは個別に特定する — `.email-row input` は #apply-form 側に部分一致するため、
+  // 汎用regexのままでは片方の削除＋無関係ルール追加を黙認してしまう。
+  assert.match(css, /^\.email-row input:focus-visible \{[^}]*var\(--cyan\)/m,
+    "newsletterメール入力の :focus-visible 代替が無い");
+  assert.match(css, /#apply-form \.email-row input:focus-visible[^{]*\{[^}]*outline:/,
+    "申込メール入力の :focus-visible 代替が無い");
   assert.match(css, /#apply-note:focus-visible[^{]*\{[^}]*outline:/,
     "申込noteの :focus-visible 代替が無い");
 });
