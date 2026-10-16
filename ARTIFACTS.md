@@ -59,7 +59,7 @@ EOF
 ## 実測 (2026-09-15・版管理の初回full cycle完了時点)
 
 - pipeline_version = `c82e1c4c96fa` (初回cycle時点・当時はscripts/木tree hash) —
-  **現行 = `b912a5a8d954`** (.py限定・版定義節参照・2026-10-12再実測)
+  **現行 = `e4d8a9a21222`** (.py限定・版定義節参照・2026-10-17再実測)
 - 監査: posted 14 / out_of_window 43 / rejected 2 / **current 5** /
   STALE 0 / placeholder 0 — 版印は生存5行すべて `c82e1c4c96fa` で単一versionに収束
 - 初回cycleの証跡: ①09:17 cronが新規3件を版印付きで起草+stale 2行を自動再生成
@@ -108,6 +108,12 @@ EOF
   `outreach.py`の`PUBLISH_ROOT_FILES`へ同PNGを足した (⑧⑨と同じ隔離ツリー
   parity修正・2026-10-12)。版は `d098ab53249c` → `b912a5a8d954` (.py変更なので
   正当)。生成系の起草・再検査logicには変更なし
+- ⑬`crm.py digest --inbox`が親repoのINBOX.md追記後すぐcommitする
+  `commit_inbox()`追加 (caretaker sweep依存とpost_dispatch dirty検知の解消 —
+  3378b04・2026-10-17)。版は `b912a5a8d954` → `e4d8a9a21222` (.py変更なので
+  正当)。台帳「現行」の同期漏れを ⑦と同種の回帰防止ガード
+  (`test/artifacts-ledger.test.js`) が検知 — 本節で同期。起草・再検査logicには
+  変更なし
 - 以後、文書変更 (本台帳の更新・scripts下READMEの更新を含む) では版は不変 —
   scripts/下の.py (codeとpromptの実体) が変わったときだけ版が動く。本節の
   更新commitで版が変わらないことがそのまま実証になる
