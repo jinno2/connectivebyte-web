@@ -515,6 +515,32 @@ test("全問回答済みの診断は従来どおり完了し、状態表示は�
   assert.equal(app.readJson("diagnosis_result", null)?.current_phase, 2);
 });
 
+test("5択の選択のみでは診断完了を記録せず、ダッシュボードは開始済みを表示する", async () => {
+  const storage = new FakeStorage();
+  const elements = {
+    "#dashboard": element(),
+    "#dash-diagnostic": element(),
+    "#route-result": element(),
+    "#result-eyebrow": element(),
+    "#result-title": element(),
+    "#result-body": element(),
+    "#result-link": element()
+  };
+  const { documentListeners } = setup({ storage, elements });
+  const app = await loadApp("interest-select-incomplete");
+  app.writeJson("consent", { analytics: true, email: false, decided: true });
+  const clickTarget = {
+    closest: (selector) => selector === "[data-interest]"
+      ? { dataset: { interest: "E" } }
+      : null
+  };
+  documentListeners.get("click")({ target: clickTarget });
+  assert.equal(app.readJson("progress", {}).diagnostic_started, true, "選択は診断の開始として記録する");
+  assert.equal(app.readJson("progress", {}).diagnostic_completed, undefined, "3問未回答では完了進捗を記録しない");
+  app.renderDashboard();
+  assert.equal(elements["#dash-diagnostic"].textContent, "開始済み", "3問未回答を完了表示しない");
+});
+
 // closestを「セレクタ文字列の模倣」ではなく実DOMと同じ親チェーン走査で判定する
 // 最小の擬似DOM。tag名と属性の実在で合致を見るため、href値の区別まで検証できる。
 function domNodeMatches(node, selector) {

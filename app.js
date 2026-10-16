@@ -822,7 +822,6 @@ function selectInterest(interest) {
   writeJson("eligible_segments", [...new Set([...eligibleSegments, selectedSegment])]);
   renderRoute(interest);
   track("interest_selected", { asset_id: "interest_selector", cta_id: `interest_${interest.toLowerCase()}` });
-  track("diagnostic_completed", { asset_id: "interest_selector", cta_id: `interest_${interest.toLowerCase()}` });
 }
 
 function download(name, type, content) {
