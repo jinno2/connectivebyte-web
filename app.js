@@ -951,17 +951,29 @@ document.addEventListener("click", (event) => {
   if (action === "copy-share-url") {
     const input = document.querySelector("#share-url-input");
     input.select();
-    const done = () => {
-      const button = event.target.closest("[data-action]");
+    const button = event.target.closest("[data-action]");
+    // execCommand("copy")は成否をbooleanで返す。結果を見ずに成功表示しない
+    // (憲法: 不明な結果を成功表示しない)。失敗時は選択済みURLの手動コピーを促す。
+    const showCopyResult = (copied) => {
       const label = button.textContent;
-      button.textContent = "コピーしました";
+      button.textContent = copied
+        ? "コピーしました"
+        : "コピーできませんでした。選択したURLを手動でコピーしてください。";
       setTimeout(() => { button.textContent = label; }, 1600);
     };
+    const copyViaExecCommand = () => {
+      try {
+        return document.execCommand("copy") === true;
+      } catch {
+        return false;
+      }
+    };
     if (navigator.clipboard?.writeText) {
-      navigator.clipboard.writeText(input.value).then(done).catch(() => { document.execCommand("copy"); done(); });
+      navigator.clipboard.writeText(input.value)
+        .then(() => showCopyResult(true))
+        .catch(() => showCopyResult(copyViaExecCommand()));
     } else {
-      document.execCommand("copy");
-      done();
+      showCopyResult(copyViaExecCommand());
     }
   }
   if (action === "open-share-intent") {

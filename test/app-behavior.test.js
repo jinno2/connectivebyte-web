@@ -541,6 +541,71 @@ test("5択の選択のみでは診断完了を記録せず、ダッシュボー�
   assert.equal(elements["#dash-diagnostic"].textContent, "開始済み", "3問未回答を完了表示しない");
 });
 
+function setupCopyElements() {
+  const shareInput = {
+    value: "https://lab.connectivebyte.com/?r=P2",
+    selected: false,
+    select() { this.selected = true; }
+  };
+  const copyButton = { dataset: { action: "copy-share-url" }, textContent: "コピー" };
+  return { shareInput, copyButton };
+}
+
+function copyClickTarget(copyButton) {
+  return {
+    closest: (selector) => selector === "[data-action]" ? copyButton : null
+  };
+}
+
+test("クリップボードAPIが無くexecCommandも失敗する場合、コピー成功と表示しない", async () => {
+  const { shareInput, copyButton } = setupCopyElements();
+  const { documentListeners, document: fakeDocument } = setup({
+    storage: new FakeStorage(),
+    elements: { "#share-url-input": shareInput }
+  });
+  fakeDocument.execCommand = () => false;
+  await loadApp("copy-fail-no-api");
+  documentListeners.get("click")({ target: copyClickTarget(copyButton) });
+  assert.equal(shareInput.selected, true, "失敗時もURLは選択済みで手動コピーできる");
+  assert.notEqual(copyButton.textContent, "コピーしました", "不明な結果を成功表示しない");
+  assert.match(copyButton.textContent, /コピーできませんでした/, "手動コピーを促す失敗表示にする");
+});
+
+test("クリップボードAPIの書込みが成功したら従来どおり成功表示する", async () => {
+  const { shareInput, copyButton } = setupCopyElements();
+  const { documentListeners } = setup({
+    storage: new FakeStorage(),
+    elements: { "#share-url-input": shareInput }
+  });
+  const written = [];
+  Object.defineProperty(globalThis, "navigator", {
+    value: { onLine: true, clipboard: { writeText: async (text) => { written.push(text); } } },
+    configurable: true, writable: true
+  });
+  const app = await loadApp("copy-success-api");
+  documentListeners.get("click")({ target: copyClickTarget(copyButton) });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.deepEqual(written, [shareInput.value], "入力値をそのまま書き込む");
+  assert.equal(copyButton.textContent, "コピーしました");
+});
+
+test("クリップボードAPI失敗時はexecCommandの成否を判定に使い、成功なら成功表示する", async () => {
+  const { shareInput, copyButton } = setupCopyElements();
+  const { documentListeners, document: fakeDocument } = setup({
+    storage: new FakeStorage(),
+    elements: { "#share-url-input": shareInput }
+  });
+  Object.defineProperty(globalThis, "navigator", {
+    value: { onLine: true, clipboard: { writeText: async () => { throw new Error("denied"); } } },
+    configurable: true, writable: true
+  });
+  fakeDocument.execCommand = () => true;
+  const app = await loadApp("copy-fallback-success");
+  documentListeners.get("click")({ target: copyClickTarget(copyButton) });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(copyButton.textContent, "コピーしました", "execCommand成功は正当な成功として表示する");
+});
+
 // closestを「セレクタ文字列の模倣」ではなく実DOMと同じ親チェーン走査で判定する
 // 最小の擬似DOM。tag名と属性の実在で合致を見るため、href値の区別まで検証できる。
 function domNodeMatches(node, selector) {
