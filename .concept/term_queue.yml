@@ -51,8 +51,8 @@ queue:
         quote: "EVENT_TYPES (23種)"
       - source: "server.js:18-56"
         quote: "EVENT_TYPES + REQUIRED_FIELDS"
-      - source: "test/events.test.js"
-        quote: "イベント仕様と保存キーを静的検証する"
+      - source: "test/events.test.js:17-27"
+        quote: "app.js EVENT_NAMES and logic.js EVENT_TYPES stay in sync / server.js EVENT_TYPES copy accepts every client event"
     auto_merge_candidates: []
     decision: "accepted"
     expires_after_runs: 10
@@ -125,7 +125,7 @@ queue:
         quote: "formatInterestStats / MIN_STATS_TOTAL"
       - source: "server.js:366-391"
         quote: "GET /api/stats (識別子なし)"
-      - source: "test/logic.test.js:287-320"
+      - source: "test/logic.test.js:287-315"
         quote: "少数 (<MIN_STATS_TOTAL) で null を返す"
     auto_merge_candidates: []
     decision: "accepted"
@@ -159,3 +159,31 @@ queue:
     decision: "accepted"
     expires_after_runs: 10
     created_run: "2026-10-17T15:12:22Z"
+  - id: "TP-20261017-012"
+    proposed_canonical: "ChangeFlow"
+    proposed_layer: "aux"
+    term_raw_examples: ["変更フロー", "仕様・テスト・計画の同時更新"]
+    reason: "README/AGENTS.md の運用プロセスであり概念辞書の対象外。対更新の制約は既に INV-PARITY-001 が記録済み。__UNMAPPED__ claims (README.md:42) の審査結果として rejected を記録 (2026-10-17 run)。"
+    evidence:
+      - source: "README.md:42"
+        quote: "入力・導線・公開対象を変更したら、対応する仕様・テスト・計画を同じ変更で更新します。"
+      - source: "AGENTS.md:変更フロー"
+        quote: "診断・newsletterの仕様変更は logic.js (判定) と app.js (UI/送信) が対。"
+    auto_merge_candidates: []
+    decision: "rejected"
+    expires_after_runs: 10
+    created_run: "2026-10-17T15:27:03Z"
+  - id: "TP-20261017-013"
+    proposed_canonical: "ResultDisplay"
+    proposed_layer: "aux"
+    term_raw_examples: ["結果表示", "成功表示"]
+    reason: "結果表示の誠実さは概念というより不変条件であり、INV-RESULT-001 (hard) として記録。独立termは不要。__UNMAPPED__ claim (SYSTEM_CONSTITUTION.md:10) の審査結果として rejected を記録 (2026-10-17 run)。"
+    evidence:
+      - source: "SYSTEM_CONSTITUTION.md:10"
+        quote: "リンク到達・登録結果・配信結果を区別し、不明な結果を成功表示しない。"
+      - source: "README.md:31"
+        quote: "ローカルサーバーの合格を本番の登録・配信成功とは扱いません。"
+    auto_merge_candidates: []
+    decision: "rejected"
+    expires_after_runs: 10
+    created_run: "2026-10-17T15:27:03Z"

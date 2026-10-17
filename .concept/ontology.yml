@@ -129,8 +129,8 @@ canonical_terms:
     evidence:
       - source: "share.js:13-235"
         quote: "MAX_POST_LENGTH / weightedLength / SHARE_TEMPLATES / buildIntentUrl"
-      - source: "test/share.test.js"
-        quote: "share.test.js"
+      - source: "test/share.test.js:95"
+        quote: "weightedLengthはXのCJK/ASCII/URL/emoji重みを扱い、共有文を上限内に切り詰める"
   InterestStats:
     id: "TERM-STATS"
     layer: "domain"

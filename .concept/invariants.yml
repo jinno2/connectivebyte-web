@@ -80,7 +80,7 @@ invariants:
     evidence:
       - source: "logic.js:254-268"
         quote: "formatInterestStats / MIN_STATS_TOTAL"
-      - source: "test/logic.test.js:287-320"
+      - source: "test/logic.test.js:287-315"
         quote: "少数 (<MIN_STATS_TOTAL) と不正な入力で null を返す"
     checks:
       - type: "test"
@@ -118,5 +118,19 @@ invariants:
     checks:
       - type: "test"
         target: "test/events.test.js"
+      - type: "test"
+        target: "test/server.test.js"
+  - id: "INV-RESULT-001"
+    related_terms: ["Subscription", "Application", "LocalVerificationServer"]
+    status: "stable"
+    strength: "hard"
+    statement: "リンク到達・登録結果・配信結果を区別し、不明な結果やローカル検証の合格を登録・配信の成功として表示しない"
+    rationale: "結果表示の誠実さ (SYSTEM_CONSTITUTION.md)。dev の 202 は検証成功のみを意味する"
+    evidence:
+      - source: "SYSTEM_CONSTITUTION.md:10"
+        quote: "リンク到達・登録結果・配信結果を区別し、不明な結果を成功表示しない。"
+      - source: "README.md:31"
+        quote: "ローカルサーバーの合格を本番の登録・配信成功とは扱いません。"
+    checks:
       - type: "test"
         target: "test/server.test.js"
