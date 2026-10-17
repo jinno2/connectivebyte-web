@@ -1,0 +1,10 @@
+{
+  "run_id": "2026-10-17T15:12:22Z",
+  "total_terms": 11,
+  "by_layer": { "core": 6, "domain": 5, "aux": 0 },
+  "draft_ratio": 0.0,
+  "queue_pending": 0,
+  "claims_retained_lines": 37,
+  "decisions_md_lines": 17,
+  "gc_actions": { "merged": 0, "deleted": 0, "deprecated": 0 }
+}
