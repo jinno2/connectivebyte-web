@@ -1,0 +1,189 @@
+queue:
+  - id: "TP-20261017-001"
+    proposed_canonical: "Interest"
+    proposed_layer: "core"
+    term_raw_examples: ["関心", "E/D/C/B/A", "interest_selected"]
+    reason: "導線・統計・申込の中心概念。既存termなし (初回run)。"
+    evidence:
+      - source: "logic.js:1-60"
+        quote: "INTERESTS / ROUTES / RANK / promoteBySelfSelection"
+      - source: "test/logic.test.js:23-60"
+        quote: "E/D/C/B/Aそれぞれに固有の導線を返す / 昇格は有効な自己選択でのみ行う"
+    auto_merge_candidates: []
+    decision: "accepted"
+    expires_after_runs: 10
+    created_run: "2026-10-17T15:12:22Z"
+  - id: "TP-20261017-002"
+    proposed_canonical: "Phase"
+    proposed_layer: "core"
+    term_raw_examples: ["段階", "P1-P4", "current_phase"]
+    reason: "診断結果と共有文の軸。詳細定義は非公開のため一般論表現のみを扱う。"
+    evidence:
+      - source: "logic.js:69-104"
+        quote: "公開サイト向けの段階モデル。一般論レベルの4段階"
+      - source: "test/logic.test.js:119-172"
+        quote: "診断はreadyを返しcurrent_phaseを数値で返す / 全質問falseでP1"
+    auto_merge_candidates: []
+    decision: "accepted"
+    expires_after_runs: 10
+    created_run: "2026-10-17T15:12:22Z"
+  - id: "TP-20261017-003"
+    proposed_canonical: "Diagnosis"
+    proposed_layer: "core"
+    term_raw_examples: ["診断", "diagnostic_completed", "run_diagnosis"]
+    reason: "サイトの主要導線。3問/12問の質問セットと段階判定。"
+    evidence:
+      - source: "logic.js:107-183"
+        quote: "run_diagnosis / DIAGNOSTIC_QUESTIONS / DETAILED_QUESTIONS"
+      - source: "test/logic.test.js:119-247"
+        quote: "診断はreadyを返し / 詳細版は12問・D0-D11で各段階3問"
+    auto_merge_candidates: []
+    decision: "accepted"
+    expires_after_runs: 10
+    created_run: "2026-10-17T15:12:22Z"
+  - id: "TP-20261017-004"
+    proposed_canonical: "AnonymousEvent"
+    proposed_layer: "core"
+    term_raw_examples: ["匿名イベント", "EVENT_TYPES", "events.jsonl"]
+    reason: "計測の中核。events.jsonl はdevの保存先として同概念に含める。"
+    evidence:
+      - source: "logic.js:228-252"
+        quote: "EVENT_TYPES (23種)"
+      - source: "server.js:18-56"
+        quote: "EVENT_TYPES + REQUIRED_FIELDS"
+      - source: "test/events.test.js:17-27"
+        quote: "app.js EVENT_NAMES and logic.js EVENT_TYPES stay in sync / server.js EVENT_TYPES copy accepts every client event"
+    auto_merge_candidates: []
+    decision: "accepted"
+    expires_after_runs: 10
+    created_run: "2026-10-17T15:12:22Z"
+  - id: "TP-20261017-005"
+    proposed_canonical: "ForbiddenAttribute"
+    proposed_layer: "core"
+    term_raw_examples: ["禁止属性", "FORBIDDEN_ATTRIBUTES"]
+    reason: "プライバシー仕様の核。憲法・README・コード・テストの全層に出る。"
+    evidence:
+      - source: "logic.js:185-219"
+        quote: "FORBIDDEN_ATTRIBUTES / filterForbiddenAttributes"
+      - source: "SYSTEM_CONSTITUTION.md:6-8"
+        quote: "能力や属性を勝手に判定しない"
+      - source: "test/logic.test.js:247-286"
+        quote: "禁止属性を含むイベントから当該属性をフィルタする"
+    auto_merge_candidates: []
+    decision: "accepted"
+    expires_after_runs: 10
+    created_run: "2026-10-17T15:12:22Z"
+  - id: "TP-20261017-006"
+    proposed_canonical: "Subscription"
+    proposed_layer: "core"
+    term_raw_examples: ["購読", "/api/subscribe", "newsletter_subscribed"]
+    reason: "メール登録の導線。本番はrepo外 (Worker+D1) で検証ロジックのみ写し。"
+    evidence:
+      - source: "server.js:99-114"
+        quote: "validateSubscription / consent_required"
+      - source: "README.md:30"
+        quote: "匿名イベントとメールアドレスを分離"
+    auto_merge_candidates: []
+    decision: "accepted"
+    expires_after_runs: 10
+    created_run: "2026-10-17T15:12:22Z"
+  - id: "TP-20261017-007"
+    proposed_canonical: "Application"
+    proposed_layer: "domain"
+    term_raw_examples: ["実施支援 申込", "/api/apply", "apply_submitted"]
+    reason: "申込endpoint。購読検証の拡張という明確な関係があるため独立term。"
+    evidence:
+      - source: "server.js:116-133"
+        quote: "validateApplication / invalid_interest / invalid_note"
+      - source: "server.js:333-364"
+        quote: "POST /api/apply (local dev用の検証のみ写し)"
+    auto_merge_candidates: []
+    decision: "accepted"
+    expires_after_runs: 10
+    created_run: "2026-10-17T15:12:22Z"
+  - id: "TP-20261017-008"
+    proposed_canonical: "Share"
+    proposed_layer: "domain"
+    term_raw_examples: ["共有", "share text", "intent URL"]
+    reason: "診断結果共有の機能群。重み付き文字数の規約を持つ。"
+    evidence:
+      - source: "share.js:13-235"
+        quote: "MAX_POST_LENGTH / weightedLength / SHARE_TEMPLATES / buildIntentUrl"
+      - source: "test/share.test.js"
+        quote: "share.test.js"
+    auto_merge_candidates: []
+    decision: "accepted"
+    expires_after_runs: 10
+    created_run: "2026-10-17T15:12:22Z"
+  - id: "TP-20261017-009"
+    proposed_canonical: "InterestStats"
+    proposed_layer: "domain"
+    term_raw_examples: ["関心stats", "/api/stats", "formatInterestStats"]
+    reason: "匿名aggregateの表示部品。少数非表示の規約を持つ。"
+    evidence:
+      - source: "logic.js:254-268"
+        quote: "formatInterestStats / MIN_STATS_TOTAL"
+      - source: "server.js:366-391"
+        quote: "GET /api/stats (識別子なし)"
+      - source: "test/logic.test.js:287-315"
+        quote: "少数 (<MIN_STATS_TOTAL) で null を返す"
+    auto_merge_candidates: []
+    decision: "accepted"
+    expires_after_runs: 10
+    created_run: "2026-10-17T15:12:22Z"
+  - id: "TP-20261017-010"
+    proposed_canonical: "PublicationGuard"
+    proposed_layer: "domain"
+    term_raw_examples: ["公開ガード", "publication-guard.test.js"]
+    reason: "公開面の機密混入を防ぐ静的ガード。運用規約と一体。"
+    evidence:
+      - source: "test/publication-guard.test.js:1-45"
+        quote: "公開面への機密用語混入を防ぐ静的ガード"
+      - source: "AGENTS.md:公開してよいか迷ったら"
+        quote: "guardが検出したら表現を直す。語削除・無効化で解決しない"
+    auto_merge_candidates: []
+    decision: "accepted"
+    expires_after_runs: 10
+    created_run: "2026-10-17T15:12:22Z"
+  - id: "TP-20261017-011"
+    proposed_canonical: "LocalVerificationServer"
+    proposed_layer: "domain"
+    term_raw_examples: ["ローカル検証用サーバー", "server.js", "dev server"]
+    reason: "本番Worker検証の写しとPages挙動再現を担う開発補助。本番処理は含まない。"
+    evidence:
+      - source: "server.js:99-100"
+        quote: "本番と同じ検証をローカルでも通すための写し。dev serverは保存しない"
+      - source: "README.md:38"
+        quote: "server.js: ローカル検証用サーバー"
+    auto_merge_candidates: []
+    decision: "accepted"
+    expires_after_runs: 10
+    created_run: "2026-10-17T15:12:22Z"
+  - id: "TP-20261017-012"
+    proposed_canonical: "ChangeFlow"
+    proposed_layer: "aux"
+    term_raw_examples: ["変更フロー", "仕様・テスト・計画の同時更新"]
+    reason: "README/AGENTS.md の運用プロセスであり概念辞書の対象外。対更新の制約は既に INV-PARITY-001 が記録済み。__UNMAPPED__ claims (README.md:42) の審査結果として rejected を記録 (2026-10-17 run)。"
+    evidence:
+      - source: "README.md:42"
+        quote: "入力・導線・公開対象を変更したら、対応する仕様・テスト・計画を同じ変更で更新します。"
+      - source: "AGENTS.md:変更フロー"
+        quote: "診断・newsletterの仕様変更は logic.js (判定) と app.js (UI/送信) が対。"
+    auto_merge_candidates: []
+    decision: "rejected"
+    expires_after_runs: 10
+    created_run: "2026-10-17T15:27:03Z"
+  - id: "TP-20261017-013"
+    proposed_canonical: "ResultDisplay"
+    proposed_layer: "aux"
+    term_raw_examples: ["結果表示", "成功表示"]
+    reason: "結果表示の誠実さは概念というより不変条件であり、INV-RESULT-001 (hard) として記録。独立termは不要。__UNMAPPED__ claim (SYSTEM_CONSTITUTION.md:10) の審査結果として rejected を記録 (2026-10-17 run)。"
+    evidence:
+      - source: "SYSTEM_CONSTITUTION.md:10"
+        quote: "リンク到達・登録結果・配信結果を区別し、不明な結果を成功表示しない。"
+      - source: "README.md:31"
+        quote: "ローカルサーバーの合格を本番の登録・配信成功とは扱いません。"
+    auto_merge_candidates: []
+    decision: "rejected"
+    expires_after_runs: 10
+    created_run: "2026-10-17T15:27:03Z"
