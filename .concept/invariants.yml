@@ -134,3 +134,55 @@ invariants:
     checks:
       - type: "test"
         target: "test/server.test.js"
+  - id: "INV-PUBLISH-001"
+    related_terms: ["PublicationPath", "PublicationGuard"]
+    status: "stable"
+    strength: "hard"
+    statement: "公開対象のルートファイル一覧を deploy workflow・test/publish-tree.test.js のROOT_FILES・outreach.py のPUBLISH_ROOT_FILES の3箇所で同一に保ち、配信前に公開ツリー実物 (JS依存閉包 + 公開ガード) を通す"
+    rationale: "3箇所が独立したコピー構造で、片方だけの更新が未公開・欠落として実害として再発している (ARTIFACTS.md ⑧⑨⑫・PERSONA_REVIEW 2026-09-22)"
+    evidence:
+      - source: ".github/workflows/deploy_pages.yml:37-46"
+        quote: "cp ルート11ファイル _site/ → cp -r content _site/ → node --test test/publish-tree.test.js (PUBLICATION_ROOT=_site)"
+      - source: "scripts/t0007-outreach/outreach.py:49-51"
+        quote: "PUBLISH_ROOT_FILES = (index.html, ..., 404.html, og-image-1200x630.png)"
+      - source: "test/publish-tree.test.js:86"
+        quote: "実際の公開ツリーでHTMLからの相対JavaScript依存閉包を検査する"
+    checks:
+      - type: "test"
+        target: "test/publish-tree.test.js"
+      - type: "test"
+        target: "test/publication-guard.test.js"
+  - id: "INV-VERSION-001"
+    related_terms: ["PipelineVersion", "PublicationPath"]
+    status: "stable"
+    strength: "hard"
+    statement: "scripts下のtracked .py を変更するcommitでは ARTIFACTS.md の「現行」pipeline_version を同じ変更で同期する。docs-onlyのcommitでは版を動かさない"
+    rationale: "台帳の更新漏れと spurious stale 化的は実測済み (2026-09-15 版対象過剰・2026-10-17 同期漏れ)。ガードが実測値との一致を強制する"
+    evidence:
+      - source: "ARTIFACTS.md:7-9"
+        quote: "版 = pipeline_version() = scripts下のtracked .py のcontent hash短縮形 (.pyに未commit変更があれば '+'、git不在は 'unknown')"
+      - source: "test/artifacts-ledger.test.js:19-38"
+        quote: "実 pipeline_version() をsubprocessで呼び、台帳「現行」と一致することを強制する (判定logicを複製しない)"
+    checks:
+      - type: "test"
+        target: "test/artifacts-ledger.test.js"
+  - id: "INV-GATE-001"
+    related_terms: ["PublicationPath", "PublicationGuard"]
+    status: "stable"
+    strength: "hard"
+    statement: "外部へ出る生成物 (記事公開・SNS投稿・アウトリーチ送信) は承認ゲートを通す。t0007はjinnoのapprove後のみ、Xはpersona_review の verdict=pass のみで、persona審査不能・yaml不在は unreviewed として投稿を fail-closed で止める"
+    rationale: "公開ガード・技術検証・公開後の画面確認を省略しない (SYSTEM_CONSTITUTION.md)。未審の自動生成物を外に出さない"
+    evidence:
+      - source: "AGENTS.md:scripts/t0007-outreach (提携候補パイプライン)"
+        quote: "draft → jinno show/approve → publish-article → browser送信 → sent。外部に出るのはapprove後のみ"
+      - source: "scripts/t0007-outreach/outreach.py:428-429"
+        quote: "id=... は approved記事ではない (kind/status を検査)"
+      - source: "scripts/x-discover/collect.py:195"
+        quote: "全媒体ペルソナレビュー必須(2026-09-14) — persona yaml未接続の起草は禁止"
+      - source: "scripts/x-discover/post.py:9-12"
+        quote: "persona_review の verdict=pass 以外は投稿しない。unreviewed/無印 → 翌朝collect rereview待ち"
+    checks:
+      - type: "test"
+        target: "scripts/x-discover/test_persona_gate.py"
+      - type: "test"
+        target: "test/outreach-publish.test.js"

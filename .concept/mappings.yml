@@ -60,3 +60,20 @@ mappings:
   LocalVerificationServer:
     code_symbols:
       - "server.js::createRequestHandler"
+  PublicationPath:
+    code_symbols:
+      - ".github/workflows/deploy_pages.yml::Prepare publish tree"
+      - "test/publish-tree.test.js::ROOT_FILES"
+      - "test/publish-tree.test.js::assertPublishTree"
+      - "scripts/t0007-outreach/outreach.py::PUBLISH_ROOT_FILES"
+      - "scripts/t0007-outreach/outreach.py::cmd_publish"
+      - "scripts/x-discover/collect.py::attach_persona_review"
+      - "scripts/x-discover/post.py::persona_review"
+  PipelineVersion:
+    code_symbols:
+      - "scripts/x-discover/x_discover_rules.py::pipeline_version"
+      - "scripts/x-discover/repolish.py::_eligible"
+      - "scripts/t0007-outreach/outreach.py::_stale_msg"
+      - "test/artifacts-ledger.test.js::台帳の現行 pipeline_version が実測値と一致する"
+    db:
+      - "ARTIFACTS.md (生成物台帳 — 現行版の実測値を保持する正本)"
