@@ -48,7 +48,7 @@ DISCOVER_QUEUE = os.path.join(FLEET, 'discover-queue.jsonl')
 REPO = os.path.dirname(os.path.dirname(HERE))
 PUBLISH_ROOT_FILES = ('index.html', 'styles.css', 'app.js', 'logic.js', 'share.js',
                       'twitter-text-regex.js', 'favicon.svg', 'sitemap.xml', 'robots.txt',
-                      '404.html')
+                      '404.html', 'og-image-1200x630.png')
 
 
 def load_env_file() -> None:

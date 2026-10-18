@@ -74,4 +74,5 @@ dossierへ追記してから `draft` を走らせる。
 ```
 
 2026-10-12再実測でこのhostのcrontabに上記行は不在 (`~/.local/share/cb-fleet/` にlogも無い)。
-発火の実態と移転・再開時の更新指示は [../../AUTOMATION.md](../../AUTOMATION.md) が正本。
+発火の実態と移転・再開時の更新指示は [../../AUTOMATION.md](../../AUTOMATION.md) が正本
+(行は移転・再開時の設定例)。

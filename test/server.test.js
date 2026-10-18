@@ -310,12 +310,18 @@ test("POST /api/apply は有効な申込に202・不正入力に400を返す (�
       note: "カスタマーサポート部門。まず話を聞きたい", anonymous_id: "anon-9"
     });
     assert.equal(full.status, 202);
+    // email 254文字の境界: local部は64文字上限のためdomain部で長さを構成する
+    const edgeApply = await postApply({
+      email: `${"a".repeat(64)}@${"a".repeat(93)}.${"a".repeat(95)}`, consent: true
+    });
+    assert.equal(edgeApply.status, 202);
     for (const bad of [
       { email: "nope", consent: true },
       { email: "org@example.com" },
       { email: "org@example.com", consent: false },
       { email: "org@example.com", consent: true, interest: "X" },
       { email: "org@example.com", consent: true, note: "x".repeat(1001) },
+      { email: `${"a".repeat(64)}@${"a".repeat(93)}.${"a".repeat(96)}`, consent: true },
       "not-json"
     ]) {
       const res = await postApply(bad);
@@ -342,11 +348,17 @@ test("POST /api/subscribe は有効な登録に202・不正入力に400を返す
     assert.equal((await ok.json()).accepted, true);
     const withId = await postSub({ email: "user2@example.com", consent: true, anonymous_id: "abc-123_X" });
     assert.equal(withId.status, 202);
+    // email 254文字の境界: local部は64文字上限のためdomain部で長さを構成する
+    const edgeSub = await postSub({
+      email: `${"a".repeat(64)}@${"a".repeat(93)}.${"a".repeat(95)}`, consent: true
+    });
+    assert.equal(edgeSub.status, 202);
     for (const bad of [
       { email: "nope", consent: true },
       { email: "user@example.com" },
       { email: "user@example.com", consent: "yes" },
       { email: "user@example.com", consent: true, anonymous_id: "不正" },
+      { email: `${"a".repeat(64)}@${"a".repeat(93)}.${"a".repeat(96)}`, consent: true },
       "not-json"
     ]) {
       const res = await postSub(bad);
@@ -374,6 +386,40 @@ test("クロスオリジンからのPOSTは403で拒否する", async () => {
     assert.equal(res.status, 403);
     const json = await res.json();
     assert.equal(json.error, "cross_origin_denied");
+  } finally {
+    await ctx.cleanup();
+  }
+});
+
+test("クロスオリジンからの /api/subscribe・/api/apply へのPOSTも403で拒否する", async () => {
+  const ctx = await startServer();
+  try {
+    for (const path of ["/api/subscribe", "/api/apply"]) {
+      const res = await fetch(`${ctx.base}${path}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Origin: "https://evil.example.com" },
+        body: JSON.stringify({ email: "org@example.com", consent: true })
+      });
+      assert.equal(res.status, 403, path);
+      assert.equal((await res.json()).error, "cross_origin_denied", path);
+    }
+  } finally {
+    await ctx.cleanup();
+  }
+});
+
+test("同一Originの /api/apply へのPOSTは許可され Access-Control-Allow-Origin が設定される", async () => {
+  const ctx = await startServer();
+  try {
+    const origin = new URL(ctx.base).origin;
+    const res = await fetch(`${ctx.base}/api/apply`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Origin: origin },
+      body: JSON.stringify({ email: "org@example.com", consent: true })
+    });
+    assert.equal(res.status, 202);
+    assert.equal((await res.json()).accepted, true);
+    assert.equal(res.headers.get("access-control-allow-origin"), origin);
   } finally {
     await ctx.cleanup();
   }

@@ -53,8 +53,11 @@ core投稿のIn-Network到達圏 (P(action)の分母) を広げる。_account=AI
 
 ## 他リポ連携
 
-- 素材源 v0 = HN (Algolia・keyless) + GitHub search (keyless)
+- 素材源 v0 = HN (Algolia・keyless) + GitHub search (keyless)。Redditは当初記載に
+  含まれたが v0から未実装のため除去 (2026-10-12・test/x-discover-sources.test.jsが
+  docs↔実装整合を恒久保証)
 - 以降 = defuddle providers (GITHUB_TOKEN/QIITA_TOKEN規律・docs/providers.md)・RSS
-- 起草 = litellm proxy (LITELLM_API_KEY環境変数のみ・keyは指紋以外記録しない)
+- 起草 = LLM_BACKENDS env優先順のbackend chain (llm_backend.py・2026-09-05〜。
+  devin/codex/litellm・既定はlitellm。litellmのkeyはLITELLM_API_KEYのみで指紋以外記録しない)
 - 投稿 = site_meiro-a/scripts/x-fleet-post.pyのパターン流用 (CB垢作成後にconfig+state+cron)
 - 台帳 = business_notes/横断/2026-08-28-x_account_fleet_strategy.md 追記

@@ -1,0 +1,136 @@
+invariants:
+  - id: "INV-INTEREST-001"
+    related_terms: ["Interest"]
+    status: "stable"
+    strength: "hard"
+    statement: "関心の昇格は訪問者自身の選択によってのみ行われ、順序は上方向にのみ動く (推定や自動格上げをしない)"
+    rationale: "自己選択の尊重・属性判定の禁止 (SYSTEM_CONSTITUTION.md)"
+    evidence:
+      - source: "logic.js:56-60"
+        quote: "promoteBySelfSelection"
+      - source: "test/logic.test.js:46-56"
+        quote: "昇格は有効な自己選択でのみ行う"
+    checks:
+      - type: "test"
+        target: "test/logic.test.js"
+  - id: "INV-DIAG-001"
+    related_terms: ["Diagnosis", "Phase"]
+    status: "stable"
+    strength: "hard"
+    statement: "診断の現段階は該当回答のうち最大のphaseで決まり、全て非該当ならP1。該当回答は「はい」「トライ中」のみ"
+    rationale: "自己申告ベースの判定規約"
+    evidence:
+      - source: "logic.js:107-171"
+        quote: "AFFIRMATIVE_ANSWERS / run_diagnosis (max-affirmative-phase)"
+      - source: "test/logic.test.js:132-172"
+        quote: "全質問falseでP1 / Q0だけtrueでP2"
+    checks:
+      - type: "test"
+        target: "test/logic.test.js"
+  - id: "INV-DIAG-002"
+    related_terms: ["Diagnosis", "ForbiddenAttribute"]
+    status: "stable"
+    strength: "hard"
+    statement: "診断結果は利用者間の優劣比較を含まず、禁止属性 (職業・収入・能力・性格等) を含まない"
+    rationale: "能力や属性を勝手に判定しない (SYSTEM_CONSTITUTION.md)"
+    evidence:
+      - source: "test/logic.test.js:172-187"
+        quote: "診断結果に優劣比較を含まない / 診断結果に禁止属性を含まない"
+    checks:
+      - type: "test"
+        target: "test/logic.test.js"
+  - id: "INV-EVENT-001"
+    related_terms: ["AnonymousEvent", "ForbiddenAttribute"]
+    status: "stable"
+    strength: "hard"
+    statement: "匿名イベントは禁止属性を含んではならない。クライアントは送信前にフィルタし、サーバーは検出時に拒否する (二重化)"
+    rationale: "PII非推定・非取得の保証"
+    evidence:
+      - source: "logic.js:185-226"
+        quote: "FORBIDDEN_ATTRIBUTES / filterForbiddenAttributes / buildEventBatch"
+      - source: "server.js:139-161"
+        quote: "validateEvent: forbidden attribute"
+      - source: "test/logic.test.js:247-286"
+        quote: "禁止属性を含むイベントから当該属性をフィルタする"
+    checks:
+      - type: "test"
+        target: "test/logic.test.js"
+      - type: "test"
+        target: "test/events.test.js"
+  - id: "INV-SUB-001"
+    related_terms: ["Subscription", "Application"]
+    status: "stable"
+    strength: "hard"
+    statement: "登録系endpointは同意フラグtrueを必須とし、メール形式と匿名ID形式を検証する。devサーバーは保存しない (202のみ)"
+    rationale: "同意なき個人情報取得の防止"
+    evidence:
+      - source: "server.js:99-133"
+        quote: "validateSubscription (consent_required) / validateApplication"
+      - source: "test/server.test.js"
+        quote: "server.test.js"
+    checks:
+      - type: "test"
+        target: "test/server.test.js"
+  - id: "INV-STATS-001"
+    related_terms: ["InterestStats"]
+    status: "stable"
+    strength: "soft"
+    statement: "total が MIN_STATS_TOTAL (5) 未満の統計は表示部品を返さず、要素ごと隠す (少数からの推定を作らない)"
+    rationale: "読みを歪める少数の%表示の防止"
+    evidence:
+      - source: "logic.js:254-268"
+        quote: "formatInterestStats / MIN_STATS_TOTAL"
+      - source: "test/logic.test.js:287-315"
+        quote: "少数 (<MIN_STATS_TOTAL) と不正な入力で null を返す"
+    checks:
+      - type: "test"
+        target: "test/logic.test.js"
+  - id: "INV-GUARD-001"
+    related_terms: ["PublicationGuard"]
+    status: "stable"
+    strength: "hard"
+    statement: "公開ファイルに非公開の詳細定義に由来する用語を混入させない。ガード語の削除・無効化による解決は人間承認を必須とする"
+    rationale: "publicリポジトリでは混入させないことが唯一の安価な対策 (AGENTS.md)"
+    evidence:
+      - source: "test/publication-guard.test.js:1-45"
+        quote: "公開面への機密用語混入を防ぐ静的ガード / 削除・無効化は人間承認を要する"
+      - source: "AGENTS.md:公開してよいか迷ったら"
+        quote: "guardの語削除・無効化で解決しない (人間承認が必須)"
+    checks:
+      - type: "test"
+        target: "test/publication-guard.test.js"
+  - id: "INV-PARITY-001"
+    related_terms: ["Diagnosis", "LocalVerificationServer", "Subscription"]
+    status: "stable"
+    strength: "soft"
+    statement: "診断・送信仕様の変更は logic.js (判定) と app.js (UI/送信) を対として更新し、server.js (本番Worker検証の写し) と片側だけ変えない"
+    rationale: "検証ロジックの乖離による偽の合格を防ぐ"
+    assumptions:
+      - id: "ASM-INV-PARITY-001"
+        text: "AUTO: repo内の検証ロジックの参照としてserver.jsを扱い、本番Workerとの差異確認は対象外とする"
+        decision_key: "AUTO:LocalVerificationServer.worker_parity:serverjs_as_reference"
+        expires_after_runs: 20
+    evidence:
+      - source: "AGENTS.md:変更フロー"
+        quote: "logic.js (判定) と app.js (UI/送信) が対。server.js は本番Workerの検証ロジックの写し"
+      - source: "server.js:99-100"
+        quote: "本番と同じ検証をローカルでも通すための写し"
+    checks:
+      - type: "test"
+        target: "test/events.test.js"
+      - type: "test"
+        target: "test/server.test.js"
+  - id: "INV-RESULT-001"
+    related_terms: ["Subscription", "Application", "LocalVerificationServer"]
+    status: "stable"
+    strength: "hard"
+    statement: "リンク到達・登録結果・配信結果を区別し、不明な結果やローカル検証の合格を登録・配信の成功として表示しない"
+    rationale: "結果表示の誠実さ (SYSTEM_CONSTITUTION.md)。dev の 202 は検証成功のみを意味する"
+    evidence:
+      - source: "SYSTEM_CONSTITUTION.md:10"
+        quote: "リンク到達・登録結果・配信結果を区別し、不明な結果を成功表示しない。"
+      - source: "README.md:31"
+        quote: "ローカルサーバーの合格を本番の登録・配信成功とは扱いません。"
+    checks:
+      - type: "test"
+        target: "test/server.test.js"

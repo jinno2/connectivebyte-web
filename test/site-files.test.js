@@ -6,6 +6,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+import { INTERESTS, getInterestRoute } from "../logic.js";
+import { existsSync, readdirSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
@@ -14,7 +16,16 @@ import { createHash } from "node:crypto";
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 test("配信ページの本文bytesと承認metadataのhashが一致する", async () => {
-  for (const asset of ["01-canonical", "02-entry-read", "15-diagnostic-lp", "17-org-pdf"]) {
+  // 対象は固定listではなく「metadata.jsonを持つ配信ページ」を content/ から自動
+  // 発見する。02-history・01-tracker-page が旧固定listから漏れ、表示用
+  // content_hash commentの陳腐化が検出されない実績があった — 以後の配信ページ
+  // 追加も自動で対象化され、本文・承認metadata・表示commentの3者一致を強制する。
+  const contentDir = path.join(repoRoot, "content");
+  const assets = readdirSync(contentDir, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory() && existsSync(path.join(contentDir, entry.name, "metadata.json")))
+    .map((entry) => entry.name);
+  assert.ok(assets.length >= 4, `配信ページの発見が過少 (${assets.length}件) — テストの前提が崩れた`);
+  for (const asset of assets) {
     const dir = path.join(repoRoot, "content", asset);
     const html = await readFile(path.join(dir, "index.html"), "utf8");
     const metadata = JSON.parse(await readFile(path.join(dir, "metadata.json"), "utf8"));
@@ -32,7 +43,7 @@ test("deploy workflow は favicon.svg と sitemap.xml を配信木に含める",
   const yml = await readFile(path.join(repoRoot, ".github/workflows/deploy_pages.yml"), "utf8");
   const cpLine = yml.split("\n").find((l) => l.includes("cp index.html"));
   assert.ok(cpLine, "publish treeのcp行が見つからない");
-  for (const file of ["favicon.svg", "sitemap.xml", "robots.txt", "app.js", "logic.js", "share.js", "twitter-text-regex.js", "404.html"]) {
+  for (const file of ["favicon.svg", "sitemap.xml", "robots.txt", "app.js", "logic.js", "share.js", "twitter-text-regex.js", "404.html", "og-image-1200x630.png"]) {
     assert.ok(cpLine.includes(file), `配信木に ${file} が無い: ${cpLine.trim()}`);
   }
 });
@@ -81,6 +92,34 @@ test("LP はOG基本metaを備え、title/descriptionの公開文字列と一致
   assert.equal(meta("og:type"), "website");
   const siteUrl = new URL(sitemap.match(/<loc>([^<]+)<\/loc>/)[1]);
   assert.equal(meta("og:url"), `${siteUrl.origin}/`);
+});
+
+test("LP の og:image は絶対URLで、原本HTML・PNG実寸・meta宣言の寸法が一致する", async () => {
+  // X・リンク共有cardの画像。meta content のURLは href/src のlink検査対象外で、
+  // 配信木漏れは favicon.svg と同じlive 404になる — 配信木包含は直前のdeploy workflow
+  // 検査が同じcp行で担保するため、ここでは寸法の三点照合に絞る。
+  // PNGはscripts/og-image-1200x630.htmlをPlaywrightで撮影した再生成物 — 原本のcanvas
+  // 宣言・IHDR実測・LP meta宣言・URL内の寸法表記が揃わないsilent driftを機械検査する。
+  const [html, sitemap, src, png] = await Promise.all([
+    readFile(path.join(repoRoot, "index.html"), "utf8"),
+    readFile(path.join(repoRoot, "sitemap.xml"), "utf8"),
+    readFile(path.join(repoRoot, "scripts/og-image-1200x630.html"), "utf8"),
+    readFile(path.join(repoRoot, "og-image-1200x630.png"))
+  ]);
+  const meta = (prop) => html.match(new RegExp(`<meta property="${prop}" content="([^"]*)">`))?.[1];
+  const siteUrl = new URL(sitemap.match(/<loc>([^<]+)<\/loc>/)[1]);
+  assert.equal(meta("og:image"), `${siteUrl.origin}/og-image-1200x630.png`);
+  const canvas = src.match(/html, body \{ width: (\d+)px; height: (\d+)px;/);
+  assert.ok(canvas, "scripts/og-image-1200x630.html に html,body のcanvas寸法宣言が無い");
+  assert.equal(png.readUInt32BE(16), Number(canvas[1]), "PNG IHDR幅 != 原本HTML宣言幅");
+  assert.equal(png.readUInt32BE(20), Number(canvas[2]), "PNG IHDR高さ != 原本HTML宣言高さ");
+  assert.equal(meta("og:image:width"), String(png.readUInt32BE(16)), "og:image:width != PNG IHDR幅");
+  assert.equal(meta("og:image:height"), String(png.readUInt32BE(20)), "og:image:height != PNG IHDR高さ");
+  assert.equal(new URL(meta("og:image")).pathname,
+    `/og-image-${png.readUInt32BE(16)}x${png.readUInt32BE(20)}.png`, "URLの寸法表記がPNG実寸と不一致");
+  const description = html.match(/<meta name="description" content="([^"]*)">/)[1];
+  assert.equal(meta("og:image:alt"), description);
+  assert.equal(html.match(/<meta name="twitter:card" content="([^"]*)">/)?.[1], "summary_large_image");
 });
 
 test("sitemap.xml はインデックス許可ページのみを掲載する (noindex資産を含まない)", async () => {
@@ -148,6 +187,34 @@ test("LP #apply 申込formは /apply endpoint・同意checkbox・PII分離文言
   assert.equal(lp.includes("東京AIソリューションズ"), false);
 });
 
+test("LP の両メール入力 (newsletter・apply) は server検証と同じ maxlength=254 を持つ", async () => {
+  // server.js は email.length > 254 を invalid_email で拒否する。maxlength 無しの
+  // 入力欄ではブラウザ検証を通過した長い入力が送信後にのみ失敗表示になるため、
+  // 両formで RFC 5321 の上限を事前に抑える (2026-10-13 newsletter側の付け忘れ修正)。
+  const lp = await readFile(path.join(repoRoot, "index.html"), "utf8");
+  assert.match(lp, /id="email" name="email" type="email"[^>]*required maxlength="254"/);
+  assert.match(lp, /id="apply-email" name="email" type="email"[^>]*required maxlength="254"/);
+});
+
+// html文字列から id 属性値を実DOMのidとして抽出する (属性順・クォート形式に依存
+// しない)。data-asset-id 等 "id" を含む属性名の値を実idと誤認しないため、空白
+// (または文頭) に続く id 属性のみを数える — 部分一致を許すと参照先idが実DOMに
+// 無くても過大受容で静かにpassする穴になる。app.js↔index.html監査・診断飛び先
+// 検査・inline id監査の3者で同一規則を共有する。
+function collectHtmlIds(html) {
+  return new Set([...html.matchAll(/(?:^|\s)id\s*=\s*["']([\w-]+)["']/g)].map((m) => m[1]));
+}
+
+// 診断5択の飛び先 (logic.js ROUTES target) のうち html の実DOMに存在しないものを
+// 突き出す (実頁の検査と合成fixtureによる規則の単位検査を同じ規則に乗せるため
+// 関数に切った — inlineScriptIdAudit と同じ構成)。
+function missingRouteTargets(html) {
+  const htmlIds = collectHtmlIds(html);
+  return INTERESTS.map(getInterestRoute)
+    .map((route) => route.target)
+    .filter((target) => !htmlIds.has(target));
+}
+
 test("app.js が querySelector で参照する全 id は index.html の実DOMに存在する (モックと実物の配線乖離の検知)", async () => {
   // level_table_read_100 のIntersectionObserverは実HTMLのidを検索する。実DOMに
   // idが無いとモックDOMにidを注入するテストだけ通って本番で発火しないため、
@@ -163,11 +230,46 @@ test("app.js が querySelector で参照する全 id は index.html の実DOMに
     for (const [, id] of selector.matchAll(/#([\w-]+)/g)) queriedIds.add(id);
   }
   const dynamicIds = new Set([...app.matchAll(/\.id\s*=\s*["']([\w-]+)["']/g)].map((m) => m[1]));
-  const htmlIds = new Set([...lp.matchAll(/\bid\s*=\s*["']([\w-]+)["']/g)].map((m) => m[1]));
+  const htmlIds = collectHtmlIds(lp);
   // 抽出regexの腐敗 (0件一致で無意味にpassする偽陰性) のガード。実在は55id。
   assert.ok(queriedIds.size >= 50, `app.js のid参照の抽出が過少: ${queriedIds.size}件`);
   const missing = [...queriedIds].filter((id) => !dynamicIds.has(id) && !htmlIds.has(id));
   assert.deepEqual(missing, [], `app.js が参照するidが index.html の実DOMに無い: ${missing.join(", ")}`);
+});
+
+test("診断5択の飛び先 (logic.js ROUTES target) は LP の実DOMに存在する (実行時リンク切れの検知)", async () => {
+  // #result-link の href は app.js が実行時に `#${route.target}` へ差し替えるため、
+  // 静的リンク検査 (#先頭は対象外) も querySelector のid監査 (querySelector内の#のみ)
+  // もこの対応を見ない。logic.js 側のtarget改名・LP側のsection改名のどちらでも
+  // 「次へ進む」が例外ではなく沈黙のリンク切れになる — 診断→案内の主導線を機械検査する。
+  // 抽出本体は missingRouteTargets (直上) — 規則の単位検査は次testが担う。
+  const lp = await readFile(path.join(repoRoot, "index.html"), "utf8");
+  // 抽出regexの腐敗 (0件一致で無意味にpassする偽陰性) のガード。実在は69id。
+  const htmlIds = collectHtmlIds(lp);
+  assert.ok(htmlIds.size >= 40, `LPのid抽出が過少 (${htmlIds.size}件) — 抽出regexの前提が崩れた`);
+  const missing = missingRouteTargets(lp);
+  assert.deepEqual(missing, [], `診断の飛び先がLPの実DOMに無い: ${missing.join(", ")}`);
+});
+
+test("診断飛び先検査の規則: 飛び先idの消失を検出し、data-asset-idの値を飛び先と認めない", async () => {
+  // 実在の1飛び先を実LP htmlから削った変異で「実際に落ちること」を固定する
+  // (規則の単位検査 — inline id監査の規則testと同じ構成)。data-asset-id 等の値が
+  // id抽出に混入する規則へ退化すると、飛び先の実DOM消失を過大受容で見逃す。
+  const lp = await readFile(path.join(repoRoot, "index.html"), "utf8");
+  const target = INTERESTS.map(getInterestRoute).map((route) => route.target)[0];
+  const idAttr = new RegExp(`(?:^|\\s)id\\s*=\\s*["']${target}["']`);
+  assert.match(lp, idAttr, `前提崩れ: 飛び先 ${target} が実LPに存在しない`);
+  // 飛び先idを実DOMから削ると検出される (沈黙リンク切れの再現)
+  const mutated = lp.replace(idAttr, (m) => m.match(/^\s*/)[0]);
+  assert.deepEqual(missingRouteTargets(mutated), [target],
+    "飛び先idの実DOM消失を検出できていない — 検査の規則が崩れた");
+  // data-asset-id の値は実DOM idではない — 誤認すると消失を見逃す
+  assert.deepEqual(missingRouteTargets(`${mutated}<div data-asset-id="${target}"></div>`), [target],
+    "data-asset-idの値が飛び先として過大受容されている — 抽出規則が崩れた");
+  // 飛び先が全て実DOMに在れば検出しない (誤検出の回帰固定)
+  const minimal = `<html><body>${INTERESTS.map(getInterestRoute)
+    .map((route) => `<section id="${route.target}"></section>`).join("")}</body></html>`;
+  assert.deepEqual(missingRouteTargets(minimal), []);
 });
 
 // 1頁分のHTMLから「inline scriptが参照するidのうち、静的DOMに存在しないもの」を
@@ -175,8 +277,7 @@ test("app.js が querySelector で参照する全 id は index.html の実DOMに
 // 規則に乗せるため関数に切った — inboundTarget と同じ構成)。
 // 規則: 参照はinline script本文の getElementById/#id (src付き外部script本文は
 // 対象外)。DOM側のidはinline script本文を除いて数え (script内の view.id = "..." を
-// 実DOMのidと誤認しない)、空白 (または文頭) に続く id 属性のみを数える —
-// data-id 等 "id" を含む属性名に部分一致すると静的id欠落の偽陰性になる。
+// 実DOMのidと誤認しない)、id抽出は collectHtmlIds の共通規則に寄せる。
 // script後段のid移転 (02-history: pre.removeAttribute→view.id) でも先頭lookupは
 // 静的DOMを探すため、最初の.id付与が最初の参照より前のidのみ動的idとして静的
 // 実在要求から除外する (生成後に参照するid・app.jsのfeedback-note型は対象外) —
@@ -201,7 +302,7 @@ function inlineScriptIdAudit(html) {
     if (!dynamicIds.has(m[1])) dynamicIds.set(m[1], m.index);
   }
   const htmlNoScript = html.replace(/<script(?![^>]*\bsrc=)[^>]*>[\s\S]*?<\/script>/g, "");
-  const htmlIds = new Set([...htmlNoScript.matchAll(/(?:^|\s)id\s*=\s*["']([\w-]+)["']/g)].map((m) => m[1]));
+  const htmlIds = collectHtmlIds(htmlNoScript);
   const missing = [...refs].filter(([id, refPos]) =>
     !htmlIds.has(id) && !(dynamicIds.get(id) !== undefined && dynamicIds.get(id) < refPos))
     .map(([id]) => id);
@@ -389,6 +490,90 @@ test("孤児検知のリンク解決: 相対・絶対・index.html付きは同�
   assert.equal(inboundTarget("https://lab.connectivebyte.com/content/18-blog/cap-scan/", lp, host), "/content/18-blog/cap-scan/");
   // 記事本文からの相対リンク (../) は記事位置基準で解決する
   assert.equal(inboundTarget("../cap-scan/", article, host), "/content/18-blog/cap-scan/");
+});
+
+test("全配信ページの相対リンク (href/src) は解決先の実在資産へ向かう (リンク切れの機械検査)", async () => {
+  // 孤児検知はsitemap記事へのinbound到達のみを見るため、張った側のリンク先が
+  // 実在するか (typo・改名・削除済みpathへのリンク) は別問題になる。L2「誤った
+  // 約束やリンク切れを減らす」の直接ガードとして、git追跡の全HTMLが張る href/src
+  // を各ページ位置から解決し、site内実在 (repo root基準) へ向かうことを検査する。
+  // 外部URL・アンカー・scheme付き (mailto/data:) と inline script が組み立てる
+  // 式断片 (引用符・連結を含む値) は対象外。
+  //
+  // 実在判定はworktreeの実在 (existsSync) ではなくgit追跡path集合との文字列照合で
+  // 行う。公開treeは追跡対象から構成されるため追跡外ローカル文件 (build成果物等)
+  // へのリンクを実在扱いで通す面がなくなり、さらに大小文字違いのpathがhost FSの
+  // 大小文字非依存 (macOS等) で偽陽性になる面も排除される (GitHub Pagesは大小文字
+  // 区別で404になる)。末尾"/"付きのtargetはdir宛て、付きなしはfile許容のdirとして
+  // 追跡dir集合 (追跡fileの祖先) と照合する。
+  const lsFiles = execFileSync("git", ["ls-files", "-z"], { cwd: repoRoot, encoding: "utf8" })
+    .split("\0").filter(Boolean);
+  const tracked = lsFiles.filter((f) => f.endsWith(".html"));
+  assert.ok(tracked.length >= 10, `追跡済みhtmlが過少 (${tracked.length}件) — テストの前提が崩れた`);
+  const trackedPaths = new Set(lsFiles);
+  const trackedDirs = new Set(["."]);
+  for (const f of lsFiles) {
+    for (let d = path.posix.dirname(f); d !== "."; d = path.posix.dirname(d)) trackedDirs.add(d);
+  }
+  const broken = [];
+  const straySkips = [];
+  let checked = 0;
+  for (const rel of tracked) {
+    const html = await readFile(path.join(repoRoot, rel), "utf8");
+    // 単一引用符属性にも対応 — 引用符styleの変更で検査対象が静かに消える偽陰性を防ぐ
+    for (const [, dq, sq] of html.matchAll(/(?:href|src)=(?:"([^"]+)"|'([^']+)')/g)) {
+      const ref = dq ?? sq;
+      if (/^(?:https?:)?\/\//.test(ref) || /^[a-z][a-z0-9+.-]*:/i.test(ref) || ref.startsWith("#")) continue;
+      if (ref.includes("'") || ref.includes(" + ")) {
+        // inline JSの式断片はskipするが、既知のtemplate形状 (' + ident + ') 以外の
+        // skipは検査の穴として即fail — skip判定の腐敗が静かにpassを作るのを防ぐ
+        if (!/^' \+ [A-Za-z_$][\w$]* \+ '$/.test(ref)) straySkips.push(`${rel}: ${ref}`);
+        continue;
+      }
+      const target = ref.split("#")[0].split("?")[0];
+      if (!target) continue;
+      const wantsDir = target.endsWith("/");
+      const base = target.replace(/\/+$/, "") || ".";
+      checked += 1;
+      const resolved = path.posix.normalize(
+        base.startsWith("/") ? base.slice(1) : path.posix.join(path.posix.dirname(rel), base)
+      );
+      const reachable = wantsDir
+        ? trackedDirs.has(resolved)
+        : trackedPaths.has(resolved) || trackedDirs.has(resolved);
+      if (!reachable) broken.push(`${rel}: ${ref} → ${resolved}`);
+    }
+  }
+  assert.deepEqual(straySkips, [], `skip判定の想定外逸脱 (${straySkips.length}件) — inline JS断片以外が静かに検査から漏れている:\n${straySkips.join("\n")}`);
+  // 抽出regexの腐敗 (0件一致で無意味にpassする偽陰性) の下限ガード。実在は103本。
+  assert.ok(checked >= 80, `検査対象リンクが過少 (${checked}本) — 抽出の前提が崩れた`);
+  assert.deepEqual(broken, [], `リンク切れ (${broken.length}本):\n${broken.join("\n")}`);
+});
+
+test("form入力欄はキーボードフォーカス表示を保持する (outline無効化の禁止と :focus-visible 代替の実在)", async () => {
+  // newsletter/apply両formのメール入力と #apply-note が outline:none で既定の
+  // フォーカスringを消しており、キーボード利用者に入力欄のフォーカス位置が
+  // 見えない実測 (WCAG 2.4.7 Focus Visible) への回帰防止。ボタン類
+  // (.button-primary/.choice) は当初から :focus-visible を備える一方で入力欄だけ
+  // 漏れていた。outline無効化は :focus-visible 代替とセットでのみ許容 —
+  // 現行では input/textarea からの outline 無効化は全廃済み。将来正当な需要が
+  // できた場合は代替表示と一緒に本ガードを見直すこと。
+  const css = await readFile(path.join(repoRoot, "styles.css"), "utf8");
+  assert.doesNotMatch(css, /outline:\s*(?:none|0(?:px)?)\b/,
+    "styles.css に outline無効化 (none/0) が復活 — フォーカス表示を消す場合は :focus-visible 代替とセットにし本ガードを見直すこと");
+  // 代替表示の実在 (下限ガード): .choice + 入力欄3セレクタの :focus-visible outline。
+  const focusOutlines = [...css.matchAll(/:focus-visible[^{]*\{[^}]*outline:\s*\d/g)].length;
+  assert.ok(focusOutlines >= 4, `:focus-visible outline規則が過少 (${focusOutlines}本) — 検査の前提が崩れた`);
+  // 4本は個別に特定する — 集計下限だけでは「.choiceの削除＋別の新規ルールで数を
+  // 穴埋め」や `.email-row input` の #apply-form 側部分一致を黙認してしまう。
+  assert.match(css, /\.choice:focus-visible[^{}]*\{[^}]*outline:/,
+    ".choiceの :focus-visible 代替が無い");
+  assert.match(css, /^\.email-row input:focus-visible \{[^}]*var\(--cyan\)/m,
+    "newsletterメール入力の :focus-visible 代替が無い");
+  assert.match(css, /#apply-form \.email-row input:focus-visible[^{]*\{[^}]*outline:/,
+    "申込メール入力の :focus-visible 代替が無い");
+  assert.match(css, /#apply-note:focus-visible[^{]*\{[^}]*outline:/,
+    "申込noteの :focus-visible 代替が無い");
 });
 
 test("Pages は同じjobでテストと配信木検査に合格してから公開する", async () => {

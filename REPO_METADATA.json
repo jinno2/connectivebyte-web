@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "verified_at": "2026-10-17T14:37:15+00:00",
+  "long_term": {
+    "summary": "訪問者が内容と選択肢を理解し、自分の意思で学習・購読などの次の行動へ進められる、分かりやすく信頼できる公開サイトを育てる。",
+    "source": "ORDER.md",
+    "source_hash": "git-blob:338c7d6a3e7b0c6487e86680615dfff5f414542e",
+    "updated_at": "2026-09-13"
+  },
+  "short_term": {
+    "summary": "既存画面の主要な選択→案内先の体験を一つ点検し、公開済み表現の範囲で不具合や説明不足を直す。",
+    "source": "ORDER.md#直近の着手点",
+    "source_hash": "git-blob:338c7d6a3e7b0c6487e86680615dfff5f414542e",
+    "updated_at": "2026-09-13",
+    "status": "unknown"
+  }
+}
