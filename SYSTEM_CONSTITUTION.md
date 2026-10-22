@@ -1,7 +1,7 @@
 # 公開サイトの不変条件
 
 読者が関心に合う情報を選び、条件を理解して次の行動へ進めるサイトにする。
-[ORDER.md](ORDER.md)が計画、[AGENTS.md](AGENTS.md)が公開・作業規約、[AUTOMATION.md](AUTOMATION.md)が発火・停止の入口である。
+[ORDER.md](ORDER.md)が計画、[docs/MILESTONES.md](docs/MILESTONES.md)が実行用分解、[AGENTS.md](AGENTS.md)が公開・作業規約、[AUTOMATION.md](AUTOMATION.md)が発火・停止の入口である。
 
 - 本人の自己選択と同意を尊重し、能力や属性を勝手に判定しない。
 - 匿名計測とメール等の個人情報を分離する。拒否・取消しを通常の利用経路として扱う。

@@ -32,7 +32,7 @@ npm run serve
 
 ## 文書と構成
 
-- [長期計画](ORDER.md)、[不変条件](SYSTEM_CONSTITUTION.md)、[発火・停止・公開](AUTOMATION.md)、[作業規約](AGENTS.md)
+- [長期計画](ORDER.md)、[マイルストーン](docs/MILESTONES.md)、[不変条件](SYSTEM_CONSTITUTION.md)、[発火・停止・公開](AUTOMATION.md)、[作業規約](AGENTS.md)
 - `index.html` / `styles.css`: 画面と表示
 - `logic.js` / `app.js` / `share.js`: 判定・同意・操作・共有
 - `server.js`: ローカル検証用サーバー
