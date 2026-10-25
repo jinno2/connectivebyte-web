@@ -4,6 +4,15 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description" content="関心を自己選択し、次の一歩を見つけるConnectiveByte診断LP。">
+  <meta property="og:title" content="ConnectiveByte | つながりから、次の可能性へ">
+  <meta property="og:description" content="関心を自己選択し、次の一歩を見つけるConnectiveByte診断LP。">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://lab.connectivebyte.com/">
+  <meta property="og:image" content="https://lab.connectivebyte.com/og-image-1200x630.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="関心を自己選択し、次の一歩を見つけるConnectiveByte診断LP。">
+  <meta name="twitter:card" content="summary_large_image">
   <meta name="theme-color" content="#101c2c">
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <title>ConnectiveByte | つながりから、次の可能性へ</title>
@@ -92,6 +101,7 @@
         <h3 id="diagnostic-step-title">診断ステップ：最近の行動について、それぞれ一番近い答えを選んでください</h3>
         <p class="privacy-note">能力・性格・習熟度を測るものではありません。自分の行動の記録として使います。</p>
         <ul class="diagnostic-questions" id="diagnostic-questions"></ul>
+        <p class="form-status" id="diagnostic-status" role="status"></p>
         <button class="button button-secondary" type="button" data-action="submit-diagnosis">診断を完了する</button>
         <div class="diagnostic-output" id="diagnostic-output" hidden aria-live="polite">
           <p>現在の段階：<span id="diagnostic-level"></span></p>
@@ -158,7 +168,9 @@
         <article class="resource-card article-card" id="verification-note" data-asset-id="verification_note">
           <p class="card-type">VERIFICATION NOTE</p><h2>サービスを実際に動かして比べる</h2>
           <p>気になる海外AIサービスを、同じ条件で実際に動かした記録です。挙動・費用・言語対応などを測定項目に、確認日と未検証の範囲を明示して報告します。</p>
-          <a class="text-link" href="content/18-blog/ozbrain-ja-knowledge/index.html" target="_blank" rel="noopener noreferrer" data-track="outbound_cta_clicked" data-cta-id="verification_note_open">検証レポートを読む <span>↗</span></a>
+          <a class="text-link" href="content/18-blog/ozbrain-ja-knowledge/index.html" target="_blank" rel="noopener noreferrer" data-track="outbound_cta_clicked" data-cta-id="verification_note_open">OzBrain検証レポートを読む <span>↗</span></a>
+          <a class="text-link" href="content/18-blog/quetab-ai-game-builder/index.html" target="_blank" rel="noopener noreferrer" data-track="outbound_cta_clicked" data-cta-id="verification_note_quetab">AIゲーム生成の検証レポートを読む <span>↗</span></a>
+          <a class="text-link" href="content/18-blog/subscription-cap-flip-scan/index.html" target="_blank" rel="noopener noreferrer" data-track="outbound_cta_clicked" data-cta-id="verification_note_subcap">サブスクAI利用枠の実測レポートを読む <span>↗</span></a>
         </article>
         <article class="resource-card accent-card" id="organization" data-asset-id="organization_brief">
           <p class="card-type">FOR ORGANIZATIONS</p><h2>部門別・AI活用診断<br>記入式様式</h2>
@@ -206,7 +218,7 @@
         <p class="dash-level-actions-label">次のアクション</p>
         <ul class="dash-level-actions" id="dash-level-actions"></ul>
       </div>
-      <div class="level-table" aria-labelledby="level-table-title">
+      <div class="level-table" id="level-table" aria-labelledby="level-table-title">
         <h3 id="level-table-title">AI活用の成熟度について</h3>
         <p>AIとの付き合い方は、知る・試す・仕組みにする・広げるといった段階を経て深まります。ConnectiveByteでは、この成熟度を多段階で捉える独自モデルを研究・開発中です。いまの位置は、診断で測れます。</p>
       </div>
@@ -217,7 +229,7 @@
       <p class="newsletter-note">価格と性能の実測など、仕事の判断に使える小さな観測を、読み切り数分の読み物として届けます。登録後に確認メールが届きます — 本文内のリンクで購読が確定します。いつでもメール内のリンクから解除できます。</p>
       <form id="newsletter-form">
         <label for="email">メールアドレス</label>
-        <div class="email-row"><input id="email" name="email" type="email" autocomplete="email" required placeholder="you@example.com"><button type="submit">登録する</button></div>
+        <div class="email-row"><input id="email" name="email" type="email" autocomplete="email" required maxlength="254" placeholder="you@example.com"><button type="submit">登録する</button></div>
         <label class="check"><input id="email-consent" type="checkbox" required> ニュースレター登録のためのメール利用に同意します。メールアドレスは送信・保存され、ニュースレター配信にのみ使用します。匿名行動との関連付けは、この明示登録後に限ります。配信はいつでも、メール内のリンクから解除できます。</label>
         <p class="form-status" id="newsletter-status" role="status">登録すると、診断が詳細版（12問・数分）に切り替わります。</p>
       </form>

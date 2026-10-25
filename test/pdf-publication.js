@@ -1,6 +1,7 @@
 // PDF検査の失敗・未対応形式は公開を止める。通常ファイルの検査範囲は従来どおり。
 import { execFile } from "node:child_process";
-import { lstat, readFile, readdir } from "node:fs/promises";
+import { lstat, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 
@@ -14,6 +15,27 @@ async function run(tool, args) {
   });
   if (stderr.trim()) throw new Error(`${tool}: ${stderr.trim()}`);
   return stdout;
+}
+
+async function qpdfJson(bytes) {
+  const directory = await mkdtemp(path.join(tmpdir(), "publication-qpdf-"));
+  // AppArmorのqpdfプロファイル(/etc/apparmor.d/qpdf)はtmp配下でも拡張子付き
+  // (.pdf/.json/.qdf)のファイルしか読めない。拡張子なしPDFも検査できるよう、
+  // 実バイトを.pdf拡張子付きの一時コピー経由でqpdfに渡す。
+  const input = path.join(directory, "input.pdf");
+  const output = path.join(directory, "document.json");
+  try {
+    await writeFile(input, bytes);
+    const { stderr } = await exec("qpdf", ["--json", "--json-stream-data=none", input, output], {
+      encoding: "utf8", timeout: 15_000, maxBuffer: MAX_BYTES,
+      env: { ...process.env, LC_ALL: "C" },
+    });
+    if (stderr.trim()) throw new Error(`qpdf: ${stderr.trim()}`);
+    if ((await stat(output)).size > MAX_BYTES) throw new Error("qpdf JSON検査サイズ上限超過");
+    return await readFile(output, "utf8");
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
 }
 
 async function regularPath(file, directory = false) {
@@ -94,7 +116,7 @@ export async function scanFile(file) {
   const raw = bytes.toString("latin1");
   if (!raw.startsWith("%PDF-") || (raw.match(/startxref/g) || []).length !== 1 ||
       !/%%EOF\s*$/.test(raw)) throw new Error(`不正・線形化・増分更新されたPDF: ${file}`);
-  const document = JSON.parse(await run("qpdf", ["--json", "--json-stream-data=none", absolute]));
+  const document = JSON.parse(await qpdfJson(bytes));
   if (document.version !== 2 || document.qpdf?.[0]?.jsonversion !== 2 || !document.qpdf?.[1] ||
       document.encrypt?.encrypted !== false || document.acroform?.hasacroform !== false ||
       !document.attachments || Object.keys(document.attachments).length) {

@@ -9,6 +9,7 @@ import {
   phaseLabel,
   nextHintFor,
   truncateJa,
+  extractUrls,
   weightedLength,
   buildShareText,
   buildIntentUrl,
@@ -123,6 +124,228 @@ test("公式extract fixtureのschemeなしURLとURL単位の切詰めを扱う",
   assert.equal(weightedLength(`${"a".repeat(279)}👩🏽‍💻`), 281);
 });
 
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import {
+  MAX_POST_LENGTH,
+  URL_WEIGHTED_LENGTH,
+  SHARE_TEMPLATES,
+  shareUrlFor,
+  parseShareParams,
+  phaseLabel,
+  nextHintFor,
+  truncateJa,
+  extractUrls,
+  weightedLength,
+  buildShareText,
+  buildIntentUrl,
+  cardLines,
+  FEEDBACK_OPTIONS,
+  feedbackLabel,
+  resultText
+} from "../share.js";
+import { PHASES } from "../logic.js";
+
+test("shareUrlFor → parseShareParams round trip for every phase", () => {
+  PHASES.forEach((def, index) => {
+    const phase = index + 1;
+    const url = shareUrlFor("https://lab.connectivebyte.com/", phase);
+    assert.match(url, /\/\?r=P[1-4]&utm_source=shared&utm_medium=social&utm_campaign=diag_v1$/);
+    assert.equal(parseShareParams(new URL(url).search).phase, phase);
+  });
+});
+
+test("parseShareParams rejects malformed r", () => {
+  assert.equal(parseShareParams("").phase, null);
+  assert.equal(parseShareParams("?r=").phase, null);
+  assert.equal(parseShareParams("?r=abc").phase, null);
+  assert.equal(parseShareParams("?r=P").phase, null);
+  assert.equal(parseShareParams("?r=P0").phase, null);
+  assert.equal(parseShareParams("?r=P5").phase, null);
+  assert.equal(parseShareParams("?r=L4").phase, null);
+  assert.equal(parseShareParams("?r=p3").phase, null);
+});
+
+test("parseShareParams ignores unrelated params", () => {
+  assert.equal(parseShareParams("?utm_source=x&r=P2&foo=bar").phase, 2);
+});
+
+test("phaseLabel / nextHintFor resolve from PHASES", () => {
+  assert.equal(phaseLabel(1), PHASES[0].label);
+  assert.equal(phaseLabel(4), PHASES[3].label);
+  assert.equal(nextHintFor(2), PHASES[1].next_hints[0]);
+  assert.equal(phaseLabel(99), "");
+});
+
+test("truncateJa counts code points and appends ellipsis", () => {
+  assert.equal(truncateJa("あいう", 5), "あいう");
+  assert.equal(truncateJa("あいうえお", 3), "あいう…");
+  assert.equal(truncateJa(null, 3), "");
+});
+
+test("result template fits 280 weighted chars for every phase", () => {
+  const url = shareUrlFor("https://lab.connectivebyte.com/", 4);
+  PHASES.forEach((def, index) => {
+    const phase = index + 1;
+    const draft = buildShareText("result", {
+      phase,
+      phaseLabel: def.label,
+      nextHint: def.next_hints[0],
+      url
+    });
+    assert.ok(draft, `draft missing for P${phase}`);
+    assert.ok(draft.text.includes(def.label));
+    assert.ok(draft.text.includes(url));
+    assert.ok(weightedLength(draft.text) <= MAX_POST_LENGTH,
+      `P${phase} over cap: ${weightedLength(draft.text)}`);
+  });
+});
+
+test("result template truncates long next hints", () => {
+  const url = "https://lab.connectivebyte.com/";
+  const longHint = "次の一手としてとても長い文章を指定した場合には末尾が省略されること".repeat(3);
+  const draft = buildShareText("result", { phase: 2, nextHint: longHint, url });
+  assert.ok(!draft.text.includes(longHint));
+  assert.ok(draft.text.includes("…"));
+});
+
+test("free template uses user text plus url and caps length", () => {
+  const url = "https://lab.connectivebyte.com/";
+  const short = buildShareText("free", { freeText: "診断が分かりやすかった", url });
+  assert.equal(short.text, "診断が分かりやすかった\nhttps://lab.connectivebyte.com/");
+  const long = buildShareText("free", { freeText: "あ".repeat(400), url });
+  assert.ok(weightedLength(long.text) <= MAX_POST_LENGTH);
+  assert.ok(long.text.endsWith(url));
+});
+
+test("weightedLengthはXのCJK/ASCII/URL/emoji重みを扱い、共有文を上限内に切り詰める", () => {
+  const url = "https://lab.connectivebyte.com/?r=P2";
+  assert.equal(weightedLength("a".repeat(280)), 280);
+  assert.equal(weightedLength("あ".repeat(140)), 280);
+  assert.equal(weightedLength(`${"あ".repeat(200)}\n${url}`), 424);
+  assert.equal(weightedLength(`a ${url} b https://example.com/x`), 51);
+  assert.equal(weightedLength("👨‍🎤"), 2);
+  assert.equal(weightedLength("👩🏽‍💻"), 2);
+  const draft = buildShareText("free", { freeText: "あ".repeat(200), url });
+  assert.ok(weightedLength(draft.text) <= MAX_POST_LENGTH);
+  assert.ok(draft.text.endsWith(url));
+});
+
+test("公式extract fixtureのschemeなしURLとURL単位の切詰めを扱う", () => {
+  assert.equal(weightedLength("example.comてすとですtwitter.みんなです"), 60);
+  assert.equal(weightedLength("example.com あ twitter.みんな"), 50);
+  assert.equal(weightedLength("a https://example.com/path_(x),"), 26);
+  assert.equal(weightedLength(`${"あ".repeat(120)} example.com\nhttps://lab.connectivebyte.com/?r=P1`), 288);
+  const draft = buildShareText("free", {
+    freeText: `${"あ".repeat(120)} example.com`,
+    url: "https://lab.connectivebyte.com/?r=P1"
+  });
+  assert.ok(weightedLength(draft.text) <= MAX_POST_LENGTH);
+  assert.ok(draft.text.endsWith("https://lab.connectivebyte.com/?r=P1"));
+  assert.ok(!draft.text.includes("example.c"), "URL途中で切詰めない");
+  assert.equal(weightedLength("a".repeat(279)), 279);
+  assert.equal(weightedLength("a".repeat(280)), 280);
+  assert.equal(weightedLength("a".repeat(281)), 281);
+  assert.equal(weightedLength(`${"a".repeat(278)}👩🏽‍💻`), 280);
+  assert.equal(weightedLength(`${"a".repeat(279)}👩🏽‍💻`), 281);
+});
+
+test("公式twitter-textのURL抽出fixtureを独立期待値で検証する", () => {
+  const fixtures = [
+    ["http://ああ.com", ["http://ああ.com"]],
+    ["http://あ-あ.com", ["http://あ-あ.com"]],
+    ["foo.com foo.net foo.org foo.edu foo.gov", ["foo.com", "foo.net", "foo.org", "foo.edu", "foo.gov"]],
+    [
+      "foo.baz foo.co.jp www.xxxxxxx.baz www.foo.co.uk wwwww.xxxxxxx foo.comm foo.somecom foo.govedu foo.jp",
+      ["foo.co.jp", "www.foo.co.uk", "foo.jp"]
+    ],
+    ["example.comてすとですtwitter.みんなです", ["example.com", "twitter.みんな"]],
+    [
+      "これは日本語です。example.com/path/index.html中国語example.com/path한국",
+      ["example.com/path/index.html", "example.com/path"]
+    ],
+    ["#test.com @test.com #http://test.com @http://test.com", []],
+    ["I really like http://t.co/pbY2NfTZ's website", ["http://t.co/pbY2NfTZ"]],
+    ["http://xn--はじめよう.com/index.html", []],
+    ["test http://-leadingdash.twitter.com", []]
+  ];
+  for (const [input, expected] of fixtures) assert.deepEqual(extractUrls(input), expected);
+
+  const invalidTldFixture = fixtures[3][0];
+  assert.equal(weightedLength(invalidTldFixture), 141);
+  assert.equal(weightedLength("http://ああ.com"), 23);
+  assert.equal(weightedLength("http://あ-あ.com"), 23);
+});
+
+test("日本語ドメインを含む288相当の共有文は生成後に上限超過を許可しない", () => {
+  const freeText = `${"あ".repeat(120)} http://ああ.com`;
+  const url = "https://lab.connectivebyte.com/?r=P2";
+  assert.equal(weightedLength(`${freeText}\n${url}`), 288);
+  const draft = buildShareText("free", { freeText, url });
+  assert.ok(weightedLength(draft.text) <= MAX_POST_LENGTH);
+  assert.deepEqual(extractUrls(draft.text).slice(-1), [url]);
+  assert.ok(!draft.text.includes("http://ああ.co"), "URL途中で切詰めない");
+});
+
+test("unknown template returns null", () => {
+  assert.equal(buildShareText("promo", { url: "https://x.jp/" }), null);
+  assert.deepEqual(SHARE_TEMPLATES, ["result", "free"]);
+});
+
+test("buildIntentUrl encodes text into the web intent", () => {
+  const intent = buildIntentUrl("診断結果 P2\nhttps://lab.connectivebyte.com/?r=P2");
+  assert.ok(intent.startsWith("https://twitter.com/intent/tweet?text="));
+  assert.equal(decodeURIComponent(intent.split("text=")[1]), "診断結果 P2\nhttps://lab.connectivebyte.com/?r=P2");
+});
+
+test("cardLines carries phase info and no personal fields", () => {
+  const lines = cardLines({ phase: 2, phaseLabel: PHASES[1].label, nextHint: PHASES[1].next_hints[0], yesCount: 2 });
+  const text = lines.map((line) => line.text).join("\n");
+  assert.ok(text.includes(PHASES[1].label));
+  assert.ok(text.includes("3問中2問"));
+  const serialized = JSON.stringify(lines).toLowerCase();
+  for (const banned of ["name", "email", "mail", "address", "phone", "tel", "company", "ip"]) {
+    assert.ok(!serialized.includes(`"${banned}`), `card must not carry ${banned}`);
+  }
+});
+
+test("FEEDBACK_OPTIONS carries the three §7 choices without ranking", () => {
+  assert.deepEqual(FEEDBACK_OPTIONS.map((o) => o.id), ["achieved", "partial", "not_achieved"]);
+  assert.deepEqual(FEEDBACK_OPTIONS.map((o) => o.label), ["達成できた", "一部達成できた", "達成できなかった"]);
+  assert.equal(feedbackLabel("achieved"), "達成できた");
+  assert.equal(feedbackLabel("nope"), "");
+});
+
+test("cardLines and resultText carry the question-set total (detailed = 12)", () => {
+  const lines = cardLines({ phase: 2, phaseLabel: PHASES[1].label, yesCount: 7, total: 12 });
+  assert.ok(lines.map((l) => l.text).join("\n").includes("12問中7問"));
+  const text = resultText({ phase: 3, phaseLabel: PHASES[2].label, nextHints: [], yesCount: 7, total: 12 }, "x");
+  assert.ok(text.includes("12問中7問"));
+  // total未指定は初回3問のまま
+  assert.ok(cardLines({ phase: 1, phaseLabel: PHASES[0].label, yesCount: 1 }).map((l) => l.text).join("\n").includes("3問中1問"));
+});
+
+test("resultText renders the full next-hint list with no personal fields", () => {
+  const text = resultText({
+    phase: 2,
+    phaseLabel: PHASES[1].label,
+    nextHints: [...PHASES[1].next_hints],
+    yesCount: 2
+  }, "2026-08-30T00:00:00.000Z");
+  assert.ok(text.includes(PHASES[1].label));
+  assert.ok(text.includes("3問中2問"));
+  assert.ok(text.includes(`- ${PHASES[1].next_hints[0]}`));
+  assert.ok(text.includes("個人情報は含まれません"));
+  for (const banned of ["occupation", "email", "氏名", "会社名"]) {
+    assert.ok(!text.toLowerCase().includes(banned.toLowerCase()));
+  }
+});
+
+test("resultText renders without bullets when no hints are given", () => {
+  const text = resultText({ phase: 4, phaseLabel: PHASES[3].label, nextHints: [] }, "x");
+  assert.ok(!text.includes("\n- "));
+  assert.ok(text.includes(PHASES[3].label));
+});
 test("unknown template returns null", () => {
   assert.equal(buildShareText("promo", { url: "https://x.jp/" }), null);
   assert.deepEqual(SHARE_TEMPLATES, ["result", "free"]);

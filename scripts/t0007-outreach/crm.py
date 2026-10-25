@@ -25,6 +25,7 @@ import argparse
 import datetime as dt
 import json
 import os
+import subprocess
 import sys
 import urllib.error
 import urllib.request
@@ -340,6 +341,35 @@ def cmd_tasks(due_only: bool) -> int:
     return 0
 
 
+def commit_inbox(source: str) -> None:
+    """INBOX追記直後の即commit (親リポ規約「追記した本人が即commitする」)。
+
+    tas_launchops-content scripts/lib/inbox.js の commitInbox() と同型。
+    cron書き手がcommitしないと main checkout がdirtyのまま残り、dispatchの
+    fail-closed dirty検知 (push_failed alert) の慢性原因になる (2026-10-16実測)。
+    stageはINBOX.mdのみなので親リポの他のdirty fileは巻き込まない。
+    gitが失敗しても投げない (cron本体を止めない — 取り残れればcaretaker sweepが
+    回収する)。
+    """
+    repo_dir = os.path.dirname(INBOX)
+    try:
+        dirty = subprocess.run(
+            ["git", "-C", repo_dir, "status", "--porcelain", "INBOX.md"],
+            capture_output=True, text=True, check=True,
+        ).stdout
+        if not dirty.strip():
+            return
+        subprocess.run(["git", "-C", repo_dir, "add", "INBOX.md"],
+                       capture_output=True, check=True)
+        subprocess.run(
+            ["git", "-C", repo_dir, "commit", "-m",
+             "inbox: {} 自動追記の即commit\n\nCo-Authored-By: Claude <noreply@anthropic.com>".format(source)],
+            capture_output=True, check=True)
+    except (OSError, subprocess.SubprocessError) as e:
+        print("(INBOX commit失敗 — caretaker sweepに委ねる: {})".format(e),
+              file=sys.stderr)
+
+
 def cmd_digest(write_inbox: bool) -> int:
     """cron本体: 行動対象(36h以内+overdue)は常時ログ、新規overdueはINBOXへ1行 (重複抑制つき)。"""
     now_ms = _now_ms()
@@ -377,6 +407,7 @@ def cmd_digest(write_inbox: bool) -> int:
                      len(fresh), "; ".join(s for _, s in fresh))
     with open(INBOX, "a", encoding="utf-8") as fh:
         fh.write(line)
+    commit_inbox("crm digest cron")
     for tid, _ in fresh:
         alerted[tid] = True
     with open(state_path, "w", encoding="utf-8") as fh:

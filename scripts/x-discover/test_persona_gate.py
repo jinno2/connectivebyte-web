@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import datetime as dt
 import json
+import os
 import pathlib
 import shutil
 import sys
@@ -39,6 +40,19 @@ TODAY = dt.date(2026, 9, 14)
 YESTERDAY = '2026-09-13'
 
 
+class _FrozenDate(dt.date):
+    """enrich.main窓判定用 — today()を固定TODAYへ (実日付がTODAYを過ぎると
+    窓内行が消え、暦の経過だけでテストが赤くなる回帰を防ぐ)。"""
+    @classmethod
+    def today(cls):
+        return TODAY
+
+
+class _FrozenDT:
+    date = _FrozenDate
+    datetime = dt.datetime
+
+
 def row(**kw) -> dict:
     base = dict(status='draft', date='2026-09-14', posted_at=None, source='github',
                 title='tool x', url='https://github.com/a/x', genre_jp='tool',
@@ -49,6 +63,16 @@ def row(**kw) -> dict:
 
 class GateTest(unittest.TestCase):
     def setUp(self):
+        # 構造保証: PERSONA_YAMLを実在しないpathへ向ける — persona_linesの
+        # patch漏れがあると実yaml読みが即FileNotFoundErrorで赤になる
+        # (2026-10-12のcollect側patch漏れと同種の回帰を、姉妹repoを
+        # 持つhostでも検知できるよう恒久化。restored per-test)
+        _old = os.environ.get('PERSONA_YAML')
+        os.environ['PERSONA_YAML'] = str(HERE / 'nonexistent-persona-guard.yaml')
+        if _old is None:
+            self.addCleanup(os.environ.pop, 'PERSONA_YAML', None)
+        else:
+            self.addCleanup(os.environ.__setitem__, 'PERSONA_YAML', _old)
         tmpmgr = tempfile.TemporaryDirectory()
         self.addCleanup(tmpmgr.cleanup)  # tmpdirも自分で掃除
         self.q = pathlib.Path(tmpmgr.name) / 'q.jsonl'
@@ -60,6 +84,10 @@ class GateTest(unittest.TestCase):
         self._patch(enrich, 'load_env_file', lambda: None)
         self._patch(repolish, 'load_env_file', lambda: None)
         self._patch(enrich, 'persona_lines',
+                    lambda: ['読者ペルソナ: テスト用 (hermetic fixture)'])
+        # polish_critique_prompt (collect側) のpersona_linesも実yamlを読む
+        # — enrich名前空間のpatchだけでは姉妹repo無しマシンで赤になる
+        self._patch(collect, 'persona_lines',
                     lambda: ['読者ペルソナ: テスト用 (hermetic fixture)'])
         # 版管理 (2026-09-15): 実git hashに依存させず固定値でhermetic化
         for m in (collect, enrich, repolish):
@@ -266,6 +294,8 @@ class TestEnrichWindow(GateTest):
                     lambda *a, **k: {'verdict': 'pass', 'reason': 'ok'})
         # enrich経路のpolishもhermetic化: 批評は即IMPROVED_NONE (実LLMに触らせない)
         self._patch(collect, 'llm_text', lambda p: 'IMPROVED_NONE')
+        # main内の窓判定 date.today() を固定TODAYへ (暦依存の切断)
+        self._patch(enrich, 'dt', _FrozenDT)
 
     def test_auto_mode_skips_window_out(self):
         self._setup_trials(tempfile.mkdtemp())

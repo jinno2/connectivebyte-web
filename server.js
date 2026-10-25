@@ -5,13 +5,13 @@ import { extname, join, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const port = Number.parseInt(process.env.PORT ?? "4173", 10);
-const root = process.cwd();
 const types = Object.freeze({
   ".css": "text/css; charset=utf-8",
   ".html": "text/html; charset=utf-8",
   ".js": "text/javascript; charset=utf-8",
   ".json": "application/json; charset=utf-8",
   ".svg": "image/svg+xml",
+  ".txt": "text/plain; charset=utf-8",
   ".xml": "application/xml; charset=utf-8"
 });
 
@@ -38,7 +38,11 @@ const EVENT_TYPES = Object.freeze(new Set([
   "x_intent_opened",
   "result_card_created",
   "feedback_submitted",
-  "apply_submitted"
+  "apply_submitted",
+  // 19-diagnosis-line-lp の inline script が本番 events backend へ直接送る
+  // 匿名2イベント (app.js track() 経由ではないため logic.js EVENT_TYPES には無い)。
+  "d1_lp_viewed",
+  "d1_lp_cart_click"
 ]));
 
 const REQUIRED_FIELDS = Object.freeze([
@@ -89,6 +93,8 @@ const FORBIDDEN_ATTRIBUTES = Object.freeze(new Set([
 const MAX_EVENTS_PER_WINDOW = 30;
 const RATE_WINDOW_MS = 60_000;
 const MAX_BODY_BYTES = 256 * 1024;
+
+const CSP_HEADER = "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'";
 
 // /api/subscribe — 本番 (api.connectivebyte.com/subscribe・Worker+D1) と同じ検証を
 // ローカルでも通すための写し。dev serverは保存しない (202を返すだけ)。
@@ -155,6 +161,7 @@ function validateEvent(event) {
 }
 
 export function createRequestHandler(options = {}) {
+  const root = options.root ?? process.cwd();
   const dataDir = options.dataDir ?? root;
   const eventsFile = join(dataDir, "events.jsonl");
   const rateBuckets = new Map();
@@ -325,6 +332,16 @@ export function createRequestHandler(options = {}) {
 
     // POST /api/apply — 実施支援 申込 (local dev用の検証のみ写し。保存はしない)。
     if (pathname === "/api/apply" && request.method === "POST") {
+      const origin = request.headers.origin;
+      if (typeof origin === "string" && origin.length > 0) {
+        const requested = new URL(origin);
+        const expectedHost = request.headers.host ?? "";
+        if (requested.host !== expectedHost) {
+          sendJson(response, 403, { error: "cross_origin_denied" });
+          return;
+        }
+        response.setHeader("Access-Control-Allow-Origin", origin);
+      }
       const raw = await readBody(request);
       if (raw === null) {
         sendJson(response, 413, { error: "body_too_large" });
@@ -383,16 +400,42 @@ export function createRequestHandler(options = {}) {
     }
     try {
       const file = await stat(filePath);
-      if (!file.isFile()) throw new Error("Not a file");
+      // GitHub Pagesと同じく、ディレクトリURLは中のindex.htmlを応答する
+      // (sitemap.xmlはディレクトリ形式のURLを掲載。ローカル確認手順とのparity)。
+      // スラッシュ無しのディレクトリURLはPages同様スラッシュ付きへ301リダイレクト
+      // する (直接返すと ../article.css 等の相対リンクの基準がずれて壊れる)。
+      let servePath = filePath;
+      if (file.isDirectory()) {
+        if (!url.pathname.endsWith("/")) {
+          response.writeHead(301, { Location: `${url.pathname}/${url.search}` }).end();
+          return;
+        }
+        servePath = join(filePath, "index.html");
+      }
+      if (!(await stat(servePath)).isFile()) throw new Error("Not a file");
       response.writeHead(200, {
-        "Content-Type": types[extname(filePath)] ?? "application/octet-stream",
+        "Content-Type": types[extname(servePath)] ?? "application/octet-stream",
         "X-Content-Type-Options": "nosniff",
         "Referrer-Policy": "strict-origin-when-cross-origin",
-        "Content-Security-Policy": "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'"
+        "Content-Security-Policy": CSP_HEADER
       });
-      createReadStream(filePath).pipe(response);
+      createReadStream(servePath).pipe(response);
     } catch {
-      response.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" }).end("Not found");
+      // GitHub Pagesと同じく、存在しないパスはルートの404.htmlを404ステータスで
+      // 応答する (Pagesは404.htmlをカスタムnot-foundページとして配信する)。
+      // 404.htmlが無い環境では平文へフォールバックする。
+      try {
+        const notFoundPage = await readFile(join(root, "404.html"));
+        response.writeHead(404, {
+          "Content-Type": "text/html; charset=utf-8",
+          "X-Content-Type-Options": "nosniff",
+          "Referrer-Policy": "strict-origin-when-cross-origin",
+          "Content-Security-Policy": CSP_HEADER
+        });
+        response.end(notFoundPage);
+      } catch {
+        response.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" }).end("Not found");
+      }
     }
   };
 }

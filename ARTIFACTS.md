@@ -59,7 +59,7 @@ EOF
 ## 実測 (2026-09-15・版管理の初回full cycle完了時点)
 
 - pipeline_version = `c82e1c4c96fa` (初回cycle時点・当時はscripts/木tree hash) —
-  **現行 = `6b11a3f976cd`** (.py限定・版定義節参照)
+  **現行 = `e4d8a9a21222`** (.py限定・版定義節参照・2026-10-17再実測)
 - 監査: posted 14 / out_of_window 43 / rejected 2 / **current 5** /
   STALE 0 / placeholder 0 — 版印は生存5行すべて `c82e1c4c96fa` で単一versionに収束
 - 初回cycleの証跡: ①09:17 cronが新規3件を版印付きで起草+stale 2行を自動再生成
@@ -77,6 +77,43 @@ EOF
   2件・テストpin 1件) で版は `99f88ba074c1` → `a476ac13d71d`、続く文言統合
   refactor (`_stale_msg` helper) で `6b11a3f976cd` — いずれも生成系実装 (.py)
   の変更なので正当。docs-only commitでは版不変を継続実証
+- ⑦2026-09-22の強化batch (6c03447/e13cb94/e98f4e9/c7ad45c — `outreach.py`/
+  `post.py`/`twitter_text_regex.py` の公開・計測・X字数まわりのhardening) で
+  版は `6b11a3f976cd` → `31c857f21c9c` (.py変更なので正当・台帳の「現行」は
+  このbatch後も更新漏れになっていた — 2026-10-03に再実測して本節で同期)。
+  生存行は翌朝collectの`regen_stale` (limit 3/回) が自動で現行版へ揃える
+- ⑧robots.txt新設 (sitemap宣言行・Pages配信木へ追加) に伴い、`outreach.py`の
+  `PUBLISH_ROOT_FILES` へ robots.txt を足した (記事公開の隔離ツリーをPages配信木と
+  同等に保つ parity 修正・2026-10-11)。版は `31c857f21c9c` → `cefc4d2e5fb4`
+  (.py変更なので正当)。生成系の起草・再検査logicには変更なし — 生存行の
+  `polish_version`/`gen_version` 判定は不変
+- ⑨存在しないパスの失敗表示をサイト体裁の日本語404ページへ揃える `404.html` 新設
+  (Pages配信木へ追加・ローカルサーバーも404ステータス+同ページで応答) に伴い、
+  `outreach.py`の`PUBLISH_ROOT_FILES`へ404.htmlを足した (⑧と同じ隔離ツリーparity
+  修正・2026-10-11)。版は `cefc4d2e5fb4` → `7d1eae75949c` (.py変更なので正当)。
+  生成系の起草・再検査logicには変更なし
+- ⑩persona gate恒久テスト (`scripts/x-discover/test_persona_gate.py`) の
+  hermetic化修正 — collect側`persona_lines`のpatch漏れ (姉妹repo無しhostで
+  enrich系3testが赤) と`enrich.main`窓判定の実日付依存 (暦の経過だけで赤) を
+  修正・本体生成系は無変更 (2026-10-12)。版は `7d1eae75949c` → `5a42158b803a`
+  (.py変更なので正当 — テストfileも版対象)。生成系の起草・再検査logicには
+  変更なし — 生存行の`polish_version`/`gen_version` 判定は不変
+- ⑪同suiteのhermetic性を構造保証 — `GateTest.setUp`が`PERSONA_YAML`を
+  実在しないpathへ向ける (per-test復元)。persona_linesのpatch漏れがあると
+  実yaml読みが即FileNotFoundErrorで赤になる — 姉妹repoを持つhostでも
+  ⑩と同種の回帰を検知できる (2026-10-12・test stage)。版は
+  `5a42158b803a` → `d098ab53249c` (.py変更なので正当)。生成系logicは無変更
+- ⑫LPのog:image新設 (絶対URL指定・`og-image-1200x630.png`) に伴い、配信木
+  (deploy workflowのcp行・`test/publish-tree.test.js`のROOT_FILES) と
+  `outreach.py`の`PUBLISH_ROOT_FILES`へ同PNGを足した (⑧⑨と同じ隔離ツリー
+  parity修正・2026-10-12)。版は `d098ab53249c` → `b912a5a8d954` (.py変更なので
+  正当)。生成系の起草・再検査logicには変更なし
+- ⑬`crm.py digest --inbox`が親repoのINBOX.md追記後すぐcommitする
+  `commit_inbox()`追加 (caretaker sweep依存とpost_dispatch dirty検知の解消 —
+  3378b04・2026-10-17)。版は `b912a5a8d954` → `e4d8a9a21222` (.py変更なので
+  正当)。台帳「現行」の同期漏れを ⑦と同種の回帰防止ガード
+  (`test/artifacts-ledger.test.js`) が検知 — 本節で同期。起草・再検査logicには
+  変更なし
 - 以後、文書変更 (本台帳の更新・scripts下READMEの更新を含む) では版は不変 —
   scripts/下の.py (codeとpromptの実体) が変わったときだけ版が動く。本節の
   更新commitで版が変わらないことがそのまま実証になる

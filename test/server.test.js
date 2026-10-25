@@ -190,6 +190,94 @@ test("静的ファイル配信は維持される", async () => {
     assert.match(text, /ConnectiveByte/);
     const res404 = await fetch(`${ctx.base}/does-not-exist.xyz`);
     assert.equal(res404.status, 404);
+    // Pages本番と同じく、404応答の本文はルートの404.html (日本語のサイト体裁)。
+    assert.equal(res404.headers.get("content-type"), "text/html; charset=utf-8");
+    const body404 = await res404.text();
+    assert.match(body404, /<html lang="ja">/);
+    assert.match(body404, /お探しのページ/);
+    assert.match(body404, /href="\/"/);
+  } finally {
+    await ctx.cleanup();
+  }
+});
+
+test("ネストした存在しないパスも404.htmlをサイト体裁で応答する", async () => {
+  // 404.htmlはアセット参照を絶対パス (/styles.css等) で書いているため、
+  // どの深さのURLで応答してもリンクが壊れない。Pages本番と同じ挙動を
+  // 深いパスとindex.htmlを持たないディレクトリURLの両方で機械検査する。
+  const ctx = await startServer();
+  try {
+    for (const path of ["/deep/nested/missing", "/missing-dir/"]) {
+      const res = await fetch(`${ctx.base}${path}`);
+      assert.equal(res.status, 404, path);
+      assert.equal(res.headers.get("content-type"), "text/html; charset=utf-8", path);
+      assert.equal(res.headers.get("x-content-type-options"), "nosniff", path);
+      assert.match(res.headers.get("content-security-policy") ?? "", /default-src 'self'/, path);
+      const body = await res.text();
+      assert.match(body, /<html lang="ja">/, path);
+      assert.match(body, /お探しのページ/, path);
+      assert.match(body, /href="\/styles\.css"/, path);
+    }
+  } finally {
+    await ctx.cleanup();
+  }
+});
+
+test("404.htmlが無い環境では平文のNot foundへフォールバックする", async () => {
+  const bareRoot = await mkdtemp(join(tmpdir(), "cb-root-"));
+  const ctx = await startServer({ root: bareRoot });
+  try {
+    const res = await fetch(`${ctx.base}/missing`);
+    assert.equal(res.status, 404);
+    assert.equal(res.headers.get("content-type"), "text/plain; charset=utf-8");
+    assert.equal(await res.text(), "Not found");
+  } finally {
+    await ctx.cleanup();
+    await rm(bareRoot, { recursive: true, force: true });
+  }
+});
+
+test("ディレクトリURLはPages配信と同じ挙動をする (スラッシュ無しは301・付きはindex.html)", async () => {
+  // sitemap.xmlはディレクトリ形式のURLを掲載する。Pages本番はスラッシュ無しの
+  // ディレクトリURLをスラッシュ付きへ301リダイレクトし、付きのURLでindex.htmlを
+  // 応答する。スラッシュ無しのままindex.htmlを返すと ../article.css 等の
+  // 相対リンクの基準がずれて壊れるため、301動作ごと本番parityとして機械検査する。
+  const ctx = await startServer();
+  try {
+    const slashed = await fetch(`${ctx.base}/content/18-blog/quetab-ai-game-builder/`);
+    assert.equal(slashed.status, 200);
+    assert.equal(slashed.headers.get("content-type"), "text/html; charset=utf-8");
+    assert.match(await slashed.text(), /quetab\.com\/games 検証レポート/);
+
+    const bare = await fetch(`${ctx.base}/content/02-entry-read`, { redirect: "manual" });
+    assert.equal(bare.status, 301);
+    assert.equal(bare.headers.get("location"), "/content/02-entry-read/");
+    const followed = await fetch(`${ctx.base}/content/02-entry-read`);
+    assert.equal(followed.status, 200);
+    assert.match(await followed.text(), /上がってくる床は、乗れば足場になる/);
+
+    const bareWithQuery = await fetch(`${ctx.base}/content/02-entry-read?utm_source=x`, { redirect: "manual" });
+    assert.equal(bareWithQuery.status, 301);
+    assert.equal(bareWithQuery.headers.get("location"), "/content/02-entry-read/?utm_source=x");
+
+    const noIndex = await fetch(`${ctx.base}/content/18-blog/`);
+    assert.equal(noIndex.status, 404);
+    const bareNoIndex = await fetch(`${ctx.base}/content/18-blog`, { redirect: "manual" });
+    assert.equal(bareNoIndex.status, 301);
+  } finally {
+    await ctx.cleanup();
+  }
+});
+
+test("robots.txt はtext/plainで配信されSitemap行を含む (Pages配信とのparity)", async () => {
+  // server.jsのMIME mapに .txt が無いとローカル配信がoctet-streamになり
+  // Pages本番と食い違う。発見経路の中身も一緒に機械検査する。
+  const ctx = await startServer();
+  try {
+    const res = await fetch(`${ctx.base}/robots.txt`);
+    assert.equal(res.status, 200);
+    assert.equal(res.headers.get("content-type"), "text/plain; charset=utf-8");
+    assert.match(await res.text(), /^Sitemap: https:\/\/lab\.connectivebyte\.com\/sitemap\.xml$/m);
   } finally {
     await ctx.cleanup();
   }
@@ -222,12 +310,18 @@ test("POST /api/apply は有効な申込に202・不正入力に400を返す (�
       note: "カスタマーサポート部門。まず話を聞きたい", anonymous_id: "anon-9"
     });
     assert.equal(full.status, 202);
+    // email 254文字の境界: local部は64文字上限のためdomain部で長さを構成する
+    const edgeApply = await postApply({
+      email: `${"a".repeat(64)}@${"a".repeat(93)}.${"a".repeat(95)}`, consent: true
+    });
+    assert.equal(edgeApply.status, 202);
     for (const bad of [
       { email: "nope", consent: true },
       { email: "org@example.com" },
       { email: "org@example.com", consent: false },
       { email: "org@example.com", consent: true, interest: "X" },
       { email: "org@example.com", consent: true, note: "x".repeat(1001) },
+      { email: `${"a".repeat(64)}@${"a".repeat(93)}.${"a".repeat(96)}`, consent: true },
       "not-json"
     ]) {
       const res = await postApply(bad);
@@ -254,11 +348,17 @@ test("POST /api/subscribe は有効な登録に202・不正入力に400を返す
     assert.equal((await ok.json()).accepted, true);
     const withId = await postSub({ email: "user2@example.com", consent: true, anonymous_id: "abc-123_X" });
     assert.equal(withId.status, 202);
+    // email 254文字の境界: local部は64文字上限のためdomain部で長さを構成する
+    const edgeSub = await postSub({
+      email: `${"a".repeat(64)}@${"a".repeat(93)}.${"a".repeat(95)}`, consent: true
+    });
+    assert.equal(edgeSub.status, 202);
     for (const bad of [
       { email: "nope", consent: true },
       { email: "user@example.com" },
       { email: "user@example.com", consent: "yes" },
       { email: "user@example.com", consent: true, anonymous_id: "不正" },
+      { email: `${"a".repeat(64)}@${"a".repeat(93)}.${"a".repeat(96)}`, consent: true },
       "not-json"
     ]) {
       const res = await postSub(bad);
@@ -291,11 +391,77 @@ test("クロスオリジンからのPOSTは403で拒否する", async () => {
   }
 });
 
+test("クロスオリジンからの /api/subscribe・/api/apply へのPOSTも403で拒否する", async () => {
+  const ctx = await startServer();
+  try {
+    for (const path of ["/api/subscribe", "/api/apply"]) {
+      const res = await fetch(`${ctx.base}${path}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Origin: "https://evil.example.com" },
+        body: JSON.stringify({ email: "org@example.com", consent: true })
+      });
+      assert.equal(res.status, 403, path);
+      assert.equal((await res.json()).error, "cross_origin_denied", path);
+    }
+  } finally {
+    await ctx.cleanup();
+  }
+});
+
+test("同一Originの /api/apply へのPOSTは許可され Access-Control-Allow-Origin が設定される", async () => {
+  const ctx = await startServer();
+  try {
+    const origin = new URL(ctx.base).origin;
+    const res = await fetch(`${ctx.base}/api/apply`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Origin: origin },
+      body: JSON.stringify({ email: "org@example.com", consent: true })
+    });
+    assert.equal(res.status, 202);
+    assert.equal((await res.json()).accepted, true);
+    assert.equal(res.headers.get("access-control-allow-origin"), origin);
+  } finally {
+    await ctx.cleanup();
+  }
+});
+
 test("manual_collaboration_candidate型を受け付ける", async () => {
   const ctx = await startServer();
   try {
     const res = await post(ctx.base, [validEvent({ name: "manual_collaboration_candidate" })]);
     assert.equal(res.status, 202);
+  } finally {
+    await ctx.cleanup();
+  }
+});
+
+test("19-diagnosis-line-lp の匿名イベントはLP実装と同じpayload形状で202・未知のd1_lp_*は400", async () => {
+  const ctx = await startServer();
+  try {
+    // LP inline script (content/19-diagnosis-line-lp) が本番 events backend へ直接送る
+    // payloadと同じ形。REQUIRED_FIELDS に無い session_id/referrer_host を含むまま
+    // 受理されることで型許可と必須/禁止属性の契約を機能面から固定する。
+    const lpEvent = (name, cta_id) => ({
+      name,
+      source_id: "d1_lp",
+      campaign_id: "static",
+      asset_id: "19-diagnosis-line-lp",
+      segment: "unselected",
+      channel: "web",
+      cta_id,
+      occurred_at: new Date().toISOString(),
+      session_id: "ses-001",
+      referrer_host: "(none)"
+    });
+    const ok = await post(ctx.base, {
+      events: [lpEvent("d1_lp_viewed", "none"), lpEvent("d1_lp_cart_click", "cart-d1")]
+    });
+    assert.equal(ok.status, 202);
+    assert.equal((await ok.json()).accepted, 2);
+
+    const bad = await post(ctx.base, { events: [lpEvent("d1_lp_bogus", "none")] });
+    assert.equal(bad.status, 400);
+    assert.equal((await bad.json()).error, "invalid event type");
   } finally {
     await ctx.cleanup();
   }

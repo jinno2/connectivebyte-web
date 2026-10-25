@@ -43,6 +43,9 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 
 from x_discover_rules import banned_hits  # noqa: E402  (§11機械検査・兄弟module)
+from twitter_text_regex import (VALID_ASCII_DOMAIN, VALID_DOMAIN, VALID_URL_PATH,
+                                VALID_URL_PRECEDING_CHARS, VALID_URL_QUERY_CHARS,
+                                VALID_URL_QUERY_ENDING_CHARS)  # noqa: E402
 STATE_DIR = os.path.expanduser('~/.local/share/cb-fleet')
 ENV_FILE = os.path.join(STATE_DIR, '.env')
 QUEUE_FILE = os.environ.get(
@@ -61,18 +64,14 @@ CHUNK_BYTES = 4 * 1024 * 1024  # v2 append segment (docs: ≤5MB推奨・server 
 VIDEO_LIMIT = 15 * 1024 * 1024  # 投稿MP4の運用上限 (API上の上限はもっと大きい)
 MAX_POST_WEIGHT = 280
 URL_WEIGHT = 23
-UNICODE_TLDS = (
-    'みんな', 'ポイント', 'ファッション', 'セール', 'ストア', 'コム', 'クラウド',
-    '通販', '购物', '网站', '网址', '在线', '公司', '网络', '中国', '中國', '香港', '台湾',
-    '台灣', '日本', '한국', 'ไทย', 'рф', 'сайт', 'онлайн', 'москва', 'ком', 'рус'
-)
-DOMAIN_LABEL = r'[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?'
-DOMAIN_TLD = r'(?:[A-Za-z]{2,63}|' + '|'.join(sorted(UNICODE_TLDS, key=len, reverse=True)) + r')'
 URL_RE = re.compile(
-    r'(?<![A-Za-z0-9@＠$#＃_.\/-])(?:https?://)?(?:' + DOMAIN_LABEL + r'\.)+' + DOMAIN_TLD +
-    r'(?::\d{1,5})?(?:[/?#][A-Za-z0-9!$&\'()*+,;=%#/?[\]@_~:\-\u00c0-\u02af\u0400-\u052f]*)?',
+    '(' + VALID_URL_PRECEDING_CHARS + r')((?P<protocol>https?://)?(?P<domain>' + VALID_DOMAIN +
+    r')(?::\d{1,5})?(?P<path>/' + VALID_URL_PATH + r'*)?(?P<query>\?' +
+    VALID_URL_QUERY_CHARS + r'*' + VALID_URL_QUERY_ENDING_CHARS + r')?)',
     re.IGNORECASE
 )
+ASCII_DOMAIN_RE = re.compile(VALID_ASCII_DOMAIN, re.IGNORECASE)
+TCO_URL_RE = re.compile(r'^https?://t\.co/([a-z0-9]+)(?:\?[^\s]*)?', re.IGNORECASE)
 URL_TRAILING = '.,!?;:、。！？，．；：'
 
 
@@ -118,18 +117,70 @@ def _cluster_weight(cluster: list[int]) -> int:
                else 2 for code_point in cluster)
 
 
+def _trim_url(raw: str) -> str:
+    trimmed = raw.rstrip(URL_TRAILING)
+    while trimmed.endswith(')') and trimmed.count('(') < trimmed.count(')'):
+        trimmed = trimmed[:-1]
+    return trimmed
+
+
+def _valid_domain_shape(domain: str) -> bool:
+    return all(len(label) <= 63 and
+               (not label.lower().startswith('xn--') or
+                re.fullmatch(r'[a-z0-9-]+', label, re.IGNORECASE))
+               for label in domain.split('.'))
+
+
+def url_ranges(text: str) -> list[tuple[int, int]]:
+    """Return twitter-text-compatible URL spans in *text*."""
+    value = str(text)
+    ranges = []
+    for match in URL_RE.finditer(value):
+        url = match.group(2)
+        url_start = match.start(2)
+        if not _valid_domain_shape(match.group('domain')):
+            continue
+        if match.group('protocol'):
+            tco = TCO_URL_RE.match(url)
+            if tco and len(tco.group(1)) > 40:
+                continue
+            trimmed = _trim_url(tco.group(0) if tco else url)
+            if trimmed:
+                ranges.append((url_start, url_start + len(trimmed)))
+            continue
+
+        if re.search(r'[-_./]$', match.group(1)):
+            continue
+
+        # twitter-text emits only ASCII-domain portions for scheme-less URLs.
+        # Unicode TLDs remain supported, e.g. twitter.みんな.
+        domain = match.group('domain')
+        ascii_matches = list(ASCII_DOMAIN_RE.finditer(domain))
+        for index, ascii_match in enumerate(ascii_matches):
+            start = url_start + ascii_match.start()
+            suffix = (url[len(domain):]
+                      if index == len(ascii_matches) - 1 and
+                      (match.group('path') or match.group('query')) else '')
+            trimmed = _trim_url(ascii_match.group(0) + suffix)
+            if trimmed:
+                ranges.append((start, start + len(trimmed)))
+    return ranges
+
+
+def extract_urls(text: str) -> list[str]:
+    value = str(text)
+    return [value[start:end] for start, end in url_ranges(value)]
+
+
 def weighted_length(text: str) -> int:
     """twitter-text v3 compatible weight for ordinary text and URLs."""
     value = unicodedata.normalize('NFC', str(text))
     total = 0
     cursor = 0
-    for match in URL_RE.finditer(value):
-        trimmed = match.group(0).rstrip(URL_TRAILING)
-        if not trimmed:
-            continue
-        total += sum(_cluster_weight(cluster) for cluster in _clusters(value[cursor:match.start()]))
+    for start, end in url_ranges(value):
+        total += sum(_cluster_weight(cluster) for cluster in _clusters(value[cursor:start]))
         total += URL_WEIGHT
-        cursor = match.start() + len(trimmed)
+        cursor = end
     return total + sum(_cluster_weight(cluster) for cluster in _clusters(value[cursor:]))
 
 

@@ -3,7 +3,7 @@
     {
       "alias": "cb_discoverer",
       "role": "discoverer",
-      "status": "warming",
+      "status": "banned",
       "env_prefix": "CBD",
       "tier": "nourl"
     }

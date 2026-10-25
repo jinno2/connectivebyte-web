@@ -1,0 +1,56 @@
+ambiguities:
+  - id: "AMB-EVENT-001"
+    term: "AnonymousEvent"
+    topic: "イベント型集合の二重定義 (logic.js と server.js)"
+    severity: "low"
+    uncertainty: 0.18
+    candidates:
+      - "logic.js の EVENT_TYPES (23種) がクライアント送信の正で、server.js の+2種 (d1_lp_viewed, d1_lp_cart_click) は本番専用LPの検証用スーパーセット"
+      - "両集合は同じ意味論を持つべきで、差異は未整備"
+    missing_info:
+      - "本番Workerのイベント型集合の実装 (repo外)"
+      - "d1_lp 2イベントの本番での受信実態"
+    linked_conflicts: []
+    auto_decision:
+      status: "applied"
+      decision_key: "AUTO:AnonymousEvent.typeset:logicjs_client_canonical"
+      chosen: "logic.js EVENT_TYPES (23種) をクライアント送信の正とし、server.js の+2種は本番専用LP由来の検証用スーパーセットとして扱う"
+      policy: "safety + change locality"
+      confidence_auto: 0.7
+      decided_at_run: "2026-10-17T15:12:22Z"
+      expires_after_runs: 20
+      revert_triggers:
+        - "primary_evidence_contradiction"
+    last_touched_run: "2026-10-17T15:12:22Z"
+    evidence:
+      - source: "server.js:42-46"
+        quote: "本番 events backend へ直接送る匿名2イベント (logic.js EVENT_TYPES には無い)"
+      - source: "logic.js:228-252"
+        quote: "EVENT_TYPES (23種)"
+  - id: "AMB-PARITY-001"
+    term: "LocalVerificationServer"
+    topic: "server.js と本番Worker検証の同等性"
+    severity: "low"
+    uncertainty: 0.24
+    candidates:
+      - "server.js は本番Workerの検証ロジックの正確な写しである"
+      - "本番Worker は server.js と差異を持つ可能性がある"
+    missing_info:
+      - "本番Worker実装 (別管理IaC・repo外)"
+    linked_conflicts: []
+    auto_decision:
+      status: "applied"
+      decision_key: "AUTO:LocalVerificationServer.worker_parity:serverjs_as_reference"
+      chosen: "repo内の検証ロジックの参照として server.js を扱い、本番との差異確認は対象外とする"
+      policy: "reversibility + change locality"
+      confidence_auto: 0.65
+      decided_at_run: "2026-10-17T15:12:22Z"
+      expires_after_runs: 20
+      revert_triggers:
+        - "primary_evidence_contradiction"
+    last_touched_run: "2026-10-17T15:12:22Z"
+    evidence:
+      - source: "server.js:99-100"
+        quote: "本番と同じ検証をローカルでも通すための写し。dev serverは保存しない"
+      - source: "AGENTS.md:変更フロー"
+        quote: "server.js は本番Workerの検証ロジックの写し — 片方だけ変えない"

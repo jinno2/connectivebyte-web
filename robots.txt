@@ -1,0 +1,6 @@
+# noindex は各ページの meta robots で処理するため、ここでは Disallow しない
+# (Disallow するとクロールされず meta が読めず、noindex が無効化されうる)。
+User-agent: *
+Allow: /
+
+Sitemap: https://lab.connectivebyte.com/sitemap.xml

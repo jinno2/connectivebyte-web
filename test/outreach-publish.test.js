@@ -15,7 +15,7 @@ from types import SimpleNamespace
 source = ${JSON.stringify(repoRoot)}
 module_path = ${JSON.stringify(outreach)}
 work = tempfile.mkdtemp(prefix='cb-publish-test-')
-shutil.copytree(source, work, dirs_exist_ok=True, ignore=shutil.ignore_patterns('.git', '.serena', 'node_modules', 'app-behavior.test.js', 'outreach-publish.test.js', 'x-discover-post.test.js'))
+shutil.copytree(source, work, dirs_exist_ok=True, ignore=shutil.ignore_patterns('.git', '.serena', 'node_modules', '__pycache__', 'app-behavior.test.js', 'outreach-publish.test.js', 'x-discover-post.test.js'))
 subprocess.run(['git', 'init', '-q'], cwd=work, check=True)
 subprocess.run(['git', 'config', 'user.email', 'test@example.invalid'], cwd=work, check=True)
 subprocess.run(['git', 'config', 'user.name', 'test'], cwd=work, check=True)
@@ -39,6 +39,7 @@ real_run = m.subprocess.run
 bad_page = m.ARTICLE_TMPL.format(title='新規記事', slug='new-article', description='知能接続', updated='2026-09-22', body=m.md_to_html('# 新規記事\\n\\n知能接続'))
 stage = tempfile.mkdtemp(prefix='cb-publish-guard-')
 m.prepare_publish_tree(stage, 'content/18-blog/new-article/index.html', bad_page)
+assert os.path.isfile(os.path.join(stage, 'twitter-text-regex.js'))
 guard_env = {**os.environ, 'PUBLICATION_ROOT': stage}
 guard_env.pop('NODE_TEST_CONTEXT', None)
 guard_fixture = real_run(['node', '--test', 'test/publication-guard.test.js'], cwd=work,

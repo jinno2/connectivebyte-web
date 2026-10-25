@@ -40,13 +40,13 @@ function element(dataset = {}) {
   };
 }
 
-function setup({ path = "/", search = "", storage, elements = {}, fetchImpl } = {}) {
+function setup({ path = "/", search = "", storage, elements = {}, selectors = {}, fetchImpl } = {}) {
   const windowListeners = new Map();
   const documentListeners = new Map();
   const map = new Map(Object.entries(elements));
   const document = {
     querySelector(selector) { return map.get(selector) ?? null; },
-    querySelectorAll() { return []; },
+    querySelectorAll(selector) { return selectors[selector] ?? []; },
     createElement() { return element(); },
     createTextNode(text) { return { textContent: text }; },
     addEventListener(type, callback) { documentListeners.set(type, callback); },
@@ -321,5 +321,451 @@ test("既存Storage値が書込み拒否後のページ内consentと関心選択
   const removalDenied = await loadApp("storage-existing-remove-denied");
   assert.equal(removalDenied.saveConsent(false), false, "削除拒否を保存成功と扱わない");
   assert.equal(removalDenied.readJson("consent", null).analytics, false);
+```javascript
+  assert.deepEqual(removalDenied.readJson("events", []), [], "削除失敗でもページ内の旧イベントを復活させない");
   assert.equal(removalDeniedStorage.values.has("consent"), true, "削除拒否では旧永続値が残ることを区別");
 });
+
+test("レベル表の全表示で宣言済みlevel_table_read_100を一度だけ送る", async () => {
+  const storage = new FakeStorage();
+  const calls = [];
+  setup({
+    storage,
+    elements: { "#level-table": Object.assign(element(), { id: "level-table" }) },
+    fetchImpl: async (_url, options) => {
+      calls.push(JSON.parse(options.body));
+      return { status: 202 };
+    }
+  });
+  const observers = [];
+  const previousObserver = globalThis.IntersectionObserver;
+  globalThis.IntersectionObserver = class {
+    constructor(callback) { this.callback = callback; this.targets = []; observers.push(this); }
+    observe(target) { this.targets.push(target); }
+  };
+  try {
+    const app = await loadApp("level-table-read");
+    app.writeJson("consent", { analytics: true, email: false, decided: true });
+    const tableObserver = observers.find((observer) => observer.targets.some((target) => target.id === "level-table"));
+    assert.ok(tableObserver, "level-tableが監視対象になっている");
+    const entry = { isIntersecting: true, intersectionRatio: 1, target: tableObserver.targets[0] };
+    tableObserver.callback([entry]);
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0][0].name, "level_table_read_100");
+    assert.equal(calls[0][0].asset_id, "level_table");
+
+    tableObserver.callback([entry]);
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(calls.length, 1, "同一pageviewで再発火しない");
+  } finally {
+    globalThis.IntersectionObserver = previousObserver;
+  }
+});
+
+test("レベル表が部分的にしか見えていない間はlevel_table_read_100を送らない", async () => {
+  const storage = new FakeStorage();
+  const calls = [];
+  setup({
+    storage,
+    elements: { "#level-table": Object.assign(element(), { id: "level-table" }) },
+    fetchImpl: async (_url, options) => {
+      calls.push(JSON.parse(options.body));
+      return { status: 202 };
+    }
+  });
+  const observers = [];
+  const previousObserver = globalThis.IntersectionObserver;
+  globalThis.IntersectionObserver = class {
+    constructor(callback) { this.callback = callback; this.targets = []; observers.push(this); }
+    observe(target) { this.targets.push(target); }
+  };
+  try {
+    const app = await loadApp("level-table-partial");
+    app.writeJson("consent", { analytics: true, email: false, decided: true });
+    const tableObserver = observers.find((observer) => observer.targets.some((target) => target.id === "level-table"));
+    assert.ok(tableObserver, "level-tableが監視対象になっている");
+    // viewportより高いテーブルではintersectionRatioが1に届かないため、部分表示は未達として扱う。
+    const partial = { isIntersecting: true, intersectionRatio: 0.6, target: tableObserver.targets[0] };
+    tableObserver.callback([partial]);
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(calls.length, 0, "部分表示では送信しない");
+
+    tableObserver.callback([partial, { isIntersecting: true, intersectionRatio: 1, target: tableObserver.targets[0] }]);
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(calls.length, 1, "部分表示を経由した後も全表示で一度だけ送る");
+    assert.equal(calls[0][0].name, "level_table_read_100");
+    assert.equal(calls[0][0].cta_id, "level_table_scroll");
+  } finally {
+    globalThis.IntersectionObserver = previousObserver;
+  }
+});
+
+test("同意拒否はconsent保存失敗でも待機イベントを破棄し、復旧後に旧イベントを送らない", async () => {
+  const storage = new FakeStorage({
+    consent: { analytics: true, email: false, decided: true },
+    events: [{ name: "landing_viewed", cta_id: "probe_1" }]
+  }, { set: true });
+  const calls = [];
+  const context = setup({
+    storage,
+    elements: { "#consent-panel": element() },
+    fetchImpl: async (_url, options) => {
+      calls.push(JSON.parse(options.body));
+      return { status: 202 };
+    }
+  });
+  navigator.onLine = false;
+  const app = await loadApp("consent-reject-clears-queue");
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.equal(app.saveConsent(false), false, "consent書込み失敗を成功扱いしない");
+  assert.deepEqual(app.readJson("events", []), [], "拒否時は待機キューをページ内でも破棄");
+  assert.equal(storage.values.has("events"), false, "removeItem成功時は永続キューも破棄");
+  app.track("interest_selected", { cta_id: "after_reject" });
+  navigator.onLine = true;
+  context.windowListeners.get("online")();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(calls.length, 0, "拒否中の操作・online復帰で送信しない");
+
+  storage.mode.set = false;
+  app.saveConsent(true);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.ok(calls.flat().every((event) => event.cta_id !== "probe_1"), "再同意後に拒否前のイベントを送らない");
+});
+
+test("未回答のまま診断を完了しない — 結果表示・保存・送信せず状態表示する", async () => {
+  const storage = new FakeStorage();
+  const elements = {
+    "#diagnostic-output": element(),
+    "#diagnostic-level": element(),
+    "#diagnostic-status": element()
+  };
+  elements["#diagnostic-output"].hidden = true;
+  const { documentListeners } = setup({ storage, elements });
+  const app = await loadApp("diagnosis-incomplete");
+  const clickTarget = {
+    closest: (selector) => selector === "[data-action]"
+      ? { dataset: { action: "submit-diagnosis" } }
+      : null
+  };
+  documentListeners.get("click")({ target: clickTarget });
+  assert.equal(elements["#diagnostic-output"].hidden, true, "未回答では結果を表示しない");
+  assert.equal(app.readJson("diagnosis_result", null), null, "未回答では判定を保存しない");
+  assert.equal(app.readJson("progress", {}).diagnostic_completed, undefined, "未回答では完了進捗を記録しない");
+  assert.match(elements["#diagnostic-status"].textContent, /未回答/);
+});
+
+test("一部のみ回答の診断も完了させず、結果を出さず状態表示する", async () => {
+  const storage = new FakeStorage();
+  const elements = {
+    "#diagnostic-output": element(),
+    "#diagnostic-level": element(),
+    "#diagnostic-status": element()
+  };
+  elements["#diagnostic-output"].hidden = true;
+  const radios = [{ dataset: { questionId: "Q0" }, value: "はい" }];
+  const { documentListeners } = setup({
+    storage,
+    elements,
+    selectors: { "#diagnostic-questions input[type=radio]:checked": radios }
+  });
+  const app = await loadApp("diagnosis-partial");
+  const clickTarget = {
+    closest: (selector) => selector === "[data-action]"
+      ? { dataset: { action: "submit-diagnosis" } }
+      : null
+  };
+  documentListeners.get("click")({ target: clickTarget });
+  assert.equal(elements["#diagnostic-output"].hidden, true, "一部回答でも結果を表示しない");
+  assert.equal(app.readJson("diagnosis_result", null), null, "一部回答では判定を保存しない");
+  assert.equal(app.readJson("progress", {}).diagnostic_completed, undefined, "一部回答では完了進捗を記録しない");
+  assert.match(elements["#diagnostic-status"].textContent, /未回答/, "未回答が残っていることを状態表示する");
+});
+
+test("全問回答済みの診断は従来どおり完了し、状態表示は空に戻る", async () => {
+  const storage = new FakeStorage();
+  const elements = {
+    "#diagnostic-output": element(),
+    "#diagnostic-level": element(),
+    "#diagnostic-actions": element(),
+    "#diagnostic-comparison-link": element(),
+    "#diagnostic-status": element()
+  };
+  const radios = [
+    { dataset: { questionId: "Q0" }, value: "はい" },
+    { dataset: { questionId: "Q1" }, value: "いいえ／わからない" },
+    { dataset: { questionId: "Q2" }, value: "いいえ／わからない" }
+  ];
+  const { documentListeners } = setup({
+    storage,
+    elements,
+    selectors: { "#diagnostic-questions input[type=radio]:checked": radios }
+  });
+  const app = await loadApp("diagnosis-complete");
+  const clickTarget = {
+    closest: (selector) => selector === "[data-action]"
+      ? { dataset: { action: "submit-diagnosis" } }
+      : null
+  };
+  documentListeners.get("click")({ target: clickTarget });
+  assert.equal(elements["#diagnostic-output"].hidden, false, "結果を表示する");
+  assert.equal(elements["#diagnostic-level"].textContent, "AIで試す・扱う段階");
+  assert.equal(elements["#diagnostic-comparison-link"].hidden, false);
+  assert.equal(elements["#diagnostic-status"].textContent, "", "完了時は状態表示を空にする");
+  assert.equal(app.readJson("diagnosis_result", null)?.current_phase, 2);
+});
+
+test("5択の選択のみでは診断完了を記録せず、ダッシュボードは開始済みを表示する", async () => {
+  const storage = new FakeStorage();
+  const elements = {
+    "#dashboard": element(),
+    "#dash-diagnostic": element(),
+    "#route-result": element(),
+    "#result-eyebrow": element(),
+    "#result-title": element(),
+    "#result-body": element(),
+    "#result-link": element()
+  };
+  const { documentListeners } = setup({ storage, elements });
+  const app = await loadApp("interest-select-incomplete");
+  app.writeJson("consent", { analytics: true, email: false, decided: true });
+  const clickTarget = {
+    closest: (selector) => selector === "[data-interest]"
+      ? { dataset: { interest: "E" } }
+      : null
+  };
+  documentListeners.get("click")({ target: clickTarget });
+  assert.equal(app.readJson("progress", {}).diagnostic_started, true, "選択は診断の開始として記録する");
+  assert.equal(app.readJson("progress", {}).diagnostic_completed, undefined, "3問未回答では完了進捗を記録しない");
+  app.renderDashboard();
+  assert.equal(elements["#dash-diagnostic"].textContent, "開始済み", "3問未回答を完了表示しない");
+});
+
+function setupCopyElements() {
+  const shareInput = {
+    value: "https://lab.connectivebyte.com/?r=P2",
+    selected: false,
+    select() { this.selected = true; }
+  };
+  const copyButton = { dataset: { action: "copy-share-url" }, textContent: "コピー" };
+  return { shareInput, copyButton };
+}
+
+function copyClickTarget(copyButton) {
+  return {
+    closest: (selector) => selector === "[data-action]" ? copyButton : null
+  };
+}
+
+// navigatorを差し替えるテストはグローバルを汚さないよう、
+// 終了時に元のdescriptorへ戻す（以降のテストへ偽clipboardを漏らさない）。
+async function withClipboard(clipboard, run) {
+  const previous = Object.getOwnPropertyDescriptor(globalThis, "navigator");
+  Object.defineProperty(globalThis, "navigator", {
+    value: { onLine: true, clipboard }, configurable: true, writable: true
+  });
+  try {
+    await run();
+  } finally {
+    if (previous) Object.defineProperty(globalThis, "navigator", previous);
+    else delete globalThis.navigator;
+  }
+}
+
+test("クリップボードAPIが無くexecCommandも失敗する場合、コピー成功と表示しない", async () => {
+  const { shareInput, copyButton } = setupCopyElements();
+  const { documentListeners, document: fakeDocument } = setup({
+    storage: new FakeStorage(),
+    elements: { "#share-url-input": shareInput }
+  });
+  fakeDocument.execCommand = () => false;
+  await loadApp("copy-fail-no-api");
+  documentListeners.get("click")({ target: copyClickTarget(copyButton) });
+  assert.equal(shareInput.selected, true, "失敗時もURLは選択済みで手動コピーできる");
+  assert.notEqual(copyButton.textContent, "コピーしました", "不明な結果を成功表示しない");
+  assert.match(copyButton.textContent, /コピーできませんでした/, "手動コピーを促す失敗表示にする");
+});
+
+test("クリップボードAPIの書込みが成功したら従来どおり成功表示する", async () => {
+  const { shareInput, copyButton } = setupCopyElements();
+  const { documentListeners } = setup({
+    storage: new FakeStorage(),
+    elements: { "#share-url-input": shareInput }
+  });
+  const written = [];
+  await withClipboard({ writeText: async (text) => { written.push(text); } }, async () => {
+    await loadApp("copy-success-api");
+    documentListeners.get("click")({ target: copyClickTarget(copyButton) });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.deepEqual(written, [shareInput.value], "入力値をそのまま書き込む");
+    assert.equal(copyButton.textContent, "コピーしました");
+  });
+});
+
+test("クリップボードAPI失敗時はexecCommandの成否を判定に使い、成功なら成功表示する", async () => {
+  const { shareInput, copyButton } = setupCopyElements();
+  const { documentListeners, document: fakeDocument } = setup({
+    storage: new FakeStorage(),
+    elements: { "#share-url-input": shareInput }
+  });
+  fakeDocument.execCommand = () => true;
+  await withClipboard({ writeText: async () => { throw new Error("denied"); } }, async () => {
+    await loadApp("copy-fallback-success");
+    documentListeners.get("click")({ target: copyClickTarget(copyButton) });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.equal(copyButton.textContent, "コピーしました", "execCommand成功は正当な成功として表示する");
+  });
+});
+
+test("クリップボードAPI拒否後にexecCommandも失敗したらコピー成功と表示しない", async () => {
+  const { shareInput, copyButton } = setupCopyElements();
+  const { documentListeners, document: fakeDocument } = setup({
+    storage: new FakeStorage(),
+    elements: { "#share-url-input": shareInput }
+  });
+  fakeDocument.execCommand = () => false;
+  await withClipboard({ writeText: async () => { throw new Error("denied"); } }, async () => {
+    await loadApp("copy-api-reject-exec-fail");
+    documentListeners.get("click")({ target: copyClickTarget(copyButton) });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.equal(shareInput.selected, true, "失敗時もURLは選択済みで手動コピーできる");
+    assert.notEqual(copyButton.textContent, "コピーしました", "両方失敗を成功表示しない");
+    assert.match(copyButton.textContent, /コピーできませんでした/, "手動コピーを促す失敗表示にする");
+  });
+});
+
+test("クリップボードAPIが無くてもexecCommandが成功したら成功表示する", async () => {
+  const { shareInput, copyButton } = setupCopyElements();
+  const { documentListeners, document: fakeDocument } = setup({
+    storage: new FakeStorage(),
+    elements: { "#share-url-input": shareInput }
+  });
+  fakeDocument.execCommand = () => true;
+  await loadApp("copy-exec-only-success");
+  documentListeners.get("click")({ target: copyClickTarget(copyButton) });
+  assert.equal(copyButton.textContent, "コピーしました", "execCommand成功は正当な成功として表示する");
+});
+
+test("execCommandが例外を投げたらコピー成功と表示しない", async () => {
+  const { shareInput, copyButton } = setupCopyElements();
+  const { documentListeners, document: fakeDocument } = setup({
+    storage: new FakeStorage(),
+    elements: { "#share-url-input": shareInput }
+  });
+  fakeDocument.execCommand = () => { throw new Error("blocked"); };
+  await loadApp("copy-exec-throw");
+  documentListeners.get("click")({ target: copyClickTarget(copyButton) });
+  assert.equal(shareInput.selected, true, "失敗時もURLは選択済みで手動コピーできる");
+  assert.notEqual(copyButton.textContent, "コピーしました", "例外を成功表示しない");
+  assert.match(copyButton.textContent, /コピーできませんでした/, "例外も失敗として扱う");
+});
+
+// closestを「セレクタ文字列の模倣」ではなく実DOMと同じ親チェーン走査で判定する
+// 最小の擬似DOM。tag名と属性の実在で合致を見るため、href値の区別まで検証できる。
+function domNodeMatches(node, selector) {
+  const match = selector.match(/^(?:([a-z]+))?(?:\[([^\]=]+)(?:="([^"]*)")?\])?$/);
+  if (!match || (!match[1] && match[2] === undefined)) return false;
+  const [, tag, attr, value] = match;
+  if (tag && node.tagName !== tag) return false;
+  if (attr === undefined) return true;
+  if (!(attr in node.attributes)) return false;
+  return value === undefined || node.attributes[attr] === value;
+}
+
+function domNode(tag, attrs = {}, parent = null) {
+  const dataset = {};
+  for (const [key, value] of Object.entries(attrs)) {
+    if (key.startsWith("data-")) {
+      dataset[key.slice(5).replace(/-([a-z])/g, (_, char) => char.toUpperCase())] = value;
+    }
+  }
+  const node = {
+    tagName: tag.toLowerCase(),
+    attributes: attrs,
+    parentNode: parent,
+    dataset,
+    closest(selector) {
+      let current = node;
+      while (current) {
+        if (domNodeMatches(current, selector)) return current;
+        current = current.parentNode;
+      }
+      return null;
+    }
+  };
+  return node;
+}
+
+test("比較テンプレートへのアンカーCTAは着地時にworkflowを開き、カードボタンと同じ挙動になる", async () => {
+  const storage = new FakeStorage({ consent: { analytics: true, email: true, decided: true } });
+  const focusCalls = [];
+  const workflow = element();
+  workflow.hidden = true;
+  workflow.querySelectorAll = () => [];
+  const theme = element();
+  theme.focus = () => focusCalls.push("theme");
+  const elements = {
+    "#comparison-workflow": workflow,
+    "#comparison-theme": theme
+  };
+  const calls = [];
+  const { documentListeners } = setup({
+    storage,
+    elements,
+    fetchImpl: async (_url, options) => {
+      calls.push(JSON.parse(options.body));
+      return { status: 202 };
+    }
+  });
+  await loadApp("comparison-anchor-cta");
+  const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
+  const viewedCount = () => calls.flat().filter((batched) => batched.name === "comparison_template_viewed").length;
+
+  // 実HTML (#diagnostic-comparison-link) と同じ構造: a[href="#comparison"] 内のspanをクリックする
+  const label = domNode("span", { "aria-hidden": "true" }, domNode("a", { href: "#comparison" }));
+  documentListeners.get("click")({ target: label });
+  await flush();
+  assert.equal(workflow.hidden, false, "アンカーCTAの着地でworkflowを開く");
+  assert.deepEqual(focusCalls, ["theme"], "テーマ入力欄へフォーカスする");
+  assert.equal(viewedCount(), 1, "アンカー経由もカードボタンと同じイベントで1回だけ計測する");
+
+  documentListeners.get("click")({ target: domNode("button", { "data-action": "open-comparison" }) });
+  await flush();
+  assert.equal(workflow.hidden, false, "カード内ボタンでもworkflowを開く");
+  assert.deepEqual(focusCalls, ["theme", "theme"], "ボタン経由でもテーマ入力欄へフォーカスする");
+  assert.equal(viewedCount(), 2, "各クリックで1回ずつ計測する");
+});
+
+test("比較アンカー以外のクリックでは比較workflowを開かない", async () => {
+  const storage = new FakeStorage({ consent: { analytics: true, email: true, decided: true } });
+  const workflow = element();
+  workflow.hidden = true;
+  workflow.querySelectorAll = () => [];
+  const elements = {
+    "#comparison-workflow": workflow,
+    "#comparison-theme": element()
+  };
+  const calls = [];
+  const { documentListeners } = setup({
+    storage,
+    elements,
+    fetchImpl: async (_url, options) => {
+      calls.push(JSON.parse(options.body));
+      return { status: 202 };
+    }
+  });
+  await loadApp("comparison-anchor-others");
+  const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
+  const viewedCount = () => calls.flat().filter((batched) => batched.name === "comparison_template_viewed").length;
+
+  // Eルートの#result-link (#resources) やアンカー外の要素は対象外
+  documentListeners.get("click")({ target: domNode("a", { href: "#resources" }) });
+  documentListeners.get("click")({ target: domNode("span") });
+  // data-action の内側にあるアンカーはaction側が優先され、アンカー経路では開かない
+  documentListeners.get("click")({ target: domNode("a", { href: "#comparison" }, domNode("div", { "data-action": "no-op" })) });
+  await flush();
+  assert.equal(workflow.hidden, true, "比較アンカー以外ではworkflowは閉じたまま");
+  assert.equal(viewedCount(), 0, "比較テンプレートの計測も発生しない");
+});
+```
