@@ -120,7 +120,9 @@ EOF
 ## 実測 (2026-09-15・版管理の初回full cycle完了時点)
 
 - pipeline_version = `c82e1c4c96fa` (初回cycle時点・当時はscripts/木tree hash) —
-  **現行 = `e4d8a9a21222`** (.py限定・版定義節参照・2026-10-17再実測)
+  **現行 = `7c6f75bde905`** (.py限定・版定義節参照・2026-10-25再実測 —
+  merge統合注記どおりrefresh merge (10bf696) 完合treeで再計測した値。
+  旧現行 `e4d8a9a21222` は合流でscripts下.pyが双方の変更を含んだため不正)
 - 監査: posted 14 / out_of_window 43 / rejected 2 / **current 5** /
   STALE 0 / placeholder 0 — 版印は生存5行すべて `c82e1c4c96fa` で単一versionに収束
 - 初回cycleの証跡: ①09:17 cronが新規3件を版印付きで起草+stale 2行を自動再生成
@@ -188,7 +190,11 @@ EOF
   変更なし
 - merge統合注記: ⑫と⑬は同一base `d098ab53249c` から別branchで並行に版を動かした
   記録 — 統合後のtreeは双方の.py変更を同居させるため、上記「現行」表記は
-  再実測での同期を要する (検知guard: `test/artifacts-ledger.test.js`)
+  再実測での同期を要する (検知guard: `test/artifacts-ledger.test.js`)。
+  2026-10-25実施: merge完了treeで再計測し「現行」を `7c6f75bde905` へ同期した
+  (refresh 10bf696後のCI test 2件失敗 — 台帳乖離の検知と、隔離publish tree内
+  `npm test` が同じ乖離で落ちる `test/outreach-publish.test.js` のカスケード。
+  本同期で解消。版対象はscripts/*.pyのみなので本更新で版は不変)
 - 以後、文書変更 (本台帳の更新・scripts下READMEの更新を含む) では版は不変 —
   scripts/下の.py (codeとpromptの実体) が変わったときだけ版が動く。本節の
   更新commitで版が変わらないことがそのまま実証になる
