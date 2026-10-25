@@ -120,7 +120,7 @@ EOF
 ## 実測 (2026-09-15・版管理の初回full cycle完了時点)
 
 - pipeline_version = `c82e1c4c96fa` (初回cycle時点・当時はscripts/木tree hash) —
-  **現行 = `e4d8a9a21222`** (.py限定・版定義節参照・2026-10-17再実測)
+  **現行 = `7c6f75bde905`** (.py限定・版定義節参照・2026-10-25再実測 — 5401e73 merge/refresh後の再実測同期。merge統合注記どおり合流treeで再計測)
 - 監査: posted 14 / out_of_window 43 / rejected 2 / **current 5** /
   STALE 0 / placeholder 0 — 版印は生存5行すべて `c82e1c4c96fa` で単一versionに収束
 - 初回cycleの証跡: ①09:17 cronが新規3件を版印付きで起草+stale 2行を自動再生成
