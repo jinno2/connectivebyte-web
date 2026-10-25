@@ -180,3 +180,36 @@ canonical_terms:
         quote: "本番 (api.connectivebyte.com/subscribe・Worker+D1) と同じ検証をローカルでも通すための写し"
       - source: "AGENTS.md:変更フロー"
         quote: "server.js は本番Workerの検証ロジックの写し — 片方だけ変えない"
+  PublicationPath:
+    id: "TERM-PUBLICATION-PATH"
+    layer: "domain"
+    status: "stable"
+    definition: "公開物が外部に出る経路。配信対象はPages配信ツリー (ルート11ファイルとcontent のみ) に閉じ、root file 一覧を deploy workflow・publish-tree テスト・outreach publish tree の3箇所で同一に保つ。外部送信 (記事公開・SNS投稿・アウトリーチ) は承認ゲートの通過を要件とし、未審・fail-closed のまま外に出さない。"
+    synonyms: ["公開ツリー", "publish tree", "隔離publish tree", "外部公開ゲート"]
+    boundaries:
+      includes: ["root file 一覧の3箇所 parity", "HTMLからの相対JavaScript依存閉包の検査", "外部送信前の承認ゲート (jinno approve / persona review fail-closed)"]
+      excludes: ["本番 Worker/D1 の登録・配信処理 (このrepo外)", "queue/state/秘密の管理 (repo外の cb-fleet)"]
+    lifecycle: ["draft", "reviewed", "published"]
+    related_terms: ["PublicationGuard", "LocalVerificationServer", "PipelineVersion"]
+    evidence:
+      - source: ".github/workflows/deploy_pages.yml:33-47"
+        quote: "Prepare publish tree (ルート11ファイル+contentのみ) → publish-tree.test.js と publication-guard.test.js を _site に対して実行 → upload-pages-artifact"
+      - source: "scripts/t0007-outreach/outreach.py:17"
+        quote: "外部送信・公開は approve (明示指示) 後のみ。draftは一切外に出ない"
+      - source: "scripts/x-discover/post.py:9-12"
+        quote: "persona_review の verdict=pass 以外は投稿しない。unreviewed/無印 → 翌朝collect rereview待ち"
+  PipelineVersion:
+    id: "TERM-PIPELINE-VERSION"
+    layer: "domain"
+    status: "stable"
+    definition: "生成系 (scripts下 tracked .py = code と埋込みpromptの実体) の実装version。content hash12桁で、生存生成物の再生成要否 (stale) 判定に使う。生成物が変わるときだけ動き、docs-only commitでは不変。"
+    synonyms: ["生成系版", "pipeline_version()", "gen_version", "polish_version"]
+    boundaries:
+      includes: ["tracked .py のcontent hash短縮形", "未commit変更の '+' 接尾とgit不在の 'unknown' 扱い", "生存 (current/STALE) と死人居 (posted/rejected/out_of_window) の分離"]
+      excludes: ["docs・画像・config の変更による版移動", "投稿済み・却下済み・窓外の再生成"]
+    related_terms: ["PublicationPath"]
+    evidence:
+      - source: "scripts/x-discover/x_discover_rules.py:126-134"
+        quote: "def pipeline_version() — 生成codeとpromptの実体が変わったときだけ変わる。repo全体やscripts下の文書・媒体・config では不変"
+      - source: "test/artifacts-ledger.test.js:19"
+        quote: "ARTIFACTS.md 台帳の現行 pipeline_version が実測値と一致する (実関数をsubprocessで呼ぶ)"
