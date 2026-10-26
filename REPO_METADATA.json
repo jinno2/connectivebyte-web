@@ -1,17 +1,17 @@
 {
   "schema_version": 1,
-  "verified_at": "2026-10-22T13:47:38+00:00",
+  "verified_at": "2026-10-26T16:48:46.028482+00:00",
   "long_term": {
     "summary": "訪問者が内容と選択肢を理解し、自分の意思で学習・購読などの次の行動へ進められる、分かりやすく信頼できる公開サイトを育てる。",
     "source": "ORDER.md",
-    "source_hash": "git-blob:b814f06e39b737f92ba2ee7b759e0cd7c4e3ea58",
-    "updated_at": "2026-10-22"
+    "source_hash": "git-blob:89082d1d26b628097ff5a05c4554637d59fccda8",
+    "updated_at": "2026-10-26"
   },
   "short_term": {
-    "summary": "既存画面の主要な選択→案内先の体験を一つ点検し、公開済み表現の範囲で不具合や説明不足を直す。",
-    "source": "ORDER.md#直近の着手点",
-    "source_hash": "git-blob:b814f06e39b737f92ba2ee7b759e0cd7c4e3ea58",
-    "updated_at": "2026-10-22",
+    "summary": "MS-001の既存の選択肢一つを約30分でキーボード・狭い画面から確認し、表示・移動・失敗表示を記録する。実画面確認は未達。",
+    "source": "docs/MILESTONES.md",
+    "source_hash": "git-blob:e5017eb7ab2838f14ca0fbc5e878fa9b3ac9220e",
+    "updated_at": "2026-10-26",
     "status": "not_started"
   }
 }
