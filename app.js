@@ -845,8 +845,10 @@ function saveConsent(analytics) {
       track("shared_result_viewed", { asset_id: "shared_result", cta_id: `r_P${sharedResultPhaseThisView}` });
     }
   } else {
+```js
     const removed = removeJson("events");
     return persisted && removed;
+```
   }
   return persisted;
 }

@@ -12,12 +12,14 @@ import {
 
 export const MAX_POST_LENGTH = 280;
 export const URL_WEIGHTED_LENGTH = 23; // X上のURLは t.co 展開で23字扱い
+```js
 const URL_PATTERN = new RegExp(
   `(${VALID_URL_PRECEDING_CHARS})((?<protocol>https?:\\/\\/)?(?<domain>${VALID_DOMAIN})(?::\\d{1,5})?(?<path>\\/${VALID_URL_PATH}*)?(?<query>\\?${VALID_URL_QUERY_CHARS}*${VALID_URL_QUERY_ENDING_CHARS})?)`,
   "gi"
 );
 const ASCII_DOMAIN_PATTERN = new RegExp(VALID_ASCII_DOMAIN, "gi");
 const TCO_URL_PATTERN = /^https?:\/\/t\.co\/([a-z0-9]+)(?:\?[^\s]*)?/i;
+```
 const URL_TRAILING_PUNCTUATION = /[.,!?;:、。！？，．；：]+$/u;
 const NEXT_ACTION_MAX = 40;
 const NEXT_ACTION_MAX_WEIGHT = 80;
@@ -86,7 +88,7 @@ function validDomainShape(domain) {
 
 function urlRanges(text) {
   const ranges = [];
-  const value = String(text ?? "");
+const value = String(text ?? "");
   for (const match of value.matchAll(URL_PATTERN)) {
     const url = match[2];
     const urlStart = match.index + match[1].length;
