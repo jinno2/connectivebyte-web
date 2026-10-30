@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """CB発見者 — 素材収集・起草キュー (v0・keyless).
 
-毎日1回動かす前提: 当日のカレンダージャンル (GENRES.md) で HN / GitHub / Reddit から
+毎日1回動かす前提: 当日のカレンダージャンル (GENRES.md) で HN / GitHub から
 候補を集め、スコア順にキュー (draft) へ追記する。投稿はしない (承認は別工程)。
 
   python3 collect.py                # 収集+起草 (LITELLM_API_KEYあれば自説も生成)
