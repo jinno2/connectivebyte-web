@@ -59,7 +59,7 @@ EOF
 ## 実測 (2026-09-15・版管理の初回full cycle完了時点)
 
 - pipeline_version = `c82e1c4c96fa` (初回cycle時点・当時はscripts/木tree hash) —
-  **現行 = `e4d8a9a21222`** (.py限定・版定義節参照・2026-10-17再実測)
+  **現行 = `7c6f75bde905`** (.py限定・版定義節参照・2026-11-02再実測)
 - 監査: posted 14 / out_of_window 43 / rejected 2 / **current 5** /
   STALE 0 / placeholder 0 — 版印は生存5行すべて `c82e1c4c96fa` で単一versionに収束
 - 初回cycleの証跡: ①09:17 cronが新規3件を版印付きで起草+stale 2行を自動再生成
@@ -114,6 +114,14 @@ EOF
   正当)。台帳「現行」の同期漏れを ⑦と同種の回帰防止ガード
   (`test/artifacts-ledger.test.js`) が検知 — 本節で同期。起草・再検査logicには
   変更なし
+- ⑭停滞PR #23 (tas/auto/08fc8af4ba5a) の生存payload着地 — collect.py docstring
+  とGENRES.mdの素材源記載から未実装Reddit (v0から一度も収集codeが存在せず)
+  を除去し、素材源docs↔実装整合guard (`test/x-discover-sources.test.js`) と
+  scripts両READMEのcron不在表明guard (`test/automation-md.test.js` +3test) を
+  新設 (2026-11-02着地)。版は `e4d8a9a21222` → `7c6f75bde905` (.py変更なので
+  正当 — docstringのみで生成系logicは無変更)。PR #23のmerge腐敗
+  (32bd82eが衝突を両側残しで解決 — JSへのfence混入・LOOP.md/PURPOSE.mdの
+  重複とrepo名改変・本台帳の自己重複) は本着地では採用せず、正本はmaster版
 - 以後、文書変更 (本台帳の更新・scripts下READMEの更新を含む) では版は不変 —
   scripts/下の.py (codeとpromptの実体) が変わったときだけ版が動く。本節の
   更新commitで版が変わらないことがそのまま実証になる
