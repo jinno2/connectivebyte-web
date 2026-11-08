@@ -73,5 +73,6 @@ dossierへ追記してから `draft` を走らせる。
 47 8 * * * cd /home/jinno/connectivebyte-web && python3 scripts/t0007-outreach/outreach.py engagement >> ~/.local/share/cb-fleet/outreach.log 2>&1
 ```
 
-2026-10-12再実測: このhostのcrontabにこの行は無い — 発火の現況の正本は
-[AUTOMATION.md](../../AUTOMATION.md) のcrontab節 (行は移転・再開時の設定例)。
+2026-10-12再実測でこのhostのcrontabに上記行は不在 (`~/.local/share/cb-fleet/` にlogも無い)。
+発火の実態と移転・再開時の更新指示は [../../AUTOMATION.md](../../AUTOMATION.md) が正本
+(行は移転・再開時の設定例)。
