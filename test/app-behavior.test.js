@@ -321,6 +321,7 @@ test("既存Storage値が書込み拒否後のページ内consentと関心選択
   const removalDenied = await loadApp("storage-existing-remove-denied");
   assert.equal(removalDenied.saveConsent(false), false, "削除拒否を保存成功と扱わない");
   assert.equal(removalDenied.readJson("consent", null).analytics, false);
+```javascript
   assert.deepEqual(removalDenied.readJson("events", []), [], "削除失敗でもページ内の旧イベントを復活させない");
   assert.equal(removalDeniedStorage.values.has("consent"), true, "削除拒否では旧永続値が残ることを区別");
 });
@@ -767,3 +768,4 @@ test("比較アンカー以外のクリックでは比較workflowを開かない
   assert.equal(workflow.hidden, true, "比較アンカー以外ではworkflowは閉じたまま");
   assert.equal(viewedCount(), 0, "比較テンプレートの計測も発生しない");
 });
+```
