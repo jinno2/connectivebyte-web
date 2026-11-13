@@ -1,0 +1,67 @@
+version: "1.0"
+
+product_goal:
+  north_star: "訪問者が自分の関心から記事・診断・ニュースレターへ進み、自己選択を助け、能力や属性を断定しない公開サイト（推定: README.md・SYSTEM_CONSTITUTION.md・ORDER.mdより）"
+  success_metrics:
+    - id: "MET-001"
+      name: "公開ガードと全テストの合格"
+      target: "npm test (node --test) が常時緑"
+    - id: "MET-002"
+      name: "属性推定の混入ゼロ"
+      target: "FORBIDDEN_ATTRIBUTES 由来のフィールドがイベント・診断結果・共有文に現れない"
+    - id: "MET-003"
+      name: "結果表示の誠実さ"
+      target: "リンク到達・登録結果・配信結果を区別し、不明な結果を成功表示しない"
+  non_goals:
+    - "非公開の成熟度モデル詳細定義の掲載（一般論として書き直した表現のみ）"
+    - "職業・年収・能力・性格・外部履歴の推定・表示"
+    - "本番の登録・配信処理の実装（api.connectivebyte.com は別管理のWorker/IaC）"
+    - "内部のリポ構造・運用手順・計測backend操作の詳細の公開"
+
+milestones:
+  - id: "MS-001"
+    name: "基本体験の安定"
+    intent: "案内・リンク・小画面・キーボード操作・失敗表示の点検で、主要な選択と移動を再現可能にする"
+    deliverables: ["選択→案内先の導線点検", "失敗表示と登録成功の区別"]
+    acceptance:
+      - type: "test"
+        target: "test/app-behavior.test.js"
+      - type: "test"
+        target: "test/server.test.js"
+    priority: "P0"
+    status: "active"
+  - id: "MS-002"
+    name: "内容と導線の整合"
+    intent: "公開可能な内容と読者の次行動を対応させ、誤った約束やリンク切れを減らす"
+    deliverables: ["記事・資料と導線の対応整備"]
+    acceptance:
+      - type: "test"
+        target: "test/site-files.test.js"
+    priority: "P1"
+    status: "planned"
+  - id: "MS-003"
+    name: "同意を尊重した改善"
+    intent: "購読と解除、匿名の利用状況を分けて扱う"
+    deliverables: ["同意フローの確認手順"]
+    acceptance:
+      - type: "test"
+        target: "test/events.test.js"
+    priority: "P1"
+    status: "planned"
+  - id: "MS-004"
+    name: "継続的な品質改善"
+    intent: "一度に一つの仮説を改善して使いやすさを比較する"
+    deliverables: ["改善の計測と比較の記録"]
+    acceptance:
+      - type: "test"
+        target: "test/logic.test.js"
+    priority: "P2"
+    status: "planned"
+
+work_policy:
+  default_mode: "commit"
+  iteration_budget:
+    max_cycles: 5
+    max_files_changed: 25
+  quality_gates:
+    must_pass: ["npm test"]

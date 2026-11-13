@@ -187,6 +187,15 @@ test("LP #apply 申込formは /apply endpoint・同意checkbox・PII分離文言
   assert.equal(lp.includes("東京AIソリューションズ"), false);
 });
 
+test("LP の両メール入力 (newsletter・apply) は server検証と同じ maxlength=254 を持つ", async () => {
+  // server.js は email.length > 254 を invalid_email で拒否する。maxlength 無しの
+  // 入力欄ではブラウザ検証を通過した長い入力が送信後にのみ失敗表示になるため、
+  // 両formで RFC 5321 の上限を事前に抑える (2026-10-13 newsletter側の付け忘れ修正)。
+  const lp = await readFile(path.join(repoRoot, "index.html"), "utf8");
+  assert.match(lp, /id="email" name="email" type="email"[^>]*required maxlength="254"/);
+  assert.match(lp, /id="apply-email" name="email" type="email"[^>]*required maxlength="254"/);
+});
+
 // html文字列から id 属性値を実DOMのidとして抽出する (属性順・クォート形式に依存
 // しない)。data-asset-id 等 "id" を含む属性名の値を実idと誤認しないため、空白
 // (または文頭) に続く id 属性のみを数える — 部分一致を許すと参照先idが実DOMに

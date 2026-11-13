@@ -514,3 +514,256 @@ test("全問回答済みの診断は従来どおり完了し、状態表示は�
   assert.equal(elements["#diagnostic-status"].textContent, "", "完了時は状態表示を空にする");
   assert.equal(app.readJson("diagnosis_result", null)?.current_phase, 2);
 });
+
+test("5択の選択のみでは診断完了を記録せず、ダッシュボードは開始済みを表示する", async () => {
+  const storage = new FakeStorage();
+  const elements = {
+    "#dashboard": element(),
+    "#dash-diagnostic": element(),
+    "#route-result": element(),
+    "#result-eyebrow": element(),
+    "#result-title": element(),
+    "#result-body": element(),
+    "#result-link": element()
+  };
+  const { documentListeners } = setup({ storage, elements });
+  const app = await loadApp("interest-select-incomplete");
+  app.writeJson("consent", { analytics: true, email: false, decided: true });
+  const clickTarget = {
+    closest: (selector) => selector === "[data-interest]"
+      ? { dataset: { interest: "E" } }
+      : null
+  };
+  documentListeners.get("click")({ target: clickTarget });
+  assert.equal(app.readJson("progress", {}).diagnostic_started, true, "選択は診断の開始として記録する");
+  assert.equal(app.readJson("progress", {}).diagnostic_completed, undefined, "3問未回答では完了進捗を記録しない");
+  app.renderDashboard();
+  assert.equal(elements["#dash-diagnostic"].textContent, "開始済み", "3問未回答を完了表示しない");
+});
+
+function setupCopyElements() {
+  const shareInput = {
+    value: "https://lab.connectivebyte.com/?r=P2",
+    selected: false,
+    select() { this.selected = true; }
+  };
+  const copyButton = { dataset: { action: "copy-share-url" }, textContent: "コピー" };
+  return { shareInput, copyButton };
+}
+
+function copyClickTarget(copyButton) {
+  return {
+    closest: (selector) => selector === "[data-action]" ? copyButton : null
+  };
+}
+
+// navigatorを差し替えるテストはグローバルを汚さないよう、
+// 終了時に元のdescriptorへ戻す（以降のテストへ偽clipboardを漏らさない）。
+async function withClipboard(clipboard, run) {
+  const previous = Object.getOwnPropertyDescriptor(globalThis, "navigator");
+  Object.defineProperty(globalThis, "navigator", {
+    value: { onLine: true, clipboard }, configurable: true, writable: true
+  });
+  try {
+    await run();
+  } finally {
+    if (previous) Object.defineProperty(globalThis, "navigator", previous);
+    else delete globalThis.navigator;
+  }
+}
+
+test("クリップボードAPIが無くexecCommandも失敗する場合、コピー成功と表示しない", async () => {
+  const { shareInput, copyButton } = setupCopyElements();
+  const { documentListeners, document: fakeDocument } = setup({
+    storage: new FakeStorage(),
+    elements: { "#share-url-input": shareInput }
+  });
+  fakeDocument.execCommand = () => false;
+  await loadApp("copy-fail-no-api");
+  documentListeners.get("click")({ target: copyClickTarget(copyButton) });
+  assert.equal(shareInput.selected, true, "失敗時もURLは選択済みで手動コピーできる");
+  assert.notEqual(copyButton.textContent, "コピーしました", "不明な結果を成功表示しない");
+  assert.match(copyButton.textContent, /コピーできませんでした/, "手動コピーを促す失敗表示にする");
+});
+
+test("クリップボードAPIの書込みが成功したら従来どおり成功表示する", async () => {
+  const { shareInput, copyButton } = setupCopyElements();
+  const { documentListeners } = setup({
+    storage: new FakeStorage(),
+    elements: { "#share-url-input": shareInput }
+  });
+  const written = [];
+  await withClipboard({ writeText: async (text) => { written.push(text); } }, async () => {
+    await loadApp("copy-success-api");
+    documentListeners.get("click")({ target: copyClickTarget(copyButton) });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.deepEqual(written, [shareInput.value], "入力値をそのまま書き込む");
+    assert.equal(copyButton.textContent, "コピーしました");
+  });
+});
+
+test("クリップボードAPI失敗時はexecCommandの成否を判定に使い、成功なら成功表示する", async () => {
+  const { shareInput, copyButton } = setupCopyElements();
+  const { documentListeners, document: fakeDocument } = setup({
+    storage: new FakeStorage(),
+    elements: { "#share-url-input": shareInput }
+  });
+  fakeDocument.execCommand = () => true;
+  await withClipboard({ writeText: async () => { throw new Error("denied"); } }, async () => {
+    await loadApp("copy-fallback-success");
+    documentListeners.get("click")({ target: copyClickTarget(copyButton) });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.equal(copyButton.textContent, "コピーしました", "execCommand成功は正当な成功として表示する");
+  });
+});
+
+test("クリップボードAPI拒否後にexecCommandも失敗したらコピー成功と表示しない", async () => {
+  const { shareInput, copyButton } = setupCopyElements();
+  const { documentListeners, document: fakeDocument } = setup({
+    storage: new FakeStorage(),
+    elements: { "#share-url-input": shareInput }
+  });
+  fakeDocument.execCommand = () => false;
+  await withClipboard({ writeText: async () => { throw new Error("denied"); } }, async () => {
+    await loadApp("copy-api-reject-exec-fail");
+    documentListeners.get("click")({ target: copyClickTarget(copyButton) });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.equal(shareInput.selected, true, "失敗時もURLは選択済みで手動コピーできる");
+    assert.notEqual(copyButton.textContent, "コピーしました", "両方失敗を成功表示しない");
+    assert.match(copyButton.textContent, /コピーできませんでした/, "手動コピーを促す失敗表示にする");
+  });
+});
+
+test("クリップボードAPIが無くてもexecCommandが成功したら成功表示する", async () => {
+  const { shareInput, copyButton } = setupCopyElements();
+  const { documentListeners, document: fakeDocument } = setup({
+    storage: new FakeStorage(),
+    elements: { "#share-url-input": shareInput }
+  });
+  fakeDocument.execCommand = () => true;
+  await loadApp("copy-exec-only-success");
+  documentListeners.get("click")({ target: copyClickTarget(copyButton) });
+  assert.equal(copyButton.textContent, "コピーしました", "execCommand成功は正当な成功として表示する");
+});
+
+test("execCommandが例外を投げたらコピー成功と表示しない", async () => {
+  const { shareInput, copyButton } = setupCopyElements();
+  const { documentListeners, document: fakeDocument } = setup({
+    storage: new FakeStorage(),
+    elements: { "#share-url-input": shareInput }
+  });
+  fakeDocument.execCommand = () => { throw new Error("blocked"); };
+  await loadApp("copy-exec-throw");
+  documentListeners.get("click")({ target: copyClickTarget(copyButton) });
+  assert.equal(shareInput.selected, true, "失敗時もURLは選択済みで手動コピーできる");
+  assert.notEqual(copyButton.textContent, "コピーしました", "例外を成功表示しない");
+  assert.match(copyButton.textContent, /コピーできませんでした/, "例外も失敗として扱う");
+});
+
+// closestを「セレクタ文字列の模倣」ではなく実DOMと同じ親チェーン走査で判定する
+// 最小の擬似DOM。tag名と属性の実在で合致を見るため、href値の区別まで検証できる。
+function domNodeMatches(node, selector) {
+  const match = selector.match(/^(?:([a-z]+))?(?:\[([^\]=]+)(?:="([^"]*)")?\])?$/);
+  if (!match || (!match[1] && match[2] === undefined)) return false;
+  const [, tag, attr, value] = match;
+  if (tag && node.tagName !== tag) return false;
+  if (attr === undefined) return true;
+  if (!(attr in node.attributes)) return false;
+  return value === undefined || node.attributes[attr] === value;
+}
+
+function domNode(tag, attrs = {}, parent = null) {
+  const dataset = {};
+  for (const [key, value] of Object.entries(attrs)) {
+    if (key.startsWith("data-")) {
+      dataset[key.slice(5).replace(/-([a-z])/g, (_, char) => char.toUpperCase())] = value;
+    }
+  }
+  const node = {
+    tagName: tag.toLowerCase(),
+    attributes: attrs,
+    parentNode: parent,
+    dataset,
+    closest(selector) {
+      let current = node;
+      while (current) {
+        if (domNodeMatches(current, selector)) return current;
+        current = current.parentNode;
+      }
+      return null;
+    }
+  };
+  return node;
+}
+
+test("比較テンプレートへのアンカーCTAは着地時にworkflowを開き、カードボタンと同じ挙動になる", async () => {
+  const storage = new FakeStorage({ consent: { analytics: true, email: true, decided: true } });
+  const focusCalls = [];
+  const workflow = element();
+  workflow.hidden = true;
+  workflow.querySelectorAll = () => [];
+  const theme = element();
+  theme.focus = () => focusCalls.push("theme");
+  const elements = {
+    "#comparison-workflow": workflow,
+    "#comparison-theme": theme
+  };
+  const calls = [];
+  const { documentListeners } = setup({
+    storage,
+    elements,
+    fetchImpl: async (_url, options) => {
+      calls.push(JSON.parse(options.body));
+      return { status: 202 };
+    }
+  });
+  await loadApp("comparison-anchor-cta");
+  const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
+  const viewedCount = () => calls.flat().filter((batched) => batched.name === "comparison_template_viewed").length;
+
+  // 実HTML (#diagnostic-comparison-link) と同じ構造: a[href="#comparison"] 内のspanをクリックする
+  const label = domNode("span", { "aria-hidden": "true" }, domNode("a", { href: "#comparison" }));
+  documentListeners.get("click")({ target: label });
+  await flush();
+  assert.equal(workflow.hidden, false, "アンカーCTAの着地でworkflowを開く");
+  assert.deepEqual(focusCalls, ["theme"], "テーマ入力欄へフォーカスする");
+  assert.equal(viewedCount(), 1, "アンカー経由もカードボタンと同じイベントで1回だけ計測する");
+
+  documentListeners.get("click")({ target: domNode("button", { "data-action": "open-comparison" }) });
+  await flush();
+  assert.equal(workflow.hidden, false, "カード内ボタンでもworkflowを開く");
+  assert.deepEqual(focusCalls, ["theme", "theme"], "ボタン経由でもテーマ入力欄へフォーカスする");
+  assert.equal(viewedCount(), 2, "各クリックで1回ずつ計測する");
+});
+
+test("比較アンカー以外のクリックでは比較workflowを開かない", async () => {
+  const storage = new FakeStorage({ consent: { analytics: true, email: true, decided: true } });
+  const workflow = element();
+  workflow.hidden = true;
+  workflow.querySelectorAll = () => [];
+  const elements = {
+    "#comparison-workflow": workflow,
+    "#comparison-theme": element()
+  };
+  const calls = [];
+  const { documentListeners } = setup({
+    storage,
+    elements,
+    fetchImpl: async (_url, options) => {
+      calls.push(JSON.parse(options.body));
+      return { status: 202 };
+    }
+  });
+  await loadApp("comparison-anchor-others");
+  const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
+  const viewedCount = () => calls.flat().filter((batched) => batched.name === "comparison_template_viewed").length;
+
+  // Eルートの#result-link (#resources) やアンカー外の要素は対象外
+  documentListeners.get("click")({ target: domNode("a", { href: "#resources" }) });
+  documentListeners.get("click")({ target: domNode("span") });
+  // data-action の内側にあるアンカーはaction側が優先され、アンカー経路では開かない
+  documentListeners.get("click")({ target: domNode("a", { href: "#comparison" }, domNode("div", { "data-action": "no-op" })) });
+  await flush();
+  assert.equal(workflow.hidden, true, "比較アンカー以外ではworkflowは閉じたまま");
+  assert.equal(viewedCount(), 0, "比較テンプレートの計測も発生しない");
+});

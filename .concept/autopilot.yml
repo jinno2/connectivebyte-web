@@ -1,0 +1,8 @@
+version: "1.0"
+commands:
+  lint: "echo \"no lint configured\""
+  test: "npm test"
+budget:
+  max_cycles: 5
+  max_files: 25
+mode: "commit"
