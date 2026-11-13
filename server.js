@@ -271,7 +271,15 @@ export function createRequestHandler(options = {}) {
 
   return async function handleRequest(request, response) {
     const url = new URL(request.url, "http://localhost");
-    const pathname = decodeURIComponent(url.pathname);
+    // %zz等の不正なパーセントエンコーディングはdecodeが例外になる — 未処理のまま
+    // ではdev serverプロセスごと落ちるため、生のpathnameへ落として通常の404経路へ
+    // 渡す (Pages同等のnot-found挙動)。
+    let pathname;
+    try {
+      pathname = decodeURIComponent(url.pathname);
+    } catch {
+      pathname = url.pathname;
+    }
 
     if (pathname === "/api/events" && request.method === "POST") {
       const origin = request.headers.origin;
