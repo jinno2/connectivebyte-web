@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createServer } from "node:http";
@@ -220,6 +220,58 @@ test("ネストした存在しないパスも404.htmlをサイト体裁で応答
     }
   } finally {
     await ctx.cleanup();
+  }
+});
+
+test("不正なパーセントエンコーディングのURLは404で応答し、サーバーは落ちない", async () => {
+  // %zz等はdecodeURIComponentがURIErrorになる — 未処理のままではdev serverプロセス
+  // が落ちる (2026-10-13実測)。Pages同等の404へ落とし、その後も同一プロセスで
+  // 正常配信が続くことを連続リクエストで機械検査する。
+  const ctx = await startServer();
+  try {
+    for (const path of ["/%zz", "/deep/%E0%A4%A", "/%E4%BD%95%zz"]) {
+      const res = await fetch(`${ctx.base}${path}`);
+      assert.equal(res.status, 404, path);
+      assert.equal(res.headers.get("content-type"), "text/html; charset=utf-8", path);
+      const body = await res.text();
+      assert.match(body, /<html lang="ja">/, path);
+    }
+    const res = await fetch(`${ctx.base}/index.html`);
+    assert.equal(res.status, 200);
+    assert.match(await res.text(), /ConnectiveByte/);
+  } finally {
+    await ctx.cleanup();
+  }
+});
+
+test("正常なパーセントエンコーディングはデコードされて配信される (不正エンコーディング修正の回帰ガード)", async () => {
+  // decodeURIComponentのtry/catch化で正当なエンコード経路が壊れていないことを、
+  // 日本語ディレクトリのエンコードURLが200で返ることで機械検査する。
+  // 404.htmlが無い環境では不正エンコーディングは平文404に落ち、
+  // その後も同一プロセスで配信が続く。
+  const encodedRoot = await mkdtemp(join(tmpdir(), "cb-root-"));
+  await mkdir(join(encodedRoot, "診断"), { recursive: true });
+  await writeFile(
+    join(encodedRoot, "診断", "index.html"),
+    "<!DOCTYPE html><html lang=\"ja\"><body>エンコード配信テスト</body></html>"
+  );
+  const ctx = await startServer({ root: encodedRoot });
+  try {
+    const encoded = `/${encodeURIComponent("診断")}/`;
+    const res = await fetch(`${ctx.base}${encoded}`);
+    assert.equal(res.status, 200, encoded);
+    assert.equal(res.headers.get("content-type"), "text/html; charset=utf-8", encoded);
+    assert.match(await res.text(), /エンコード配信テスト/, encoded);
+
+    const bad = await fetch(`${ctx.base}/%zz`);
+    assert.equal(bad.status, 404);
+    assert.equal(await bad.text(), "Not found");
+
+    const alive = await fetch(`${ctx.base}${encoded}`);
+    assert.equal(alive.status, 200, encoded);
+  } finally {
+    await ctx.cleanup();
+    await rm(encodedRoot, { recursive: true, force: true });
   }
 });
 
