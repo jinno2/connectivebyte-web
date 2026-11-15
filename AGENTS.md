@@ -37,7 +37,7 @@
 - 外部state (`~/.local/share/cb-fleet/`) を持つ運用code。queue/state/log/秘密は**repo外**。
 - 監視・異常時復旧・authorize手順などの**運用手順の詳細はbusiness_notes (非公開) が正本**
   (このpublic repoに内部手順・path詳細を書かない — 上記「絶対にcommitしないもの」#2)。
-- ここでの変更は `post.py --dry-run` / `collect.py --dry` で検証してからcommit。
+- ここでの変更は恒久テスト (`python3 test_persona_gate.py` / `test_llm_backend.py`) と `post.py --dry-run` / `collect.py --dry` で検証してからcommit。
 
 ## テスト
 
