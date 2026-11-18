@@ -10,9 +10,9 @@ GitHub Actionsによるイベント駆動。開発確認はローカルCLI。運
 
 [CI](.github/workflows/ci.yml)はpush/PR。[Pages](.github/workflows/deploy_pages.yml)はmaster pushとworkflow_dispatch。正確な条件はworkflowを参照する。
 
-### ローカルcrontab（実測 2026-09-15・2026-10-12再実測で不在）
+### ローカルcrontab（2026-09-15実測・2026-10-12再実測）
 
-2026-09-15時点ではGitHub Actions以外に、ローカルcrontabで以下が毎日発火していた。当時の停止（Kill Switch）は`crontab -e`で該当行を削除する方法だった。
+2026-09-15時点では、GitHub Actions以外に以下のローカルcrontabが毎日発火していた。当時の停止（Kill Switch）は`crontab -e`で該当行を削除する方法だった。
 
 ```
 17 9 * * * cd /home/jinno/connectivebyte-web && /home/jinno/.local/share/mise/installs/python/3.13/bin/python3 scripts/x-discover/collect.py >> /home/jinno/.local/share/cb-fleet/collect.log 2>&1
@@ -20,6 +20,8 @@ GitHub Actionsによるイベント駆動。開発確認はローカルCLI。運
 47 8 * * * cd /home/jinno/connectivebyte-web && /home/jinno/.local/share/mise/installs/python/3.13/bin/python3 scripts/t0007-outreach/outreach.py engagement >> /home/jinno/.local/share/cb-fleet/outreach.log 2>&1
 53 8 * * * cd /home/jinno/connectivebyte-web && /home/jinno/.local/share/mise/installs/python/3.13/bin/python3 scripts/t0007-outreach/crm.py digest --inbox >> /home/jinno/.local/share/cb-fleet/crm-alerts.log 2>&1
 ```
+
+2026-10-12の再実測では、ユーザーcrontab・systemd timer・システムcronのいずれにもこれらの行はなく、`~/.local/share/cb-fleet/`にも`.env`以外のqueueやlogはなかった。現在の発火状態は実機で確認し、移転・再開時は本節を更新すること。
 
 2026-10-12再実測: このhostのcrontabとsystemd timer（user/system両方）にこれらの行は無く、`~/.local/share/cb-fleet/`にもqueue・各logが無い（`.env`のみ残存）。上記の毎日発火はこのhostでは確認できない。発火の移転・再開時は本節を実態に合わせて更新する。
 

@@ -53,8 +53,9 @@ core投稿のIn-Network到達圏 (P(action)の分母) を広げる。_account=AI
 
 ## 他リポ連携
 
-- 素材源 v0 = HN (Algolia・keyless) + GitHub search (keyless)。Reddit (best-effort) は
-  2026-10-12時点で未実装 (collect.pyの実素材源はHN・GitHubのみ)
+- 素材源 v0 = HN (Algolia・keyless) + GitHub search (keyless)。Redditは当初記載に
+  含まれたが v0から未実装のため除去 (2026-10-12・test/x-discover-sources.test.jsが
+  docs↔実装整合を恒久保証)
 - 以降 = defuddle providers (GITHUB_TOKEN/QIITA_TOKEN規律・docs/providers.md)・RSS
 - 起草 = LLM_BACKENDS env優先順のbackend chain (llm_backend.py・2026-09-05〜。
   devin/codex/litellm・既定はlitellm。litellmのkeyはLITELLM_API_KEYのみで指紋以外記録しない)

@@ -1,0 +1,215 @@
+version: "0.3"
+
+canonical_terms:
+  Interest:
+    id: "TERM-INTEREST"
+    layer: "core"
+    status: "stable"
+    definition: "訪問者が自分で選ぶ5種類の関心カテゴリ (E/D/C/B/A)。分類は自己申告のみで、昇格は有効な自己選択による上方向のみ。"
+    synonyms: ["関心", "interest", "E/D/C/B/A"]
+    boundaries:
+      includes: ["自己選択による分類", "関心別の導線ルート (segment/target/cta)", "関心の順序 rank (E<D<C<B<A)"]
+      excludes: ["職業・収入・能力などの属性推定", "優劣順位やスコアリング"]
+    lifecycle: ["selected", "promoted"]
+    related_terms: ["Diagnosis", "InterestStats", "Application"]
+    evidence:
+      - source: "logic.js:1-60"
+        quote: "INTERESTS / ROUTES / RANK / promoteBySelfSelection"
+      - source: "test/logic.test.js:23-60"
+        quote: "E/D/C/B/Aそれぞれに固有の導線を返す / 昇格は有効な自己選択でのみ行う"
+  Phase:
+    id: "TERM-PHASE"
+    layer: "core"
+    status: "stable"
+    definition: "AI活用の進み方を示す公開用4段階 (P1-P4) の一般論モデル。詳細な段階の定義は非公開のため、本repoでは一般論の表現のみを扱う。"
+    synonyms: ["段階", "current_phase", "P1-P4"]
+    boundaries:
+      includes: ["4段階のid (P1-P4) と next_hints", "診断結果・共有文での段階表示"]
+      excludes: ["非公開の詳細定義の原文・用語", "数値スコアや順位付け"]
+    lifecycle: ["P1", "P2", "P3", "P4"]
+    related_terms: ["Diagnosis", "Share"]
+    evidence:
+      - source: "logic.js:69-104"
+        quote: "公開サイト向けの段階モデル。一般論レベルの4段階。詳細な段階の定義は非公開"
+      - source: "AGENTS.md:絶対にcommitしないもの"
+        quote: "一般論として自分の言葉で書き直した表現のみ"
+  Diagnosis:
+    id: "TERM-DIAGNOSIS"
+    layer: "core"
+    status: "stable"
+    definition: "自己申告の行動回答から現段階を判定する機能。初回3問 (Q0-Q2) と詳細12問 (D0-D11) の質問セットを持ち、max-affirmative-phaseで判定する。"
+    synonyms: ["診断", "diagnostic", "run_diagnosis"]
+    boundaries:
+      includes: ["質問セットの差し替え (初回/詳細)", "段階判定と next_hints", "diagnostic_completed イベント"]
+      excludes: ["利用者間の優劣比較", "禁止属性の取得・表示"]
+    lifecycle: ["started", "completed"]
+    related_terms: ["Phase", "AnonymousEvent", "ForbiddenAttribute"]
+    evidence:
+      - source: "logic.js:107-183"
+        quote: "run_diagnosis / DIAGNOSTIC_QUESTIONS / DETAILED_QUESTIONS / buildDiagnosticCompletedEvent"
+      - source: "test/logic.test.js:119-247"
+        quote: "診断はreadyを返しcurrent_phaseを数値で返す / 詳細版は12問・各段階3問"
+  AnonymousEvent:
+    id: "TERM-EVENT"
+    layer: "core"
+    status: "stable"
+    definition: "個人を識別しない行動イベント。型は EVENT_TYPES、必須フィールド7つ、バッチは200件まで・60秒窓で30件のレート制限。devの保存先は events.jsonl。"
+    synonyms: ["匿名イベント", "tracking event", "events.jsonl"]
+    boundaries:
+      includes: ["EVENT_TYPES による型検証", "必須フィールドとUTM欄の検証", "レート制限・ボディ上限"]
+      excludes: ["メール等の個人情報", "禁止属性の保持"]
+    lifecycle: ["validated", "accepted"]
+    assumptions:
+      - id: "ASM-EVENT-001"
+        text: "AUTO: logic.js の EVENT_TYPES (23種) をクライアント送信イベントの正とし、server.js の+2種 (d1_lp_viewed, d1_lp_cart_click) は本番専用LPの検証用スーパーセットとして扱う"
+        decision_key: "AUTO:AnonymousEvent.typeset:logicjs_client_canonical"
+        expires_after_runs: 20
+    evidence:
+      - source: "logic.js:228-252"
+        quote: "EVENT_TYPES (23種)"
+      - source: "server.js:18-95"
+        quote: "EVENT_TYPES (+2種) / REQUIRED_FIELDS / レート制限"
+  ForbiddenAttribute:
+    id: "TERM-FORBIDDEN"
+    layer: "core"
+    status: "stable"
+    definition: "取り込んではいけない推定属性の集合 (職業・収入・能力・性格・外部履歴など23属性)。クライアントでフィルタし、サーバーは検出時に拒否する二重構え。"
+    synonyms: ["禁止属性", "FORBIDDEN_ATTRIBUTES"]
+    boundaries:
+      includes: ["クライアント側フィルタ (filterForbiddenAttributes)", "サーバー側拒否 (validateEvent)"]
+      excludes: ["匿名ID (anonymous_id は許可)", "同意の上でのメール取得"]
+    related_terms: ["AnonymousEvent", "Subscription"]
+    evidence:
+      - source: "logic.js:185-219"
+        quote: "FORBIDDEN_ATTRIBUTES / filterForbiddenAttributes"
+      - source: "SYSTEM_CONSTITUTION.md:6-8"
+        quote: "能力や属性を勝手に判定しない / 匿名計測とメール等の個人情報を分離"
+  Subscription:
+    id: "TERM-SUBSCRIPTION"
+    layer: "core"
+    status: "stable"
+    definition: "メールでの更新受け取り登録。同意フラグ true が必須で、メール形式と匿名ID形式を検証する。本番は別管理のWorker+D1、ローカルは検証のみで保存しない。"
+    synonyms: ["購読登録", "/api/subscribe", "newsletter_subscribed"]
+    boundaries:
+      includes: ["email形式検証", "consent必須", "anonymous_id形式検証"]
+      excludes: ["本番の登録・配信処理 (このrepo外)", "無同意の取得"]
+    lifecycle: ["validated", "accepted"]
+    related_terms: ["ForbiddenAttribute", "Application", "LocalVerificationServer"]
+    evidence:
+      - source: "server.js:99-114"
+        quote: "validateSubscription / 本番と同じ検証をローカルでも通すための写し"
+      - source: "README.md:30-31"
+        quote: "同意と明示操作の条件を満たして処理 / ローカルサーバーの合格を本番の登録・配信成功とは扱わない"
+  Application:
+    id: "TERM-APPLICATION"
+    layer: "domain"
+    status: "stable"
+    definition: "実施支援への申込。購読登録と同じ検証に interest (E..A) と note (1000字以内) の検証を追加する。devは保存しない。"
+    synonyms: ["実施支援 申込", "/api/apply", "apply_submitted"]
+    boundaries:
+      includes: ["購読検証の再利用", "interest と note の検証"]
+      excludes: ["本番の申込処理 (このrepo外)", "自由記述の内容解釈"]
+    lifecycle: ["validated", "accepted"]
+    related_terms: ["Subscription", "Interest"]
+    evidence:
+      - source: "server.js:116-133"
+        quote: "validateApplication / invalid_interest / invalid_note"
+      - source: "server.js:333-364"
+        quote: "POST /api/apply"
+  Share:
+    id: "TERM-SHARE"
+    layer: "domain"
+    status: "stable"
+    definition: "診断結果の共有文生成。重み付き文字数 (上限280・URLは23字扱い) で切り詰め、テンプレートは result/free の2種。intent URL を生成する。"
+    synonyms: ["共有", "share text", "intent URL"]
+    boundaries:
+      includes: ["重み付き文字数計算", "テンプレートとintent URL生成"]
+      excludes: ["診断の再判定", "段階ラベルの改変"]
+    related_terms: ["Diagnosis", "Phase"]
+    evidence:
+      - source: "share.js:13-235"
+        quote: "MAX_POST_LENGTH / weightedLength / SHARE_TEMPLATES / buildIntentUrl"
+      - source: "test/share.test.js:95"
+        quote: "weightedLengthはXのCJK/ASCII/URL/emoji重みを扱い、共有文を上限内に切り詰める"
+  InterestStats:
+    id: "TERM-STATS"
+    layer: "domain"
+    status: "stable"
+    definition: "interest_selected の匿名集計表示。total+5関心の件数のみ返し、total が5未満なら部品を返さず要素ごと隠す (少数からの推定を作らない)。"
+    synonyms: ["関心stats", "/api/stats", "formatInterestStats"]
+    boundaries:
+      includes: ["識別子なしの閉じたaggregate", "MIN_STATS_TOTAL (5) による非表示"]
+      excludes: ["個別イベントの露出", "少数サンプルからの%表示"]
+    related_terms: ["Interest", "AnonymousEvent"]
+    evidence:
+      - source: "logic.js:254-268"
+        quote: "formatInterestStats / MIN_STATS_TOTAL (5) なら null"
+      - source: "server.js:366-391"
+        quote: "GET /api/stats (匿名aggregate: 識別子なし)"
+  PublicationGuard:
+    id: "TERM-GUARD"
+    layer: "domain"
+    status: "stable"
+    definition: "git管理ファイルを走査し、非公開の詳細定義に由来する用語の混入をfailさせる静的ガード。ガード語の削除・無効化による解決は人間承認を必須とする。"
+    synonyms: ["公開ガード", "publication-guard"]
+    boundaries:
+      includes: ["git ls-files 全件の静的走査", "検出時は表現を修正"]
+      excludes: ["test/ ディレクトリ自身 (ガード語を文字列として含むため)"]
+    related_terms: ["Phase"]
+    evidence:
+      - source: "test/publication-guard.test.js:1-45"
+        quote: "公開面への機密用語混入を防ぐ静的ガード / 削除・無効化は人間承認を要する"
+      - source: "AGENTS.md:公開してよいか迷ったら"
+        quote: "guardの語削除・無効化で解決しない (人間承認が必須)"
+  LocalVerificationServer:
+    id: "TERM-LOCALSERVER"
+    layer: "domain"
+    status: "stable"
+    definition: "本番Workerの検証ロジックの写しを持ち、Pagesと同じ静的配信挙動 (index・301・404.html) を再現するローカル開発サーバー。保存はせず202を返す。"
+    synonyms: ["ローカル検証用サーバー", "dev server", "server.js"]
+    boundaries:
+      includes: ["本番と同じ検証の写し", "events.jsonl・隠しパスの403保護", "Pages同等のURL挙動"]
+      excludes: ["本番の登録・配信処理", "本番Workerとの差異の解消 (repo外)"]
+    assumptions:
+      - id: "ASM-LOCALSERVER-001"
+        text: "AUTO: repo内の検証ロジックの参照としてserver.jsを扱い、本番Workerとの差異確認は対象外とする"
+        decision_key: "AUTO:LocalVerificationServer.worker_parity:serverjs_as_reference"
+        expires_after_runs: 20
+    evidence:
+      - source: "server.js:99-100"
+        quote: "本番 (api.connectivebyte.com/subscribe・Worker+D1) と同じ検証をローカルでも通すための写し"
+      - source: "AGENTS.md:変更フロー"
+        quote: "server.js は本番Workerの検証ロジックの写し — 片方だけ変えない"
+  PublicationPath:
+    id: "TERM-PUBLICATION-PATH"
+    layer: "domain"
+    status: "stable"
+    definition: "公開物が外部に出る経路。配信対象はPages配信ツリー (ルート11ファイルとcontent のみ) に閉じ、root file 一覧を deploy workflow・publish-tree テスト・outreach publish tree の3箇所で同一に保つ。外部送信 (記事公開・SNS投稿・アウトリーチ) は承認ゲートの通過を要件とし、未審・fail-closed のまま外に出さない。"
+    synonyms: ["公開ツリー", "publish tree", "隔離publish tree", "外部公開ゲート"]
+    boundaries:
+      includes: ["root file 一覧の3箇所 parity", "HTMLからの相対JavaScript依存閉包の検査", "外部送信前の承認ゲート (jinno approve / persona review fail-closed)"]
+      excludes: ["本番 Worker/D1 の登録・配信処理 (このrepo外)", "queue/state/秘密の管理 (repo外の cb-fleet)"]
+    lifecycle: ["draft", "reviewed", "published"]
+    related_terms: ["PublicationGuard", "LocalVerificationServer", "PipelineVersion"]
+    evidence:
+      - source: ".github/workflows/deploy_pages.yml:33-47"
+        quote: "Prepare publish tree (ルート11ファイル+contentのみ) → publish-tree.test.js と publication-guard.test.js を _site に対して実行 → upload-pages-artifact"
+      - source: "scripts/t0007-outreach/outreach.py:17"
+        quote: "外部送信・公開は approve (明示指示) 後のみ。draftは一切外に出ない"
+      - source: "scripts/x-discover/post.py:9-12"
+        quote: "persona_review の verdict=pass 以外は投稿しない。unreviewed/無印 → 翌朝collect rereview待ち"
+  PipelineVersion:
+    id: "TERM-PIPELINE-VERSION"
+    layer: "domain"
+    status: "stable"
+    definition: "生成系 (scripts下 tracked .py = code と埋込みpromptの実体) の実装version。content hash12桁で、生存生成物の再生成要否 (stale) 判定に使う。生成物が変わるときだけ動き、docs-only commitでは不変。"
+    synonyms: ["生成系版", "pipeline_version()", "gen_version", "polish_version"]
+    boundaries:
+      includes: ["tracked .py のcontent hash短縮形", "未commit変更の '+' 接尾とgit不在の 'unknown' 扱い", "生存 (current/STALE) と死人居 (posted/rejected/out_of_window) の分離"]
+      excludes: ["docs・画像・config の変更による版移動", "投稿済み・却下済み・窓外の再生成"]
+    related_terms: ["PublicationPath"]
+    evidence:
+      - source: "scripts/x-discover/x_discover_rules.py:126-134"
+        quote: "def pipeline_version() — 生成codeとpromptの実体が変わったときだけ変わる。repo全体やscripts下の文書・媒体・config では不変"
+      - source: "test/artifacts-ledger.test.js:19"
+        quote: "ARTIFACTS.md 台帳の現行 pipeline_version が実測値と一致する (実関数をsubprocessで呼ぶ)"

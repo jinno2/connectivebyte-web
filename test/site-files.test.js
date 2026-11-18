@@ -187,16 +187,17 @@ test("LP #apply 申込formは /apply endpoint・同意checkbox・PII分離文言
   assert.equal(lp.includes("東京AIソリューションズ"), false);
 });
 
-test("両formのメール入力は server契約の254字上限 (maxlength) を備える", async () => {
+test("LP の両メール入力 (newsletter・apply) は server契約の254字上限 (maxlength) を備える", async () => {
   // server.js validateSubscription/validateApplication (本番Workerの写し) は
   // email > 254字を invalid_email (400) で拒否する。maxlengthが無い入力欄では
-  // 長すぎるアドレスが checkValidity を通って送信され、UIが「通信状況を確認…」と
-  // 誤った失敗理由を表示する (apply側はmaxlength済み・newsletter側のみ漏れ)。
+  // 長すぎるアドレスが送信後にのみ失敗表示となり、UIが誤った失敗理由を表示する。
+  // 両formで RFC 5321 の上限を事前に抑える (2026-10-13 newsletter側の付け忘れ修正)。
   const lp = await readFile(path.join(repoRoot, "index.html"), "utf8");
-  assert.match(lp, /id="apply-email" name="email" type="email"[^>]*maxlength="254"/,
-    "申込メール入力の maxlength=254 が無い");
-  assert.match(lp, /id="email" name="email" type="email"[^>]*maxlength="254"/,
-    "newsletterメール入力の maxlength=254 が無い");
+  assert.match(lp, /id="email" name="email" type="email"[^>]*required maxlength="254"/,
+    "newsletterメール入力に required と maxlength=254 が無い");
+  assert.match(lp, /id="apply-email" name="email" type="email"[^>]*required maxlength="254"/,
+    "申込メール入力に required と maxlength=254 が無い");
+});
 });
 
 // html文字列から id 属性値を実DOMのidとして抽出する (属性順・クォート形式に依存
