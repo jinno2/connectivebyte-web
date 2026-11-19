@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { EVENT_TYPES } from "../logic.js";
@@ -24,6 +24,29 @@ test("server.js EVENT_TYPES copy accepts every client event", () => {
   for (const name of EVENT_TYPES) {
     assert.ok(serverTypes.has(name), `server.js rejects ${name}`);
   }
+});
+
+test("content pages' inline events are accepted by the server.js Worker copy", () => {
+  // LP の inline script は app.js track() を経由せず本番 events backend へ直接送るため
+  // logic.js EVENT_TYPES には現れない。写しである server.js は実Worker同様に受理する。
+  // content/ 直の全ページを走査する — 2箇所目の inline 送信側が増えても自動で対象化。
+  const contentDir = new URL("../content/", import.meta.url);
+  const serverTypes = extractEventSet(serverSource, "EVENT_TYPES");
+  const senders = [];
+  for (const entry of readdirSync(contentDir, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue;
+    const page = new URL(`${entry.name}/index.html`, contentDir);
+    if (!existsSync(page)) continue;
+    const names = [...readFileSync(page, "utf8").matchAll(/\bsend\(['"]([a-z_0-9]+)['"]/g)].map((m) => m[1]);
+    if (names.length === 0) continue;
+    senders.push([entry.name, names]);
+    for (const name of names) {
+      assert.ok(serverTypes.has(name), `${entry.name}: server.js rejects ${name}`);
+    }
+  }
+  // d1 LP の現行2語をそのまま固定 (第3語が増えたら意図的な更新を強制する)。
+  const d1Names = senders.filter(([page]) => page === "19-diagnosis-line-lp").flatMap(([, names]) => names);
+  assert.deepEqual([...d1Names].sort(), ["d1_lp_cart_click", "d1_lp_viewed"]);
 });
 
 test("share-loop events use the plan §19 canonical names", () => {

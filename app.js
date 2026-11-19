@@ -519,6 +519,14 @@ function submitDiagnosis() {
   const declared = readJson("declared_interest", null);
   const questions = activeQuestions();
   const checked = document.querySelectorAll("#diagnostic-questions input[type=radio]:checked");
+  const status = document.querySelector("#diagnostic-status");
+  // 未回答は run_diagnosis で「いいえ」扱いになる — 沈黙の完了表示をせず、
+  // 全問回答を促してから判定する (不明な結果を成功表示しない)。
+  if (checked.length < questions.length) {
+    if (status) status.textContent = "未回答の質問があります。すべての質問に答えを選んでください。";
+    return;
+  }
+  if (status) status.textContent = "";
   const behaviors = Array.from(checked).map((radio) => ({
     id: radio.dataset.questionId,
     answer: radio.value
@@ -814,7 +822,6 @@ function selectInterest(interest) {
   writeJson("eligible_segments", [...new Set([...eligibleSegments, selectedSegment])]);
   renderRoute(interest);
   track("interest_selected", { asset_id: "interest_selector", cta_id: `interest_${interest.toLowerCase()}` });
-  track("diagnostic_completed", { asset_id: "interest_selector", cta_id: `interest_${interest.toLowerCase()}` });
 }
 
 function download(name, type, content) {
@@ -887,6 +894,17 @@ function initializeReadingEvents() {
   }
 }
 
+// CTA「比較テンプレートを開く」(#comparisonアンカー経由) も着地時にworkflowを開く —
+// 「開く」と約束した導線を2クリックにしない。カード内ボタン (open-comparison) と
+// 同じ挙動・同じ計測イベントにする。
+function openComparisonWorkflow() {
+  const workflow = document.querySelector("#comparison-workflow");
+  if (!workflow) return;
+  workflow.hidden = false;
+  document.querySelector("#comparison-theme")?.focus();
+  track("comparison_template_viewed", { asset_id: "comparison_template", cta_id: "comparison_open" });
+}
+
 document.addEventListener("click", (event) => {
   const interestButton = event.target.closest("[data-interest]");
   if (interestButton) selectInterest(interestButton.dataset.interest);
@@ -901,12 +919,8 @@ document.addEventListener("click", (event) => {
   }
 
   const action = event.target.closest("[data-action]")?.dataset.action;
-  if (action === "open-comparison") {
-    const workflow = document.querySelector("#comparison-workflow");
-    workflow.hidden = false;
-    document.querySelector("#comparison-theme").focus();
-    track("comparison_template_viewed", { asset_id: "comparison_template", cta_id: "comparison_open" });
-  }
+  if (action === "open-comparison") openComparisonWorkflow();
+  if (!action && event.target.closest('a[href="#comparison"]')) openComparisonWorkflow();
   if (action === "complete-comparison") {
     const theme = document.querySelector("#comparison-theme").value.trim();
     const next = document.querySelector("#comparison-next").value.trim();
@@ -937,17 +951,29 @@ document.addEventListener("click", (event) => {
   if (action === "copy-share-url") {
     const input = document.querySelector("#share-url-input");
     input.select();
-    const done = () => {
-      const button = event.target.closest("[data-action]");
+    const button = event.target.closest("[data-action]");
+    // execCommand("copy")は成否をbooleanで返す。結果を見ずに成功表示しない
+    // (憲法: 不明な結果を成功表示しない)。失敗時は選択済みURLの手動コピーを促す。
+    const showCopyResult = (copied) => {
       const label = button.textContent;
-      button.textContent = "コピーしました";
+      button.textContent = copied
+        ? "コピーしました"
+        : "コピーできませんでした。選択したURLを手動でコピーしてください。";
       setTimeout(() => { button.textContent = label; }, 1600);
     };
+    const copyViaExecCommand = () => {
+      try {
+        return document.execCommand("copy") === true;
+      } catch {
+        return false;
+      }
+    };
     if (navigator.clipboard?.writeText) {
-      navigator.clipboard.writeText(input.value).then(done).catch(() => { document.execCommand("copy"); done(); });
+      navigator.clipboard.writeText(input.value)
+        .then(() => showCopyResult(true))
+        .catch(() => showCopyResult(copyViaExecCommand()));
     } else {
-      document.execCommand("copy");
-      done();
+      showCopyResult(copyViaExecCommand());
     }
   }
   if (action === "open-share-intent") {

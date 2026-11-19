@@ -38,7 +38,11 @@ const EVENT_TYPES = Object.freeze(new Set([
   "x_intent_opened",
   "result_card_created",
   "feedback_submitted",
-  "apply_submitted"
+  "apply_submitted",
+  // 19-diagnosis-line-lp の inline script が本番 events backend へ直接送る
+  // 匿名2イベント (app.js track() 経由ではないため logic.js EVENT_TYPES には無い)。
+  "d1_lp_viewed",
+  "d1_lp_cart_click"
 ]));
 
 const REQUIRED_FIELDS = Object.freeze([
@@ -267,7 +271,15 @@ export function createRequestHandler(options = {}) {
 
   return async function handleRequest(request, response) {
     const url = new URL(request.url, "http://localhost");
-    const pathname = decodeURIComponent(url.pathname);
+    // %zz等の不正なパーセントエンコーディングはdecodeが例外になる — 未処理のまま
+    // ではdev serverプロセスごと落ちるため、生のpathnameへ落として通常の404経路へ
+    // 渡す (Pages同等のnot-found挙動)。
+    let pathname;
+    try {
+      pathname = decodeURIComponent(url.pathname);
+    } catch {
+      pathname = url.pathname;
+    }
 
     if (pathname === "/api/events" && request.method === "POST") {
       const origin = request.headers.origin;
@@ -328,6 +340,16 @@ export function createRequestHandler(options = {}) {
 
     // POST /api/apply — 実施支援 申込 (local dev用の検証のみ写し。保存はしない)。
     if (pathname === "/api/apply" && request.method === "POST") {
+      const origin = request.headers.origin;
+      if (typeof origin === "string" && origin.length > 0) {
+        const requested = new URL(origin);
+        const expectedHost = request.headers.host ?? "";
+        if (requested.host !== expectedHost) {
+          sendJson(response, 403, { error: "cross_origin_denied" });
+          return;
+        }
+        response.setHeader("Access-Control-Allow-Origin", origin);
+      }
       const raw = await readBody(request);
       if (raw === null) {
         sendJson(response, 413, { error: "body_too_large" });
