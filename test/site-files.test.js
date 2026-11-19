@@ -187,6 +187,16 @@ test("LP #apply 申込formは /apply endpoint・同意checkbox・PII分離文言
   assert.equal(lp.includes("東京AIソリューションズ"), false);
 });
 
+test("LPはapp.jsの読了計測が監視するid=level-tableを実 markupに備える", async () => {
+  // app.jsは #level-table をIntersectionObserverで監視してlevel_table_read_100を
+  // 送る。実LPにidが無いと監視対象が null で発火しないが、動作テストは要素を
+  // 注入するため通ってしまう (実markupとテストfixtureの乖離を実測した回帰防止)。
+  const lp = await readFile(path.join(repoRoot, "index.html"), "utf8");
+  assert.match(lp, /id="level-table"/);
+  const app = await readFile(path.join(repoRoot, "app.js"), "utf8");
+  assert.match(app, /querySelector\("#level-table"\)/);
+});
+
 test("LP の両メール入力 (newsletter・apply) は server契約の254字上限 (maxlength) を備える", async () => {
   // server.js validateSubscription/validateApplication (本番Workerの写し) は
   // email > 254字を invalid_email (400) で拒否する。maxlengthが無い入力欄では
@@ -197,7 +207,6 @@ test("LP の両メール入力 (newsletter・apply) は server契約の254字上
     "newsletterメール入力に required と maxlength=254 が無い");
   assert.match(lp, /id="apply-email" name="email" type="email"[^>]*required maxlength="254"/,
     "申込メール入力に required と maxlength=254 が無い");
-});
 });
 
 // html文字列から id 属性値を実DOMのidとして抽出する (属性順・クォート形式に依存
@@ -318,7 +327,7 @@ test("各頁のinline scriptが参照するidはその頁の実DOMに存在す�
   // inline scriptは自身のDOMへ getElementById/#id で配線し、idが無くても例外ではなく
   // 沈黙の早期returnに落ちる (asset-bodyのrich render等)。上のapp.js↔index.html
   // ガードはLPのみのため、追跡済み全HTMLのinline script参照へ同一規律を拡張する
-  // (02-history の asset-body は hash検査の対象list外で、id欠落しても既存testが
+  // (02-history の asset-body は hash検査対象list外で、id欠落しても既存testが
   // 緑のまま沈黙劣化する)。将来の頁追加も自動で対象化。
   // 抽出本体は inlineScriptIdAudit (直上) — 規則の単位検査は下の2testが担う。
   const tracked = execFileSync("git", ["ls-files", "-z"], { cwd: repoRoot, encoding: "utf8" })
@@ -370,6 +379,7 @@ test("inline id監査の規則: 前段動的id・外部script本文・属性sele
   // 属性selector [data-h="#x"] 内の # はid参照ではなく、同selector中の実id参照は数える
   const mixed = page("", `document.querySelector('[data-h="#x"] #real');`);
   assert.deepEqual(inlineScriptIdAudit(mixed).missing, ["real"]);
+});
 });
 
 test("17-org-pdf 完成PDF artifactは存在しLP・原稿page両面から配線される", async () => {
