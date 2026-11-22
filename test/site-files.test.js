@@ -402,6 +402,15 @@ test("17-org-pdf 完成PDF artifactは存在しLP・原稿page両面から配線
   assert.match(page, /href="organization-guide\.pdf" download=/);
 });
 
+test("LPのレベル表は読了計測が参照するidを備える", async () => {
+  // level_table_read_100 は実ページで一度も発火しない欠陥があった (app.jsは
+  // #level-tableを監視するが index.html にidが無く、行動テストはモック要素を
+  // マップ注入するため実ページの欠落を検出できなかった)。欠落していた実ペー
+  // ジ側のid存在だけを機械検査する (app.js側の参照は修正前から存在し、ここで
+  // 見ても常に真になるためガードにならない)。
+  const lp = await readFile(path.join(repoRoot, "index.html"), "utf8");
+  assert.match(lp, /<div class="level-table" id="level-table"/);
+});
 
 test("LPの検証レポートカードから、公開中の全検証レポート記事へ到達できる", async () => {
   // VERIFICATION NOTEカードのリンクを「最新1本へ差し替える」運用で旧記事が

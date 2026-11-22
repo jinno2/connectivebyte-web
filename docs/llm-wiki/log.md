@@ -15,6 +15,13 @@ relations.md の親草案を確定版へ訂正した（親: tas_launchops）。
 
 **Verification**: contracts registry `registry/organization/repositories/connectivebyte-web.yaml` の spec.parent と一致することを確認（contracts commit ecbc226、validate/lint 0 errors 済み）。
 
+## 2026-10-12 — relations.md に機械可読 Evidence を追加
+
+親関係（tas_launchops）の証跡を memo 契約の Evidence 行（sha256）に整形し、
+contracts 現行 HEAD で再検証した。関係の主張自体に変更はない。
+
+**Verification**: contracts `registry/organization/repositories/connectivebyte-web.yaml`（HEAD 01134ce）の spec.parent = tas_launchops を実ファイルで再確認し、sha256 を Evidence 行へ記録。
+
 ## 2026-10-22 — 計画と実行マイルストーン整備
 
 既存の ORDER.md を長期計画の正本として補強し、MS-001〜MS-004 のIDを維持した実行用台帳を追加。README・憲法・wikiから正本と実行状態へリンクし、REPO_METADATA.json を原本のGit blobへ同期した。
