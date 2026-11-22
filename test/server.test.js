@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createServer } from "node:http";
@@ -223,6 +223,58 @@ test("ネストした存在しないパスも404.htmlをサイト体裁で応答
   }
 });
 
+test("不正なパーセントエンコーディングのURLは404で応答し、サーバーは落ちない", async () => {
+  // %zz等はdecodeURIComponentがURIErrorになる — 未処理のままではdev serverプロセス
+  // が落ちる (2026-10-13実測)。Pages同等の404へ落とし、その後も同一プロセスで
+  // 正常配信が続くことを連続リクエストで機械検査する。
+  const ctx = await startServer();
+  try {
+    for (const path of ["/%zz", "/deep/%E0%A4%A", "/%E4%BD%95%zz"]) {
+      const res = await fetch(`${ctx.base}${path}`);
+      assert.equal(res.status, 404, path);
+      assert.equal(res.headers.get("content-type"), "text/html; charset=utf-8", path);
+      const body = await res.text();
+      assert.match(body, /<html lang="ja">/, path);
+    }
+    const res = await fetch(`${ctx.base}/index.html`);
+    assert.equal(res.status, 200);
+    assert.match(await res.text(), /ConnectiveByte/);
+  } finally {
+    await ctx.cleanup();
+  }
+});
+
+test("正常なパーセントエンコーディングはデコードされて配信される (不正エンコーディング修正の回帰ガード)", async () => {
+  // decodeURIComponentのtry/catch化で正当なエンコード経路が壊れていないことを、
+  // 日本語ディレクトリのエンコードURLが200で返ることで機械検査する。
+  // 404.htmlが無い環境では不正エンコーディングは平文404に落ち、
+  // その後も同一プロセスで配信が続く。
+  const encodedRoot = await mkdtemp(join(tmpdir(), "cb-root-"));
+  await mkdir(join(encodedRoot, "診断"), { recursive: true });
+  await writeFile(
+    join(encodedRoot, "診断", "index.html"),
+    "<!DOCTYPE html><html lang=\"ja\"><body>エンコード配信テスト</body></html>"
+  );
+  const ctx = await startServer({ root: encodedRoot });
+  try {
+    const encoded = `/${encodeURIComponent("診断")}/`;
+    const res = await fetch(`${ctx.base}${encoded}`);
+    assert.equal(res.status, 200, encoded);
+    assert.equal(res.headers.get("content-type"), "text/html; charset=utf-8", encoded);
+    assert.match(await res.text(), /エンコード配信テスト/, encoded);
+
+    const bad = await fetch(`${ctx.base}/%zz`);
+    assert.equal(bad.status, 404);
+    assert.equal(await bad.text(), "Not found");
+
+    const alive = await fetch(`${ctx.base}${encoded}`);
+    assert.equal(alive.status, 200, encoded);
+  } finally {
+    await ctx.cleanup();
+    await rm(encodedRoot, { recursive: true, force: true });
+  }
+});
+
 test("404.htmlが無い環境では平文のNot foundへフォールバックする", async () => {
   const bareRoot = await mkdtemp(join(tmpdir(), "cb-root-"));
   const ctx = await startServer({ root: bareRoot });
@@ -310,12 +362,18 @@ test("POST /api/apply は有効な申込に202・不正入力に400を返す (�
       note: "カスタマーサポート部門。まず話を聞きたい", anonymous_id: "anon-9"
     });
     assert.equal(full.status, 202);
+    // email 254文字の境界: local部は64文字上限のためdomain部で長さを構成する
+    const edgeApply = await postApply({
+      email: `${"a".repeat(64)}@${"a".repeat(93)}.${"a".repeat(95)}`, consent: true
+    });
+    assert.equal(edgeApply.status, 202);
     for (const bad of [
       { email: "nope", consent: true },
       { email: "org@example.com" },
       { email: "org@example.com", consent: false },
       { email: "org@example.com", consent: true, interest: "X" },
       { email: "org@example.com", consent: true, note: "x".repeat(1001) },
+      { email: `${"a".repeat(64)}@${"a".repeat(93)}.${"a".repeat(96)}`, consent: true },
       "not-json"
     ]) {
       const res = await postApply(bad);
@@ -342,11 +400,17 @@ test("POST /api/subscribe は有効な登録に202・不正入力に400を返す
     assert.equal((await ok.json()).accepted, true);
     const withId = await postSub({ email: "user2@example.com", consent: true, anonymous_id: "abc-123_X" });
     assert.equal(withId.status, 202);
+    // email 254文字の境界: local部は64文字上限のためdomain部で長さを構成する
+    const edgeSub = await postSub({
+      email: `${"a".repeat(64)}@${"a".repeat(93)}.${"a".repeat(95)}`, consent: true
+    });
+    assert.equal(edgeSub.status, 202);
     for (const bad of [
       { email: "nope", consent: true },
       { email: "user@example.com" },
       { email: "user@example.com", consent: "yes" },
       { email: "user@example.com", consent: true, anonymous_id: "不正" },
+      { email: `${"a".repeat(64)}@${"a".repeat(93)}.${"a".repeat(96)}`, consent: true },
       "not-json"
     ]) {
       const res = await postSub(bad);
@@ -379,11 +443,77 @@ test("クロスオリジンからのPOSTは403で拒否する", async () => {
   }
 });
 
+test("クロスオリジンからの /api/subscribe・/api/apply へのPOSTも403で拒否する", async () => {
+  const ctx = await startServer();
+  try {
+    for (const path of ["/api/subscribe", "/api/apply"]) {
+      const res = await fetch(`${ctx.base}${path}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Origin: "https://evil.example.com" },
+        body: JSON.stringify({ email: "org@example.com", consent: true })
+      });
+      assert.equal(res.status, 403, path);
+      assert.equal((await res.json()).error, "cross_origin_denied", path);
+    }
+  } finally {
+    await ctx.cleanup();
+  }
+});
+
+test("同一Originの /api/apply へのPOSTは許可され Access-Control-Allow-Origin が設定される", async () => {
+  const ctx = await startServer();
+  try {
+    const origin = new URL(ctx.base).origin;
+    const res = await fetch(`${ctx.base}/api/apply`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Origin: origin },
+      body: JSON.stringify({ email: "org@example.com", consent: true })
+    });
+    assert.equal(res.status, 202);
+    assert.equal((await res.json()).accepted, true);
+    assert.equal(res.headers.get("access-control-allow-origin"), origin);
+  } finally {
+    await ctx.cleanup();
+  }
+});
+
 test("manual_collaboration_candidate型を受け付ける", async () => {
   const ctx = await startServer();
   try {
     const res = await post(ctx.base, [validEvent({ name: "manual_collaboration_candidate" })]);
     assert.equal(res.status, 202);
+  } finally {
+    await ctx.cleanup();
+  }
+});
+
+test("19-diagnosis-line-lp の匿名イベントはLP実装と同じpayload形状で202・未知のd1_lp_*は400", async () => {
+  const ctx = await startServer();
+  try {
+    // LP inline script (content/19-diagnosis-line-lp) が本番 events backend へ直接送る
+    // payloadと同じ形。REQUIRED_FIELDS に無い session_id/referrer_host を含むまま
+    // 受理されることで型許可と必須/禁止属性の契約を機能面から固定する。
+    const lpEvent = (name, cta_id) => ({
+      name,
+      source_id: "d1_lp",
+      campaign_id: "static",
+      asset_id: "19-diagnosis-line-lp",
+      segment: "unselected",
+      channel: "web",
+      cta_id,
+      occurred_at: new Date().toISOString(),
+      session_id: "ses-001",
+      referrer_host: "(none)"
+    });
+    const ok = await post(ctx.base, {
+      events: [lpEvent("d1_lp_viewed", "none"), lpEvent("d1_lp_cart_click", "cart-d1")]
+    });
+    assert.equal(ok.status, 202);
+    assert.equal((await ok.json()).accepted, 2);
+
+    const bad = await post(ctx.base, { events: [lpEvent("d1_lp_bogus", "none")] });
+    assert.equal(bad.status, 400);
+    assert.equal((await bad.json()).error, "invalid event type");
   } finally {
     await ctx.cleanup();
   }

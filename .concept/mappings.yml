@@ -1,0 +1,79 @@
+mappings:
+  Interest:
+    code_symbols:
+      - "logic.js::INTERESTS"
+      - "logic.js::ROUTES"
+      - "logic.js::RANK"
+      - "logic.js::promoteBySelfSelection"
+      - "logic.js::getEligibleSegments"
+    api:
+      - "server.js::GET /api/stats (counts E..A)"
+  Phase:
+    code_symbols:
+      - "logic.js::PHASES"
+      - "share.js::phaseLabel"
+      - "share.js::nextHintFor"
+  Diagnosis:
+    code_symbols:
+      - "logic.js::run_diagnosis"
+      - "logic.js::DIAGNOSTIC_QUESTIONS"
+      - "logic.js::DETAILED_QUESTIONS"
+      - "logic.js::buildDiagnosticCompletedEvent"
+  AnonymousEvent:
+    code_symbols:
+      - "logic.js::EVENT_TYPES"
+      - "logic.js::buildEventBatch"
+      - "server.js::validateEvent"
+      - "server.js::POST /api/events"
+    db:
+      - "events.jsonl (dev local append-only)"
+  ForbiddenAttribute:
+    code_symbols:
+      - "logic.js::FORBIDDEN_ATTRIBUTES"
+      - "logic.js::filterForbiddenAttributes"
+      - "server.js::FORBIDDEN_ATTRIBUTES"
+  Subscription:
+    code_symbols:
+      - "server.js::validateSubscription"
+      - "server.js::POST /api/subscribe"
+    api:
+      - "api.connectivebyte.com/subscribe (production・repo外)"
+  Application:
+    code_symbols:
+      - "server.js::validateApplication"
+      - "server.js::POST /api/apply"
+  Share:
+    code_symbols:
+      - "share.js::buildShareText"
+      - "share.js::weightedLength"
+      - "share.js::SHARE_TEMPLATES"
+      - "share.js::buildIntentUrl"
+  InterestStats:
+    code_symbols:
+      - "logic.js::formatInterestStats"
+      - "logic.js::MIN_STATS_TOTAL"
+      - "server.js::GET /api/stats"
+  PublicationGuard:
+    code_symbols:
+      - "test/publication-guard.test.js::BANNED_TERMS"
+      - "test/publication-guard.test.js::BANNED_PATTERNS"
+  LocalVerificationServer:
+    code_symbols:
+      - "server.js::createRequestHandler"
+  PublicationPath:
+    code_symbols:
+      - ".github/workflows/deploy_pages.yml::Prepare publish tree"
+      - "test/publish-tree.test.js::ROOT_FILES"
+      - "test/publish-tree.test.js::assertPublishTree"
+      - "scripts/t0007-outreach/outreach.py::PUBLISH_ROOT_FILES"
+      - "scripts/t0007-outreach/outreach.py::cmd_publish"
+      - "scripts/x-discover/collect.py::attach_persona_review"
+      - "scripts/x-discover/post.py::persona_review"
+  PipelineVersion:
+    code_symbols:
+      - "scripts/x-discover/x_discover_rules.py::pipeline_version"
+      - "scripts/x-discover/repolish.py::_eligible"
+      - "scripts/t0007-outreach/outreach.py::_stale_msg"
+      - "test/artifacts-ledger.test.js::台帳の現行 pipeline_version が実測値と一致する"
+    db:
+      - "ARTIFACTS.md (生成物台帳 — 現行版の実測値を保持する正本)"

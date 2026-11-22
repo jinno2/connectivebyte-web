@@ -34,7 +34,7 @@ jobs:
       - name: Prepare publish tree
         run: |
           mkdir -p _site
-          cp index.html styles.css app.js logic.js share.js twitter-text-regex.js favicon.svg sitemap.xml robots.txt 404.html _site/
+          cp index.html styles.css app.js logic.js share.js twitter-text-regex.js favicon.svg sitemap.xml robots.txt 404.html og-image-1200x630.png _site/
           cp -r content _site/
       - name: Verify publish tree JavaScript dependency closure
         env:

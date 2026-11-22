@@ -5,7 +5,7 @@
   "type": "module",
   "description": "ConnectiveByte diagnostic landing page MVP",
   "scripts": {
-    "test": "node --test",
+    "test": "node scripts/run-tests-with-evidence.mjs",
     "serve": "node server.js"
   },
   "engines": {
