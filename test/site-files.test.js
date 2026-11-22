@@ -187,13 +187,26 @@ test("LP #apply 申込formは /apply endpoint・同意checkbox・PII分離文言
   assert.equal(lp.includes("東京AIソリューションズ"), false);
 });
 
-test("LP の両メール入力 (newsletter・apply) は server検証と同じ maxlength=254 を持つ", async () => {
-  // server.js は email.length > 254 を invalid_email で拒否する。maxlength 無しの
-  // 入力欄ではブラウザ検証を通過した長い入力が送信後にのみ失敗表示になるため、
+test("LPはapp.jsの読了計測が監視するid=level-tableを実 markupに備える", async () => {
+  // app.jsは #level-table をIntersectionObserverで監視してlevel_table_read_100を
+  // 送る。実LPにidが無いと監視対象が null で発火しないが、動作テストは要素を
+  // 注入するため通ってしまう (実markupとテストfixtureの乖離を実測した回帰防止)。
+  const lp = await readFile(path.join(repoRoot, "index.html"), "utf8");
+  assert.match(lp, /id="level-table"/);
+  const app = await readFile(path.join(repoRoot, "app.js"), "utf8");
+  assert.match(app, /querySelector\("#level-table"\)/);
+});
+
+test("LP の両メール入力 (newsletter・apply) は server契約の254字上限 (maxlength) を備える", async () => {
+  // server.js validateSubscription/validateApplication (本番Workerの写し) は
+  // email > 254字を invalid_email (400) で拒否する。maxlengthが無い入力欄では
+  // 長すぎるアドレスが送信後にのみ失敗表示となり、UIが誤った失敗理由を表示する。
   // 両formで RFC 5321 の上限を事前に抑える (2026-10-13 newsletter側の付け忘れ修正)。
   const lp = await readFile(path.join(repoRoot, "index.html"), "utf8");
-  assert.match(lp, /id="email" name="email" type="email"[^>]*required maxlength="254"/);
-  assert.match(lp, /id="apply-email" name="email" type="email"[^>]*required maxlength="254"/);
+  assert.match(lp, /id="email" name="email" type="email"[^>]*required maxlength="254"/,
+    "newsletterメール入力に required と maxlength=254 が無い");
+  assert.match(lp, /id="apply-email" name="email" type="email"[^>]*required maxlength="254"/,
+    "申込メール入力に required と maxlength=254 が無い");
 });
 
 // html文字列から id 属性値を実DOMのidとして抽出する (属性順・クォート形式に依存
@@ -314,7 +327,7 @@ test("各頁のinline scriptが参照するidはその頁の実DOMに存在す�
   // inline scriptは自身のDOMへ getElementById/#id で配線し、idが無くても例外ではなく
   // 沈黙の早期returnに落ちる (asset-bodyのrich render等)。上のapp.js↔index.html
   // ガードはLPのみのため、追跡済み全HTMLのinline script参照へ同一規律を拡張する
-  // (02-history の asset-body は hash検査の対象list外で、id欠落しても既存testが
+  // (02-history の asset-body は hash検査対象list外で、id欠落しても既存testが
   // 緑のまま沈黙劣化する)。将来の頁追加も自動で対象化。
   // 抽出本体は inlineScriptIdAudit (直上) — 規則の単位検査は下の2testが担う。
   const tracked = execFileSync("git", ["ls-files", "-z"], { cwd: repoRoot, encoding: "utf8" })
@@ -367,6 +380,7 @@ test("inline id監査の規則: 前段動的id・外部script本文・属性sele
   const mixed = page("", `document.querySelector('[data-h="#x"] #real');`);
   assert.deepEqual(inlineScriptIdAudit(mixed).missing, ["real"]);
 });
+});
 
 test("17-org-pdf 完成PDF artifactは存在しLP・原稿page両面から配線される", async () => {
   // 2026-09-10 残課題#4 (r4 F8): 記入式様式の完成PDF不在を閉じる。生成源は
@@ -388,6 +402,15 @@ test("17-org-pdf 完成PDF artifactは存在しLP・原稿page両面から配線
   assert.match(page, /href="organization-guide\.pdf" download=/);
 });
 
+test("LPのレベル表は読了計測が参照するidを備える", async () => {
+  // level_table_read_100 は実ページで一度も発火しない欠陥があった (app.jsは
+  // #level-tableを監視するが index.html にidが無く、行動テストはモック要素を
+  // マップ注入するため実ページの欠落を検出できなかった)。欠落していた実ペー
+  // ジ側のid存在だけを機械検査する (app.js側の参照は修正前から存在し、ここで
+  // 見ても常に真になるためガードにならない)。
+  const lp = await readFile(path.join(repoRoot, "index.html"), "utf8");
+  assert.match(lp, /<div class="level-table" id="level-table"/);
+});
 
 test("LPの検証レポートカードから、公開中の全検証レポート記事へ到達できる", async () => {
   // VERIFICATION NOTEカードのリンクを「最新1本へ差し替える」運用で旧記事が
