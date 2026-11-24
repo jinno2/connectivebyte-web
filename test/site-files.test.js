@@ -380,7 +380,6 @@ test("inline id監査の規則: 前段動的id・外部script本文・属性sele
   const mixed = page("", `document.querySelector('[data-h="#x"] #real');`);
   assert.deepEqual(inlineScriptIdAudit(mixed).missing, ["real"]);
 });
-});
 
 test("17-org-pdf 完成PDF artifactは存在しLP・原稿page両面から配線される", async () => {
   // 2026-09-10 残課題#4 (r4 F8): 記入式様式の完成PDF不在を閉じる。生成源は

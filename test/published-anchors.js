@@ -52,4 +52,3 @@ export function pageLinkCandidates(doc, base) {
   }
   return found;
 }
-}

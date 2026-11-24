@@ -19,6 +19,7 @@ const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), ".."
 const ROOT_FILES = new Set([
   "index.html", "styles.css", "app.js", "logic.js", "share.js",
   "twitter-text-regex.js", "favicon.svg", "sitemap.xml", "robots.txt",
+  "404.html", "og-image-1200x630.png",
 ]);
 
 // deploy_pages.yml の Prepare publish tree と同じ配信対象 (HTMLのみ)

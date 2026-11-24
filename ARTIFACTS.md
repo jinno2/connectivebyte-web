@@ -120,8 +120,7 @@ EOF
 ## 実測 (2026-09-15・版管理の初回full cycle完了時点)
 
 - pipeline_version = `c82e1c4c96fa` (初回cycle時点・当時はscripts/木tree hash) —
-  **直近確認済み = `7c6f75bde905`** (.py限定・2026-11-10再実測)。本mergeでは
-  両側の.py変更が合流するため、merge後に再実測して現行版を同期する
+  **現行 = `7c6f75bde905`** (.py限定・版定義節参照・2026-11-25再実測で同hashを確認)
 - 監査: posted 14 / out_of_window 43 / rejected 2 / **current 5** /
   STALE 0 / placeholder 0 — 初回full cycle時点では生存5行すべての版印が
   `c82e1c4c96fa` で単一versionに収束
